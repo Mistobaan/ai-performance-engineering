@@ -61,7 +61,17 @@ def plot_throughput(groups, out_path: Path, title: str):
     for conc, rows in groups.items():
         vals = []
         for r in rows:
-            v = extract_metric(r, ["tok_per_s", "toks_per_s", "tokens_per_s", "throughput_tok_s"])
+            v = extract_metric(
+                r,
+                [
+                    "tok_per_s",
+                    "toks_per_s",
+                    "tokens_per_s",
+                    "throughput_tok_s",
+                    "output_throughput",
+                    "total_token_throughput",
+                ],
+            )
             if v is not None:
                 vals.append(v)
         if vals:
@@ -84,8 +94,8 @@ def plot_latency(groups, out_path: Path, title: str):
     for conc, rows in groups.items():
         p50_vals, p99_vals = [], []
         for r in rows:
-            p50 = extract_metric(r, ["p50_ms", "p50", "latency_p50_ms"])
-            p99 = extract_metric(r, ["p99_ms", "p99", "latency_p99_ms"])
+            p50 = extract_metric(r, ["p50_ms", "p50", "latency_p50_ms", "median_ttft_ms", "mean_ttft_ms"])
+            p99 = extract_metric(r, ["p99_ms", "p99", "latency_p99_ms", "p99_ttft_ms"])
             if p50 is not None:
                 p50_vals.append(p50)
             if p99 is not None:
