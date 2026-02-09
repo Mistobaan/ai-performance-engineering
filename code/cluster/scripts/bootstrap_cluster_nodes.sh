@@ -28,8 +28,12 @@ Options:
   --install-python-deps      Ensure env/venv + Python deps (default: on)
   --skip-python-deps         Skip Python dependency install
 
-  --sync-suite-dir <dir>     Optional local Cluster Perf suite dir to sync to remote
-                             at the same absolute path (syncs standalone/compute/)
+  --sync-suite-dir <dir>     Optional local Cluster Perf suite path to sync to remote.
+                             Accepted forms:
+                               - suite root containing standalone/compute/
+                               - standalone/ directory
+                               - standalone/compute/ directory
+                               - parent directory containing a single suite root
   --torch-index-url <url>    Torch wheel index (default: https://download.pytorch.org/whl/cu130)
   --torch-version <ver>      Torch version to install if missing (default: 2.9.1+cu130)
 EOF
@@ -85,9 +89,66 @@ if [[ "$SYNC_CODE" -eq 1 && ! -x "$(command -v rsync || true)" ]]; then
   exit 2
 fi
 
-if [[ -n "$SYNC_SUITE_DIR" && ! -d "$SYNC_SUITE_DIR/standalone/compute" ]]; then
-  echo "ERROR: --sync-suite-dir must contain standalone/compute (got: ${SYNC_SUITE_DIR})" >&2
-  exit 2
+resolve_suite_dir() {
+  local raw="${1:-}"
+  local cand=""
+  if [[ -z "$raw" ]]; then
+    return 1
+  fi
+  if [[ -d "${raw}/standalone/compute" ]]; then
+    (cd "$raw" && pwd -P)
+    return 0
+  fi
+  if [[ -d "$raw" ]]; then
+    if [[ "$(basename "$raw")" == "compute" && "$(basename "$(dirname "$raw")")" == "standalone" ]]; then
+      (cd "$(dirname "$(dirname "$raw")")" && pwd -P)
+      return 0
+    fi
+    if [[ "$(basename "$raw")" == "standalone" && -d "${raw}/compute" ]]; then
+      (cd "$(dirname "$raw")" && pwd -P)
+      return 0
+    fi
+    for cand in "${raw}"/* "${raw}"/*/*; do
+      [[ -d "$cand" ]] || continue
+      if [[ -d "${cand}/standalone/compute" ]]; then
+        (cd "$cand" && pwd -P)
+        return 0
+      fi
+    done
+  fi
+  local parent
+  parent="$(dirname "$raw")"
+  if [[ -d "$parent" ]]; then
+    local -a sibling_matches=()
+    for cand in "${parent}"/*; do
+      [[ -d "$cand" ]] || continue
+      if [[ -d "${cand}/standalone/compute" && "$(basename "$cand")" == "$(basename "$raw")" ]]; then
+        (cd "$cand" && pwd -P)
+        return 0
+      fi
+      if [[ -d "${cand}/standalone/compute" ]]; then
+        sibling_matches+=("$cand")
+      fi
+    done
+    if [[ "${#sibling_matches[@]}" -eq 1 ]]; then
+      (cd "${sibling_matches[0]}" && pwd -P)
+      return 0
+    fi
+  fi
+  return 1
+}
+
+if [[ -n "$SYNC_SUITE_DIR" ]]; then
+  resolved_suite_dir="$(resolve_suite_dir "$SYNC_SUITE_DIR" || true)"
+  if [[ -z "$resolved_suite_dir" ]]; then
+    echo "ERROR: --sync-suite-dir must resolve to a suite root containing standalone/compute." >&2
+    echo "Provided: ${SYNC_SUITE_DIR}" >&2
+    exit 2
+  fi
+  if [[ "$resolved_suite_dir" != "$SYNC_SUITE_DIR" ]]; then
+    echo "Resolved --sync-suite-dir: ${SYNC_SUITE_DIR} -> ${resolved_suite_dir}"
+  fi
+  SYNC_SUITE_DIR="$resolved_suite_dir"
 fi
 
 IFS=',' read -r -a HOST_ARR <<<"$HOSTS"

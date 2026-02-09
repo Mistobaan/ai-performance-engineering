@@ -1,0 +1,35 @@
+{
+  "run_id": "2026-02-09_gb200_fullflags_all_0117",
+  "hosts": [
+    "node1",
+    "node2"
+  ],
+  "gpus_per_node": 4,
+  "total_ranks": 8,
+  "algorithms_tested": [
+    {
+      "algo": "Ring",
+      "status": "ok",
+      "peak_busbw_gbps": 698.28,
+      "output": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_nccl_algo_ring.json"
+    },
+    {
+      "algo": "Tree",
+      "status": "ok",
+      "peak_busbw_gbps": 547.22,
+      "output": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_nccl_algo_tree.json"
+    },
+    {
+      "algo": "NVLS",
+      "status": "ok",
+      "peak_busbw_gbps": 839.33,
+      "output": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_nccl_algo_nvls.json"
+    },
+    {
+      "algo": "auto",
+      "status": "ok",
+      "peak_busbw_gbps": 839.09,
+      "output": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_nccl_algo_auto.json"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "hosts": [
+    "node1",
+    "node2"
+  ],
+  "iperf3": {
+    "fwd_gbps": 7.717288401133888,
+    "rev_gbps": 7.526530183032093
+  },
+  "oob_if": "enP22p3s0f3",
+  "run_id": "2026-02-09_gb200_fullflags_all_0117_health_suite_extended",
+  "source_summary_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_cluster_health_suite_summary.json"
+}

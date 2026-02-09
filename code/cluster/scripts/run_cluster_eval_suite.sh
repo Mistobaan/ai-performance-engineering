@@ -415,16 +415,83 @@ if [[ -n "$TRAIN_PRECISION" && "$TRAIN_PRECISION" != "bf16" && "$TRAIN_PRECISION
   exit 2
 fi
 
+resolve_fp4_suite_dir() {
+  local raw="${1:-}"
+  local cand=""
+  local parent=""
+  if [[ -z "$raw" ]]; then
+    return 1
+  fi
+
+  if [[ -d "${raw}/standalone/compute" ]]; then
+    (cd "$raw" && pwd -P)
+    return 0
+  fi
+
+  if [[ -d "$raw" ]]; then
+    if [[ "$(basename "$raw")" == "compute" && "$(basename "$(dirname "$raw")")" == "standalone" ]]; then
+      (cd "$(dirname "$(dirname "$raw")")" && pwd -P)
+      return 0
+    fi
+    if [[ "$(basename "$raw")" == "standalone" && -d "${raw}/compute" ]]; then
+      (cd "$(dirname "$raw")" && pwd -P)
+      return 0
+    fi
+
+    for cand in "${raw}"/* "${raw}"/*/*; do
+      [[ -d "$cand" ]] || continue
+      if [[ -d "${cand}/standalone/compute" ]]; then
+        (cd "$cand" && pwd -P)
+        return 0
+      fi
+    done
+  fi
+
+  parent="$(dirname "$raw")"
+  if [[ -d "$parent" ]]; then
+    local -a sibling_matches=()
+    for cand in "${parent}"/*; do
+      [[ -d "$cand" ]] || continue
+      if [[ -d "${cand}/standalone/compute" && "$(basename "$cand")" == "$(basename "$raw")" ]]; then
+        (cd "$cand" && pwd -P)
+        return 0
+      fi
+      if [[ -d "${cand}/standalone/compute" ]]; then
+        sibling_matches+=("$cand")
+      fi
+    done
+    if [[ "${#sibling_matches[@]}" -eq 1 ]]; then
+      (cd "${sibling_matches[0]}" && pwd -P)
+      return 0
+    fi
+  fi
+  return 1
+}
+
 if [[ "$ENABLE_FP4" -eq 1 && -z "$FP4_SUITE_DIR" ]]; then
   fp4_candidates=(
     "${ROOT_DIR}/../cluster_perf_suite"
+    "${ROOT_DIR}/../clustermax"
+    "${ROOT_DIR}/../clustermax_from_node2"
+    "${ROOT_DIR}/code/cluster_perf_suite"
   )
   for cand in "${fp4_candidates[@]}"; do
-    if [[ -d "${cand}/standalone/compute" ]]; then
-      FP4_SUITE_DIR="$cand"
+    resolved_cand="$(resolve_fp4_suite_dir "$cand" || true)"
+    if [[ -n "$resolved_cand" ]]; then
+      FP4_SUITE_DIR="$resolved_cand"
       break
     fi
   done
+fi
+
+if [[ "$ENABLE_FP4" -eq 1 && -n "$FP4_SUITE_DIR" ]]; then
+  resolved_fp4_dir="$(resolve_fp4_suite_dir "$FP4_SUITE_DIR" || true)"
+  if [[ -z "$resolved_fp4_dir" ]]; then
+    echo "ERROR: FP4 suite dir must resolve to a root containing standalone/compute." >&2
+    echo "Provided: ${FP4_SUITE_DIR}" >&2
+    exit 2
+  fi
+  FP4_SUITE_DIR="$resolved_fp4_dir"
 fi
 
 if [[ "$ENABLE_FP4" -eq 1 && -z "$FP4_IMAGE" ]]; then
@@ -596,6 +663,23 @@ run_step "nccl_single_node" "${ROOT_DIR}/scripts/run_nccl_all_reduce.sh" \
   --run-id "${RUN_ID}_node1" \
   --hosts localhost \
   --label "${PRIMARY_LABEL}"
+
+single_nccl_json="${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json"
+single_nccl_raw="${ROOT_DIR}/results/raw/${RUN_ID}_node1_${PRIMARY_LABEL}_nccl_all_reduce.log"
+if [[ ! -f "$single_nccl_json" && -f "$single_nccl_raw" ]]; then
+  single_nccl_gpus="$(nvidia-smi -L | wc -l | tr -d ' ')"
+  if [[ "$single_nccl_gpus" =~ ^[1-9][0-9]*$ ]]; then
+    run_step "recover_nccl_single_node_json" python3 "${ROOT_DIR}/scripts/parse_nccl_log.py" \
+      --input "$single_nccl_raw" \
+      --output "$single_nccl_json" \
+      --run-id "${RUN_ID}_node1" \
+      --hosts localhost \
+      --gpus-per-node "$single_nccl_gpus" \
+      --command "recovered_from_raw_log:${single_nccl_raw}"
+  else
+    echo "WARNING: unable to recover single-node NCCL JSON; could not detect GPU count." >&2
+  fi
+fi
 
 if [[ "${#HOST_ARR[@]}" -gt 1 ]]; then
   if [[ -z "$OOB_IF" ]]; then
@@ -994,10 +1078,14 @@ run_step "fio" "${ROOT_DIR}/scripts/run_fio_bench.sh" \
   --runtime "$FIO_RUNTIME"
 
 # Plotting (best-effort)
-run_step "plot_nccl_single_node" python3 "${ROOT_DIR}/analysis/plot_nccl.py" \
-  --input "${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json" \
-  --out-dir "${ROOT_DIR}/docs/figures" \
-  --run-id "${RUN_ID}_node1"
+if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json" ]]; then
+  run_step "plot_nccl_single_node" python3 "${ROOT_DIR}/analysis/plot_nccl.py" \
+    --input "${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json" \
+    --out-dir "${ROOT_DIR}/docs/figures" \
+    --run-id "${RUN_ID}_node1"
+else
+  echo "WARNING: skipping plot_nccl_single_node; missing ${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json" >&2
+fi
 
 if [[ "${#HOST_ARR[@]}" -gt 1 && -f "${ROOT_DIR}/results/structured/${RUN_ID}_2nodes_nccl.json" ]]; then
   run_step "plot_nccl_multi_node" python3 "${ROOT_DIR}/analysis/plot_nccl.py" \

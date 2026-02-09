@@ -1,0 +1,31 @@
+{
+  "label": "node2_gpu2",
+  "gpu_name": "NVIDIA GB200",
+  "dtype": "bf16",
+  "mamf_tflops": 1605.29,
+  "best_shape": {
+    "m": 18688,
+    "n": 4096,
+    "k": 4096
+  },
+  "mean_tflops_at_best": 1544.61,
+  "median_tflops_at_best": 1550.98,
+  "shapes_tested": 10,
+  "shapes_total": 10,
+  "app_clocks": {
+    "app_sm_mhz": 2062,
+    "app_mem_mhz": 3996,
+    "cur_sm_mhz": 2062,
+    "cur_mem_mhz": 3996
+  },
+  "clocks": {
+    "physical_gpu": 0,
+    "gpu_name": "NVIDIA GB200",
+    "app_sm_mhz": 2062,
+    "app_mem_mhz": 3996,
+    "cur_sm_mhz": 2062,
+    "cur_mem_mhz": 3996
+  },
+  "warmup_iters": 5,
+  "measurement_iters": 20
+}

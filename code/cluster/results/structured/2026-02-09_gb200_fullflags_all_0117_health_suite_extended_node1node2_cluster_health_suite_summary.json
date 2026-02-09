@@ -1,0 +1,209 @@
+{
+  "cuda_visible_devices": "",
+  "gdr": {
+    "disabled_reason": "local ib_write_bw lacks --use_cuda;local ib_write_lat lacks --use_cuda",
+    "effective_enabled": false,
+    "enabled": false,
+    "gpu": 0,
+    "mem_types": [
+      "0",
+      "1"
+    ],
+    "requested": true,
+    "use_dmabuf": true
+  },
+  "gpus_per_node": 4,
+  "hosts": [
+    "node1",
+    "node2"
+  ],
+  "ib_read_bw": {
+    "mlx5_0": {
+      "avg_gbps": 388.6,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_read_bw_mlx5_0_p18615_client.json",
+      "port": 18615
+    },
+    "mlx5_1": {
+      "avg_gbps": 388.61,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_read_bw_mlx5_1_p18616_client.json",
+      "port": 18616
+    },
+    "mlx5_4": {
+      "avg_gbps": 388.61,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_read_bw_mlx5_4_p18617_client.json",
+      "port": 18617
+    },
+    "mlx5_5": {
+      "avg_gbps": 388.53,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_read_bw_mlx5_5_p18618_client.json",
+      "port": 18618
+    }
+  },
+  "ib_read_lat": {},
+  "ib_send_bw": {
+    "mlx5_0": {
+      "avg_gbps": 388.6,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_send_bw_mlx5_0_p18715_client.json",
+      "port": 18715
+    },
+    "mlx5_1": {
+      "avg_gbps": 388.59,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_send_bw_mlx5_1_p18716_client.json",
+      "port": 18716
+    },
+    "mlx5_4": {
+      "avg_gbps": 388.6,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_send_bw_mlx5_4_p18717_client.json",
+      "port": 18717
+    },
+    "mlx5_5": {
+      "avg_gbps": 388.52,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_send_bw_mlx5_5_p18718_client.json",
+      "port": 18718
+    }
+  },
+  "ib_send_lat": {},
+  "ib_write_bw": {
+    "mlx5_0": {
+      "avg_gbps": 387.14,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_write_bw_mlx5_0_p18515_client.json",
+      "port": 18515
+    },
+    "mlx5_1": {
+      "avg_gbps": 387.13,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_write_bw_mlx5_1_p18516_client.json",
+      "port": 18516
+    },
+    "mlx5_4": {
+      "avg_gbps": 387.14,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_write_bw_mlx5_4_p18517_client.json",
+      "port": 18517
+    },
+    "mlx5_5": {
+      "avg_gbps": 387.14,
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_ib_write_bw_mlx5_5_p18518_client.json",
+      "port": 18518
+    }
+  },
+  "ib_write_lat": {},
+  "iperf3": {
+    "fwd": {
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_iperf3_node1node2_fwd_client.json",
+      "gbps": 7.717288401133888
+    },
+    "rev": {
+      "client_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_iperf3_node1node2_rev_client.json",
+      "gbps": 7.526530183032093
+    }
+  },
+  "label": "node1node2",
+  "mpi": {
+    "bind_to": "none",
+    "map_by": "ppr:4:node",
+    "rank_by": "",
+    "report_bindings": false
+  },
+  "nccl": {
+    "all_gather_perf": {
+      "max_busbw": {
+        "busbw_gbps": 655.39,
+        "size_bytes": 4294967296
+      },
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_all_gather_perf.json"
+    },
+    "all_reduce_perf": {
+      "max_busbw": {
+        "busbw_gbps": 840.07,
+        "size_bytes": 17179869184
+      },
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_all_reduce_perf.json"
+    },
+    "alltoall_perf": {
+      "max_busbw": {
+        "busbw_gbps": 604.81,
+        "size_bytes": 1073741824
+      },
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_alltoall_perf.json"
+    },
+    "reduce_scatter_perf": {
+      "max_busbw": {
+        "busbw_gbps": 675.43,
+        "size_bytes": 4294967296
+      },
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_reduce_scatter_perf.json"
+    }
+  },
+  "nccl_debug": "INFO",
+  "nccl_debug_subsys": "INIT",
+  "nccl_ib_hca": "mlx5_0,mlx5_1,mlx5_4,mlx5_5",
+  "nccl_nvls_enable": "",
+  "nvls": {
+    "degraded": false,
+    "effective_nccl_nvls_enable": "",
+    "requested_nccl_nvls_enable": "",
+    "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nvls_recovery.json"
+  },
+  "oob_if": "enP22p3s0f3",
+  "require_clock_lock": true,
+  "run_id": "2026-02-09_gb200_fullflags_all_0117_health_suite_extended",
+  "security": {
+    "container_runtime_checks": {
+      "node1": {
+        "artifact": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1_container_runtime.txt",
+        "cve_2025_23266_docker_default_runtime": "runc",
+        "cve_2025_23266_nvidia_container_toolkit_version": "1.18.2-1",
+        "cve_2025_23266_reason": "nvidia-container-toolkit >= 1.17.8",
+        "cve_2025_23266_status": "pass",
+        "cve_2025_23267_reason": "nvidia-container-toolkit >= 1.17.7",
+        "cve_2025_23267_status": "pass",
+        "gpu_operator_cve_2025_23266_reason": "gpu-operator namespace missing",
+        "gpu_operator_cve_2025_23266_status": "n/a",
+        "gpu_operator_image": "<unknown>",
+        "gpu_operator_namespace": "missing",
+        "gpu_operator_version": "<unknown>",
+        "host": "node1"
+      },
+      "node2": {
+        "artifact": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node2_container_runtime.txt",
+        "cve_2025_23266_docker_default_runtime": "runc",
+        "cve_2025_23266_nvidia_container_toolkit_version": "1.18.2-1",
+        "cve_2025_23266_reason": "nvidia-container-toolkit >= 1.17.8",
+        "cve_2025_23266_status": "pass",
+        "cve_2025_23267_reason": "nvidia-container-toolkit >= 1.17.7",
+        "cve_2025_23267_status": "pass",
+        "gpu_operator_cve_2025_23266_reason": "gpu-operator namespace missing",
+        "gpu_operator_cve_2025_23266_status": "n/a",
+        "gpu_operator_image": "<unknown>",
+        "gpu_operator_namespace": "missing",
+        "gpu_operator_version": "<unknown>",
+        "host": "node2"
+      }
+    },
+    "runtime_cve_check_enabled": true
+  },
+  "steps": {
+    "order": [
+      "preflight",
+      "runtime_cve_check",
+      "iperf3_fwd",
+      "iperf3_rev",
+      "ib_write_bw",
+      "ib_read_bw",
+      "ib_send_bw",
+      "nccl_all_reduce",
+      "nccl_all_gather",
+      "nccl_reduce_scatter",
+      "nccl_alltoall",
+      "torchdist",
+      "summary"
+    ]
+  },
+  "suite_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_cluster_health_suite.log",
+  "torchdist": {
+    "max_busbw": {
+      "busbw_gbps": 715.6426608912589,
+      "size_bytes": 1073741824
+    },
+    "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_torchrun_allreduce.json"
+  }
+}

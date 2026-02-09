@@ -1,0 +1,103 @@
+{
+  "app_clocks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 3,
+      "local_rank": 3,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 3
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 2,
+      "local_rank": 2,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 2
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 0,
+      "local_rank": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 0
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 1,
+      "local_rank": 1,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 1
+    }
+  ],
+  "command": "recovered_from_raw_log:/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/_node1_node1_nccl_all_reduce.log",
+  "gpus_per_node": 4,
+  "hosts": [
+    "localhost"
+  ],
+  "log_summary": {
+    "collnet": {
+      "lines": [],
+      "seen": false
+    },
+    "errors": {
+      "lines": [],
+      "nvls_init_failure": false
+    },
+    "mnnvl": {
+      "mnnvl": null,
+      "nNodes": null
+    },
+    "nvls": {
+      "channels": null,
+      "comm_lines": 0
+    },
+    "sharp": {
+      "lines": [],
+      "seen": false
+    }
+  },
+  "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/_node1_node1_nccl_all_reduce.log",
+  "results": [],
+  "run_id": "_node1",
+  "total_ranks": 4
+}

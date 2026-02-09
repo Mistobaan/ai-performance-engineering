@@ -20,7 +20,12 @@ Options:
   --run-id <id>          RUN_ID prefix (default: YYYY-MM-DD)
   --hosts <h1,h2,...>    Comma-separated host list (required)
   --labels <l1,l2,...>   Optional labels (must match host count)
-  --suite-dir <dir>      Cluster Perf suite path on each host (required)
+  --suite-dir <dir>      Cluster Perf suite path on each host (required).
+                         Accepted forms:
+                           - suite root containing standalone/compute/
+                           - standalone/ directory
+                           - standalone/compute/ directory
+                           - parent directory containing a single suite root
   --ssh-user <user>      SSH user (default: ubuntu)
   --ssh-key <path>       SSH key (default: $SSH_KEY)
   --remote-root <path>   Repo root on remote hosts (default: this repo root)
@@ -139,6 +144,66 @@ if [[ -z "$IMAGE" ]]; then
   usage >&2
   exit 2
 fi
+
+resolve_suite_dir() {
+  local raw="${1:-}"
+  local cand=""
+  if [[ -z "$raw" ]]; then
+    return 1
+  fi
+  if [[ -d "${raw}/standalone/compute" ]]; then
+    (cd "$raw" && pwd -P)
+    return 0
+  fi
+  if [[ -d "$raw" ]]; then
+    if [[ "$(basename "$raw")" == "compute" && "$(basename "$(dirname "$raw")")" == "standalone" ]]; then
+      (cd "$(dirname "$(dirname "$raw")")" && pwd -P)
+      return 0
+    fi
+    if [[ "$(basename "$raw")" == "standalone" && -d "${raw}/compute" ]]; then
+      (cd "$(dirname "$raw")" && pwd -P)
+      return 0
+    fi
+    for cand in "${raw}"/* "${raw}"/*/*; do
+      [[ -d "$cand" ]] || continue
+      if [[ -d "${cand}/standalone/compute" ]]; then
+        (cd "$cand" && pwd -P)
+        return 0
+      fi
+    done
+  fi
+  local parent
+  parent="$(dirname "$raw")"
+  if [[ -d "$parent" ]]; then
+    local -a sibling_matches=()
+    for cand in "${parent}"/*; do
+      [[ -d "$cand" ]] || continue
+      if [[ -d "${cand}/standalone/compute" && "$(basename "$cand")" == "$(basename "$raw")" ]]; then
+        (cd "$cand" && pwd -P)
+        return 0
+      fi
+      if [[ -d "${cand}/standalone/compute" ]]; then
+        sibling_matches+=("$cand")
+      fi
+    done
+    if [[ "${#sibling_matches[@]}" -eq 1 ]]; then
+      (cd "${sibling_matches[0]}" && pwd -P)
+      return 0
+    fi
+  fi
+  return 1
+}
+
+resolved_suite_dir="$(resolve_suite_dir "$SUITE_DIR" || true)"
+if [[ -z "$resolved_suite_dir" ]]; then
+  echo "ERROR: --suite-dir must resolve to a suite root containing standalone/compute." >&2
+  echo "Provided: ${SUITE_DIR}" >&2
+  exit 2
+fi
+if [[ "$resolved_suite_dir" != "$SUITE_DIR" ]]; then
+  echo "Resolved --suite-dir: ${SUITE_DIR} -> ${resolved_suite_dir}"
+fi
+SUITE_DIR="$resolved_suite_dir"
 
 IFS=',' read -r -a HOST_ARR <<<"$HOSTS"
 IFS=',' read -r -a LABEL_ARR <<<"$LABELS"

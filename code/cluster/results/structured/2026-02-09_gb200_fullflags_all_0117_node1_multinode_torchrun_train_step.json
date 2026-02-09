@@ -1,0 +1,219 @@
+{
+  "app_clocks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 0,
+      "local_rank": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 0
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 1,
+      "local_rank": 1,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 1
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 2,
+      "local_rank": 2,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 2
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 3,
+      "local_rank": 3,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 3
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 2062
+      },
+      "global_rank": 4,
+      "local_rank": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node2",
+      "physical_gpu": 0
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 5,
+      "local_rank": 1,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node2",
+      "physical_gpu": 1
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 6,
+      "local_rank": 2,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node2",
+      "physical_gpu": 2
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 7,
+      "local_rank": 3,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node2",
+      "physical_gpu": 3
+    }
+  ],
+  "backend": "nccl",
+  "config": {
+    "batch_size_per_rank": 2,
+    "heads": 32,
+    "hidden": 4096,
+    "layers": 24,
+    "mlp_ratio": 4,
+    "seq_len": 2048,
+    "steps": 30,
+    "warmup_steps": 5
+  },
+  "fp8": {
+    "note": "This benchmark currently runs bf16/fp16 only; use FP8 training stacks (e.g. TransformerEngine) separately.",
+    "torch_float8_supported": true,
+    "transformer_engine_available": false
+  },
+  "fsdp": {
+    "enabled": true,
+    "mixed_precision": "bf16",
+    "sharding": "FULL_SHARD"
+  },
+  "hosts": [
+    "node1",
+    "node2"
+  ],
+  "label": "node1_multinode",
+  "local_rank_count": 4,
+  "optimizer": {
+    "fused": true,
+    "lr": 0.0001,
+    "name": "AdamW"
+  },
+  "precision": "bf16",
+  "results": {
+    "avg_step_s": 0.15876098970572153,
+    "p50_step_s": 0.15854229032993317,
+    "p99_step_s": 0.16247496008872986,
+    "step_times_s": [
+      0.16247496008872986,
+      0.15395185351371765,
+      0.16116245090961456,
+      0.159036785364151,
+      0.1601009964942932,
+      0.15783387422561646,
+      0.15983638167381287,
+      0.15833166241645813,
+      0.16185475885868073,
+      0.15674740076065063,
+      0.16150538623332977,
+      0.15809476375579834,
+      0.16299015283584595,
+      0.15649622678756714,
+      0.1571652591228485,
+      0.1597684621810913,
+      0.15733174979686737,
+      0.15763437747955322,
+      0.16220660507678986,
+      0.15975260734558105,
+      0.15794798731803894,
+      0.15487249195575714,
+      0.15988047420978546,
+      0.15674753487110138,
+      0.15854229032993317,
+      0.1573769450187683,
+      0.15684449672698975,
+      0.1603407859802246,
+      0.1562810093164444,
+      0.15971896052360535
+    ],
+    "tokens_per_s": 206398.3101940759,
+    "tokens_per_step": 32768
+  },
+  "run_id": "2026-02-09_gb200_fullflags_all_0117",
+  "timestamp": "2026-02-09T01:45:57+0000",
+  "versions": {
+    "cuda": "13.0",
+    "torch": "2.9.1+cu130"
+  },
+  "world_size": 8
+}

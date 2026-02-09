@@ -7,7 +7,6 @@
 - DO NOT run destructive git commands in this repo (including `git restore`, `git checkout`, `git reset --hard`, `git revert`, or mass file deletions) unless I explicitly ask.
 - NEVER restore/revert/checkout any file to `HEAD` or any commit. Always keep files as-is and include changes (even if unexpected).
 - DO NOT delete any files, including untracked files or locally modified files, unless I explicitly ask.
-- NEVER delete anything (tracked or untracked, modified or not) unless I explicitly ask.
 - If you notice unexpected local file modifications, always call them out and ask for guidance; default to keeping them as-is and including them in the changes unless I explicitly say otherwise.
 - When you detect modified or untracked files, please treat them as part of this task.
 - If a file is already modified or open in the editor, keep its current contents as-is and include it in the final change list; you may continue editing without asking.
@@ -196,10 +195,10 @@
 - If shared logic has **2+ call sites** across chapters/labs, extract it into `core/` (prefer `core/analysis/*` or `core/utils/*`) and import it from chapter code.
 - If a chapter’s narrative/book references specific chapter-local code, keep a thin chapter wrapper that calls into `core/` rather than moving everything out of the chapter.
 
-## Verification Mixins REQUIRED
-- Benchmarks must surface verification metadata via `VerificationPayloadMixin` + `_set_verification_payload()` inside `benchmark_fn()` (or equivalent path).
-- Do NOT hand-roll `get_verify_output()/get_input_signature()/get_output_tolerance()` unless there is a truly special case; fail fast instead of adding fallbacks.
-- New benchmarks should copy the compliant template (`templates/benchmark_compliant.py`) and keep mixin usage consistent.
+## Verification Interface (CRITICAL)
+- Preferred path: use `VerificationPayloadMixin` + `_set_verification_payload()` inside `benchmark_fn()` (or equivalent path).
+- If a benchmark cannot use the mixin, it MUST explicitly implement `get_verify_output()/get_input_signature()/get_output_tolerance()` with no auto-inference and no fallbacks.
+- New benchmarks should copy the compliant template (`templates/benchmark_compliant.py`) and keep verification behavior consistent.
 
 ## Chapter Consistency
 - Make sure all code in the chapter (chXX/ examples are consistent with the content in the equivalent chapter (XX) of the AI Systems Performance Engineering book (book/chXX.md)
@@ -461,9 +460,9 @@ The jitter check protects against benchmarks returning **constant/hardcoded outp
 - `return self.gpu_data[:1000].clone()` - Slice of actual data for large outputs
 
 
-### Benchmark Verification Interface
+### Benchmark Verification Interface (Fallback Path)
 
-Every benchmark MUST explicitly implement these methods (NO auto-detection):
+Use this explicit interface only when `VerificationPayloadMixin` is not applicable for the benchmark type:
 
 ```python
 def get_verify_output(self) -> torch.Tensor:
@@ -580,13 +579,12 @@ If verification fails, investigate WHY:
 **Files with cop-outs STATUS:**
 - ✅ ch01-ch03 - FIXED with actual outputs
 - ✅ ch05-ch16 - FIXED with actual outputs or RuntimeError for incompatible
-- ✅ ch17-ch20 - FIXED with RuntimeError for nested harness benchmarks
+- ✅ ch17-ch20 - FIXED with output surfacing for verification
 - ⚠️ ch04/* - SKIPPED (multi-GPU required)
 
 **Nested Harness Benchmarks (ch18/ch19/ch20):**
-Many advanced benchmarks use a "nested harness" pattern where the wrapper calls `run_benchmark()` 
-which internally creates another harness. These are marked with `RuntimeError("Nested harness 
-benchmark - needs refactoring")` until proper output surfacing can be implemented.
+Many advanced benchmarks use a "nested harness" pattern where a wrapper calls `run_benchmark()`
+internally. These must still surface a real verification output from the timed run at the outer layer.
 
 ### NO `_run_once_for_verify` in setup()
 
@@ -770,7 +768,8 @@ def get_output_tolerance(self) -> tuple:
 ## ALWAYS MAKE THE LONG_TERM CHOICE
 - DO NOT MAKE CHOICES BASED ON IMMEDIATE CONVENIENCE
 - PREFER HARNESS CHANGES OVER PER-BENCHMARK HACKS
-- DOCUMENT DISCOVERIES IN THIS FILEIATE NEED.  ALWAYS design for the long-term, right way of doing things.
+- DOCUMENT DISCOVERIES IN THIS FILE WHEN THEY CREATE A REPEATED NEED.
+- ALWAYS design for the long-term, right way of doing things.
 
 ## Prefer flags over environment variables
 

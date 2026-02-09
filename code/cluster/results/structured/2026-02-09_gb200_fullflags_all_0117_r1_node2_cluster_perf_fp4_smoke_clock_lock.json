@@ -1,0 +1,78 @@
+{
+  "cmd": "bash -lc 'set -euo pipefail; docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v \"/home/ubuntu/ai-performance-engineering/code/cluster:/workspace\" -w /workspace \"ghcr.io/jordannanos/cmax-compute:latest\" python -u analysis/smoke_deepgemm_fp8_fp4.py --m \"4096\" --n \"4096\" --k \"4096\" --warmup \"10\" --iters \"30\" --out-json \"/workspace/results/structured/2026-02-09_gb200_fullflags_all_0117_r1_node2_cluster_perf_fp4_smoke.json\" 2>&1 | tee \"/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_r1_node2_cluster_perf_fp4_smoke.log\"'",
+  "command_end_ts": "2026-02-09T01:38:21+0000",
+  "command_start_ts": "2026-02-09T01:38:13+0000",
+  "devices": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "label": "",
+  "locks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 0
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 210
+      },
+      "device": 1,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 1
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 2062
+      },
+      "device": 2,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 2
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 2062
+      },
+      "device": 3,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 3
+    }
+  ],
+  "require_clock_lock": true,
+  "returncode": 0,
+  "run_id": "",
+  "timestamp": "2026-02-09T01:38:12+0000"
+}

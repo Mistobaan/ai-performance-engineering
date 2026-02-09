@@ -1,0 +1,77 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "bin": "all_reduce_perf",
+      "cmd_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_all_reduce_perf_attempt1.cmd.txt",
+      "error_excerpt": null,
+      "nccl_nvls_enable_env": "",
+      "nvls_init_failure": false,
+      "phase": "run",
+      "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_all_reduce_perf_attempt1.log",
+      "rc": 0,
+      "reset": null,
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_all_reduce_perf.json",
+      "timestamp_utc": "2026-02-09T01:18:54Z"
+    },
+    {
+      "attempt": 1,
+      "bin": "all_gather_perf",
+      "cmd_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_all_gather_perf_attempt1.cmd.txt",
+      "error_excerpt": null,
+      "nccl_nvls_enable_env": "",
+      "nvls_init_failure": false,
+      "phase": "run",
+      "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_all_gather_perf_attempt1.log",
+      "rc": 0,
+      "reset": null,
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_all_gather_perf.json",
+      "timestamp_utc": "2026-02-09T01:19:16Z"
+    },
+    {
+      "attempt": 1,
+      "bin": "reduce_scatter_perf",
+      "cmd_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_reduce_scatter_perf_attempt1.cmd.txt",
+      "error_excerpt": null,
+      "nccl_nvls_enable_env": "",
+      "nvls_init_failure": false,
+      "phase": "run",
+      "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_reduce_scatter_perf_attempt1.log",
+      "rc": 0,
+      "reset": null,
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_reduce_scatter_perf.json",
+      "timestamp_utc": "2026-02-09T01:19:36Z"
+    },
+    {
+      "attempt": 1,
+      "bin": "alltoall_perf",
+      "cmd_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_alltoall_perf_attempt1.cmd.txt",
+      "error_excerpt": null,
+      "nccl_nvls_enable_env": "",
+      "nvls_init_failure": false,
+      "phase": "run",
+      "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_alltoall_perf_attempt1.log",
+      "rc": 0,
+      "reset": null,
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nccl_alltoall_perf.json",
+      "timestamp_utc": "2026-02-09T01:19:55Z"
+    }
+  ],
+  "attempts_jsonl": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_nvls_recovery.jsonl",
+  "degraded": false,
+  "effective_nccl_nvls_enable": "",
+  "hosts": [
+    "node1",
+    "node2"
+  ],
+  "label": "node1node2",
+  "max_attempts": 3,
+  "remediation": [
+    "Ensure nvidia-imex is active on all nodes and IMEX Domain State is UP (scripts/preflight_cluster_services.sh).",
+    "If NVLS init fails with transport/nvls.cc + Cuda failure 801, try restarting nvidia-imex on all nodes and re-running.",
+    "If NVLS continues to fail, run with NCCL_NVLS_ENABLE=0 as a degraded escape hatch and report the perf delta."
+  ],
+  "requested_nccl_nvls_enable": "",
+  "run_id": "2026-02-09_gb200_fullflags_all_0117_health_suite_extended",
+  "timestamp_utc": "2026-02-09T01:20:09Z"
+}

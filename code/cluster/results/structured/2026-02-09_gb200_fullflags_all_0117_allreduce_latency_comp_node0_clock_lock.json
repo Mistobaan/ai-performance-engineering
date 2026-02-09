@@ -1,0 +1,78 @@
+{
+  "cmd": "/home/ubuntu/ai-performance-engineering/code/cluster/env/venv/bin/torchrun --nproc_per_node=4 --nnodes=2 --node_rank=0 --rdzv_backend=c10d --rdzv_endpoint=node1:29502 --max_restarts=0 /home/ubuntu/ai-performance-engineering/code/cluster/scripts/allreduce_latency_comp.py --payload-gib 4.0 --chunks 1000 --iters 5 --warmup 1 --output /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_gb200_fullflags_all_0117_allreduce_latency_comp.json",
+  "command_end_ts": "2026-02-09T01:40:07+0000",
+  "command_start_ts": "2026-02-09T01:39:55+0000",
+  "devices": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "label": "allreduce_latency_comp_node0",
+  "locks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 0
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 1,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 1
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 2,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 2
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 3,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 3
+    }
+  ],
+  "require_clock_lock": true,
+  "returncode": 0,
+  "run_id": "2026-02-09_gb200_fullflags_all_0117",
+  "timestamp": "2026-02-09T01:39:54+0000"
+}

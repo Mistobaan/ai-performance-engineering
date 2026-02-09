@@ -6,6 +6,7 @@ Rules:
 - Do not link to `results/raw/` (raw is gitignored and for debugging only).
 - Link only to `results/structured/` and `docs/figures/`.
 - GPU benchmark runs are valid only if clock locking succeeded (include the clock-lock artifact in the run).
+- For stakeholder delivery, include GitHub handoff metadata (repo URL, commit/tag, collaborator invite status).
 
 ## TL;DR
 - Hardware summary (nodes, GPUs/node, CPU, RAM, OS)
@@ -30,10 +31,26 @@ Discovery:
 - Egress constraints (model download reality)
 - Observability (DCGM/IMEX/Fabric Manager)
 
+## Normal vs Typical Cluster (Operator Reality)
+| Area | Typical small-team expectation | Observed on this cluster | Why it matters |
+| --- | --- | --- | --- |
+| Launch path | <example> | <example> | <impact> |
+| Networking | <example> | <example> | <impact> |
+| Services/health gates | <example> | <example> | <impact> |
+| Storage/scratch | <example> | <example> | <impact> |
+| Observability | <example> | <example> | <impact> |
+
 ## Weird / New / Interesting
 1. <finding>
 2. <finding>
 3. <finding>
+
+## Capability Demonstration (Causal Debugging Workflow)
+- Observation: <what broke and how it was detected>
+- Hypothesis: <candidate root cause>
+- Isolation tests: <what was ruled out>
+- Fix or mitigation: <what changed>
+- Verification: <before/after metric change + artifact links>
 
 ## Benchmark A (Networking Story): NCCL `all_reduce_perf`
 - Why: explain intra-node vs inter-node scaling
@@ -122,6 +139,30 @@ Discovery:
 - <bullet>
 - <bullet>
 
+## Clustermax Extension Outcomes
+| Area | What you implemented/prototyped | Why it should be upstreamed |
+| --- | --- | --- |
+| <example> | <script/analysis/doc path> | <impact> |
+| <example> | <script/analysis/doc path> | <impact> |
+
+## Repository Handoff (GitHub)
+- Repo URL: <url>
+- Commit/Tag for review: <commit or tag>
+- Collaborator access (`JordanNanos`) status: <invited|already has access>
+
+## Repro Steps
+- One-command baseline repro (portable profile):
+  - `scripts/run_cluster_eval_suite.sh --run-id <RUN_ID> --hosts <h1,h2> --labels <l1,l2> --ssh-key <key> --oob-if <iface> --socket-ifname <iface> --nccl-ib-hca <hcas> --health-suite extended --disable-fp4`
+- Full GB200 repro (FP4 path enabled):
+  - `scripts/run_cluster_eval_suite.sh --run-id <RUN_ID> --hosts <h1,h2> --labels <l1,l2> --ssh-key <key> --oob-if <iface> --socket-ifname <iface> --nccl-ib-hca <hcas> --health-suite extended --fp4-suite-dir <dir> --fp4-image ghcr.io/jordannanos/cmax-compute:latest`
+- Full GB200 repro (all extended checks enabled):
+  - `scripts/run_cluster_eval_suite.sh --run-id <RUN_ID> --hosts <h1,h2> --labels <l1,l2> --ssh-key <key> --oob-if <iface> --socket-ifname <iface> --nccl-ib-hca <hcas> --health-suite extended --health-gdr --health-gdr-gpu 0 --health-gdr-mem-types 0,1 --health-gdr-use-dmabuf --fp4-suite-dir <dir> --fp4-image ghcr.io/jordannanos/cmax-compute:latest --run-c2c --run-numa-mem-bw --run-train-step --train-step-single-node --train-step-multi-node --run-checkpoint-io --enable-mamf --mamf-mode quick --mamf-concurrent --enable-allreduce-stability --allreduce-payload-gib 2.0 --allreduce-iters 200 --allreduce-warmup 20 --enable-allreduce-latency-comp --allreduce-latency-payload-gib 4.0 --allreduce-latency-chunks 1000 --allreduce-latency-iters 5 --allreduce-latency-warmup 1 --enable-allgather-control-plane --allgather-control-iters 2000 --allgather-control-warmup 200 --enable-nccl-algo-comparison --nccl-algos Ring,Tree,NVLS,auto`
+  - If grouped GEMM fails on GB200 with DeepGEMM scaling-factor errors, apply `code/cluster_perf_patches/deepgemm_gb200_grouped_gemm_ue8m0.patch` (see `docs/advanced-runbook.md`).
+
 ## Appendix
 - Discovery links
 - Any tuning deltas (sysctl, MTU, NCCL env)
+
+## Activity Log
+<!-- ACTIVITY_LOG_START -->
+<!-- ACTIVITY_LOG_END -->

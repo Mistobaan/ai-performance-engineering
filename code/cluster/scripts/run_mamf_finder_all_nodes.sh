@@ -162,7 +162,9 @@ for idx in "${!HOST_ARR[@]}"; do
       out_csv="results/structured/${RUN_ID}_${label}_gpu${gpu}_mamf.csv"
       out_json="results/structured/${RUN_ID}_${label}_gpu${gpu}_mamf_summary.json"
 
-      mamf_args="scripts/run_with_gpu_clocks.sh --devices ${gpu} -- env/venv/bin/python scripts/mamf_finder.py"
+      # Each worker is constrained to one physical GPU via CUDA_VISIBLE_DEVICES.
+      # Inside that namespace the visible device index is always 0.
+      mamf_args="scripts/run_with_gpu_clocks.sh --devices 0 -- env/venv/bin/python scripts/mamf_finder.py"
 
       if [[ "$MODE" == "quick" ]]; then
         mamf_args+=" --m-range '${M_RANGE}' --n ${N_FIXED} --k ${K_FIXED}"
@@ -200,7 +202,8 @@ for idx in "${!HOST_ARR[@]}"; do
 
       mamf_args=(
         scripts/run_with_gpu_clocks.sh
-        --devices "${gpu}"
+        # CUDA_VISIBLE_DEVICES narrows visibility to one GPU; use local index 0.
+        --devices "0"
         --
         env/venv/bin/python
         scripts/mamf_finder.py

@@ -1,0 +1,19 @@
+{
+  "fp4": {
+    "image": "ghcr.io/jordannanos/cmax-compute:latest",
+    "requested_preset": "auto",
+    "selected_preset": "all",
+    "suite_dir": "/home/ubuntu/ai-performance-engineering/code/clustermax"
+  },
+  "gb_family_detected": true,
+  "gb_sku": "GB200",
+  "gpu_names": [
+    "NVIDIA GB200",
+    "NVIDIA GB200",
+    "NVIDIA GB200",
+    "NVIDIA GB200"
+  ],
+  "host": "node1",
+  "label": "node1",
+  "timestamp": "2026-02-09T01:35:43+0000"
+}
