@@ -21,7 +21,7 @@ Options:
   --iters <n>         Benchmark iterations (default: 30).
   --runtime <mode>    host|container (default: host).
   --stack-profile <name>
-                      Stack profile: old_container|old_parity_container|new_container|host_only
+                      Stack profile: old_container|orig_parity_container|new_container|host_only
                       (default: runtime-specific from configs/cluster_perf_stack_profiles.json).
   --image <image>     Container image for runtime=container
                       (default: stack-profile image_ref or $CONTAINER_IMAGE).
@@ -148,6 +148,16 @@ if [[ ! -x "${ROOT_DIR}/env/venv/bin/python" ]]; then
   exit 1
 fi
 if [[ "$RUNTIME" == "host" ]]; then
+  if [[ "$STACK_PROFILE" == "host_only" ]]; then
+    HOST_RUNTIME_ENV_FILE="${ROOT_DIR}/env/venv/orig_parity_runtime_env.sh"
+    if [[ ! -f "$HOST_RUNTIME_ENV_FILE" ]]; then
+      echo "ERROR: missing host runtime env file for host_only parity: ${HOST_RUNTIME_ENV_FILE}" >&2
+      echo "Run scripts/bootstrap_cluster_nodes.sh (or run_fp4_checks_all_nodes.sh with bootstrap enabled) first." >&2
+      exit 1
+    fi
+    # shellcheck disable=SC1090
+    source "$HOST_RUNTIME_ENV_FILE"
+  fi
   HOST_CUDA_HOME="$(resolve_host_cuda_home)"
 fi
 

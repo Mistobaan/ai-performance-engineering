@@ -104,11 +104,11 @@ scripts/run_cluster_eval_suite.sh \
   --fp4-stack-profile new_container
 ```
 
-Optional old-parity open container profile (matches legacy `old_container` software versions, without `jordannanos` image dependency):
+Optional orig-parity open container profile (matches legacy `old_container` software versions, without `jordannanos` image dependency):
 
 ```bash
-scripts/repro/build_cluster_perf_image.sh --profile old_parity
-IMAGE_ID="$(docker image inspect --format '{{.Id}}' cfregly/cluster_perf_old_parity:latest)"
+scripts/repro/build_cluster_perf_image.sh --profile orig_parity
+IMAGE_ID="$(docker image inspect --format '{{.Id}}' cfregly/cluster_perf_orig_parity:latest)"
 
 scripts/run_cluster_eval_suite.sh \
   --run-id <run_id> \
@@ -120,7 +120,7 @@ scripts/run_cluster_eval_suite.sh \
   --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5 \
   --health-suite extended \
   --fp4-runtime container \
-  --fp4-stack-profile old_parity_container \
+  --fp4-stack-profile orig_parity_container \
   --fp4-image "${IMAGE_ID}"
 ```
 
@@ -156,14 +156,14 @@ python3 scripts/write_manifest.py --run-id <run_id> --hosts node1,node2 --includ
 ## FP4 Notes
 - FP4 is enabled by default in `scripts/run_cluster_eval_suite.sh`.
 - FP4 runtime is host-native by default (`--fp4-runtime host`).
-- Host bootstrap installs pinned `deep_gemm` (`DeepGEMM@477618c`) into `env/venv` for `host_only` profile parity.
+- Host bootstrap now installs `host_only` from `orig_parity` image provenance (Torch/CUDA/NCCL/cuDNN/DeepGEMM) and installs host `nvbandwidth` from the same image by default (`--bootstrap-host-parity-image` to override).
 - Optional container runtime is supported with `--fp4-runtime container --fp4-stack-profile new_container`.
 - FP4 benchmark entrypoints also expose runtime selection:
   - grouped GEMM: `scripts/run_cluster_perf_grouped_gemm.sh --runtime host|container --stack-profile <profile>`
   - FP4 smoke: `scripts/run_cluster_perf_fp4_smoke.sh --runtime host|container --stack-profile <profile>`
 - Build local open container runtime (optional):
   - open decoupled: `scripts/repro/build_cluster_perf_image.sh --profile open --tag cfregly/cluster_perf:latest`
-  - old-parity: `scripts/repro/build_cluster_perf_image.sh --profile old_parity --tag cfregly/cluster_perf_old_parity:latest`
+  - orig-parity: `scripts/repro/build_cluster_perf_image.sh --profile orig_parity --tag cfregly/cluster_perf_orig_parity:latest`
 - Stack profile catalog and pinned digests: `docs/cluster-perf-stack-profiles.md`
 - FP4 checks now enforce a balanced attestation by default:
   - semantic source check on `scripts/benchmarks/grouped_gemm_bench.py` (GB200 UE8M0 markers)

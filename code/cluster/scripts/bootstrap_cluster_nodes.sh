@@ -34,8 +34,11 @@ Options:
                                - standalone/ directory
                                - standalone/compute/ directory
                                - parent directory containing a single suite root
-  --torch-index-url <url>    Torch wheel index (default: https://download.pytorch.org/whl/cu130)
-  --torch-version <ver>      Torch version to install if missing (default: 2.9.1+cu130)
+  --host-parity-image <ref>  Source image for host-only orig-parity binaries
+                             (default: cfregly/cluster_perf_orig_parity:latest)
+  --torch-index-url <url>    Legacy fallback torch index (default: https://pypi.ngc.nvidia.com)
+  --torch-version <ver>      Expected torch version after host parity install
+                             (default: 2.10.0a0+a36e1d39eb.nv26.01.42222806)
 EOF
 }
 
@@ -53,11 +56,13 @@ INSTALL_SYSTEM_PACKAGES=1
 INSTALL_PYTHON_DEPS=1
 
 SYNC_SUITE_DIR=""
-TORCH_INDEX_URL="https://download.pytorch.org/whl/cu130"
-TORCH_VERSION="2.9.1+cu130"
-DEEP_GEMM_GIT_URL="https://github.com/deepseek-ai/DeepGEMM.git"
-DEEP_GEMM_GIT_REF="477618c"
-DEEP_GEMM_VERSION="2.3.0+477618c"
+TORCH_INDEX_URL="https://pypi.ngc.nvidia.com"
+TORCH_VERSION="2.10.0a0+a36e1d39eb.nv26.01.42222806"
+TORCH_CUDA_VERSION="13.1"
+TORCH_CUDNN_VERSION="91701"
+TORCH_NCCL_VERSION="2.29.2"
+DEEP_GEMM_VERSION="2.3.0+0f5f266"
+HOST_PARITY_IMAGE="${HOST_PARITY_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -74,6 +79,7 @@ while [[ $# -gt 0 ]]; do
     --install-python-deps) INSTALL_PYTHON_DEPS=1; shift ;;
     --skip-python-deps) INSTALL_PYTHON_DEPS=0; shift ;;
     --sync-suite-dir) SYNC_SUITE_DIR="${2:-}"; shift 2 ;;
+    --host-parity-image) HOST_PARITY_IMAGE="${2:-}"; shift 2 ;;
     --torch-index-url) TORCH_INDEX_URL="${2:-}"; shift 2 ;;
     --torch-version) TORCH_VERSION="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -335,51 +341,41 @@ install_python_deps_on_host() {
   local host="$1"
   local venv_dir="${REMOTE_ROOT}/env/venv"
   local venv_py="${venv_dir}/bin/python"
-  local venv_pip="${venv_dir}/bin/pip"
+  local installer_script="${REMOTE_ROOT}/scripts/install_host_orig_parity_stack.sh"
   local req_file="${REMOTE_ROOT}/env/requirements.txt"
-  local deep_gemm_req="deep_gemm @ git+${DEEP_GEMM_GIT_URL}@${DEEP_GEMM_GIT_REF}"
 
-  local q_venv_dir q_venv_py q_venv_pip q_req q_torch_index q_torch_version q_deep_gemm_req q_deep_gemm_version
+  local q_venv_dir q_venv_py q_installer q_req q_parity_image
+  local q_torch_version q_torch_cuda q_torch_cudnn q_torch_nccl q_deep_gemm_version
   printf -v q_venv_dir '%q' "$venv_dir"
   printf -v q_venv_py '%q' "$venv_py"
-  printf -v q_venv_pip '%q' "$venv_pip"
+  printf -v q_installer '%q' "$installer_script"
   printf -v q_req '%q' "$req_file"
-  printf -v q_torch_index '%q' "$TORCH_INDEX_URL"
+  printf -v q_parity_image '%q' "$HOST_PARITY_IMAGE"
   printf -v q_torch_version '%q' "$TORCH_VERSION"
-  printf -v q_deep_gemm_req '%q' "$deep_gemm_req"
+  printf -v q_torch_cuda '%q' "$TORCH_CUDA_VERSION"
+  printf -v q_torch_cudnn '%q' "$TORCH_CUDNN_VERSION"
+  printf -v q_torch_nccl '%q' "$TORCH_NCCL_VERSION"
   printf -v q_deep_gemm_version '%q' "$DEEP_GEMM_VERSION"
 
   local cmd="
 set -euo pipefail
 mkdir -p $(printf '%q' "${REMOTE_ROOT}/env")
+if [[ ! -x ${q_installer} ]]; then
+  echo 'ERROR: missing host parity installer script: ${installer_script}' >&2
+  exit 2
+fi
 if [[ ! -x ${q_venv_py} ]]; then
   python3 -m venv ${q_venv_dir}
 fi
-${q_venv_pip} install --upgrade pip 'setuptools<81' wheel
-if ! ${q_venv_py} -c \"import torch\" >/dev/null 2>&1; then
-  ${q_venv_pip} install --index-url ${q_torch_index} torch==${q_torch_version}
-fi
-if [[ -f ${q_req} ]]; then
-  ${q_venv_pip} install -r ${q_req}
-fi
-cuda_home=\"\${CUDA_HOME:-}\"
-if [[ -z \"\${cuda_home}\" ]]; then
-  if [[ -d /usr/local/cuda ]]; then
-    cuda_home=/usr/local/cuda
-  elif command -v nvcc >/dev/null 2>&1; then
-    nvcc_path=\"\$(command -v nvcc)\"
-    cuda_home=\"\$(cd \"\$(dirname \"\${nvcc_path}\")/..\" && pwd -P)\"
-  fi
-fi
-if [[ -z \"\${cuda_home}\" || ! -f \"\${cuda_home}/include/cuda.h\" ]]; then
-  echo 'ERROR: CUDA toolkit headers not found; cannot install pinned deep_gemm for host-only FP4.' >&2
-  echo \"Resolved CUDA_HOME=\${cuda_home:-<empty>}\" >&2
-  exit 2
-fi
-if ! ${q_venv_py} -c \"import importlib.metadata as m; print(m.version('deep_gemm'))\" 2>/dev/null | grep -qx ${q_deep_gemm_version}; then
-  CUDA_HOME=\"\${cuda_home}\" CUDACXX=\"\${cuda_home}/bin/nvcc\" ${q_venv_pip} install --no-build-isolation --upgrade ${q_deep_gemm_req}
-fi
-${q_venv_pip} check || true
+${q_installer} \
+  --venv-dir ${q_venv_dir} \
+  --requirements-file ${q_req} \
+  --parity-image ${q_parity_image} \
+  --expected-torch-version ${q_torch_version} \
+  --expected-cuda-version ${q_torch_cuda} \
+  --expected-cudnn-version ${q_torch_cudnn} \
+  --expected-nccl-version ${q_torch_nccl} \
+  --expected-deep-gemm-version ${q_deep_gemm_version}
 "
   run_host_cmd "$host" "$cmd"
 }
@@ -392,6 +388,7 @@ write_status_json() {
 
   local python3_path pip3_path docker_path nvidia_smi_path nvcc_path mpirun_path ib_write_bw_path ibstat_path iperf3_path numactl_path
   local fio_path jq_path wget_path curl_path ncu_path nsys_path dcgmi_path
+  local nvbandwidth_path
   local venv_py torch_version torch_cuda_available matplotlib_version numpy_version deep_gemm_version
 
   python3_path="$(check_cmd_path "$host" "python3")"
@@ -411,6 +408,7 @@ write_status_json() {
   ncu_path="$(check_cmd_path "$host" "ncu")"
   nsys_path="$(check_cmd_path "$host" "nsys")"
   dcgmi_path="$(check_cmd_path "$host" "dcgmi")"
+  nvbandwidth_path="$(check_cmd_path "$host" "nvbandwidth")"
 
   venv_py="${REMOTE_ROOT}/env/venv/bin/python"
   torch_version="$(run_host_cmd "$host" "${venv_py} -c \"import torch; print(torch.__version__)\" 2>/dev/null || true" | tr -d '\r' | head -n1 | xargs || true)"
@@ -419,7 +417,7 @@ write_status_json() {
   numpy_version="$(run_host_cmd "$host" "${venv_py} -c \"import numpy; print(numpy.__version__)\" 2>/dev/null || true" | tr -d '\r' | head -n1 | xargs || true)"
   deep_gemm_version="$(run_host_cmd "$host" "${venv_py} -c \"import importlib.metadata as m; print(m.version('deep_gemm'))\" 2>/dev/null || true" | tr -d '\r' | head -n1 | xargs || true)"
 
-  python3 - <<'PY' "$out_path" "$host" "$label" "$SYNC_CODE" "$INSTALL_SYSTEM_PACKAGES" "$INSTALL_PYTHON_DEPS" "$installed_pkgs" "$REMOTE_ROOT" "$python3_path" "$pip3_path" "$docker_path" "$nvidia_smi_path" "$nvcc_path" "$mpirun_path" "$ib_write_bw_path" "$ibstat_path" "$iperf3_path" "$numactl_path" "$fio_path" "$jq_path" "$wget_path" "$curl_path" "$ncu_path" "$nsys_path" "$dcgmi_path" "$venv_py" "$torch_version" "$torch_cuda_available" "$matplotlib_version" "$numpy_version" "$deep_gemm_version"
+  python3 - <<'PY' "$out_path" "$host" "$label" "$SYNC_CODE" "$INSTALL_SYSTEM_PACKAGES" "$INSTALL_PYTHON_DEPS" "$installed_pkgs" "$REMOTE_ROOT" "$python3_path" "$pip3_path" "$docker_path" "$nvidia_smi_path" "$nvcc_path" "$mpirun_path" "$ib_write_bw_path" "$ibstat_path" "$iperf3_path" "$numactl_path" "$fio_path" "$jq_path" "$wget_path" "$curl_path" "$ncu_path" "$nsys_path" "$dcgmi_path" "$nvbandwidth_path" "$venv_py" "$torch_version" "$torch_cuda_available" "$matplotlib_version" "$numpy_version" "$deep_gemm_version"
 import json
 import sys
 import time
@@ -451,6 +449,7 @@ from pathlib import Path
     ncu_path,
     nsys_path,
     dcgmi_path,
+    nvbandwidth_path,
     venv_py,
     torch_version,
     torch_cuda_available,
@@ -488,6 +487,7 @@ payload = {
         "ncu": ncu_path or None,
         "nsys": nsys_path or None,
         "dcgmi": dcgmi_path or None,
+        "nvbandwidth": nvbandwidth_path or None,
     },
     "python_env": {
         "venv_python": venv_py,
@@ -514,6 +514,7 @@ echo "REMOTE_ROOT=${REMOTE_ROOT}"
 echo "SYNC_CODE=${SYNC_CODE}"
 echo "INSTALL_SYSTEM_PACKAGES=${INSTALL_SYSTEM_PACKAGES}"
 echo "INSTALL_PYTHON_DEPS=${INSTALL_PYTHON_DEPS}"
+echo "HOST_PARITY_IMAGE=${HOST_PARITY_IMAGE}"
 if [[ -n "$SYNC_SUITE_DIR" ]]; then
   echo "SYNC_SUITE_DIR=${SYNC_SUITE_DIR}"
 fi

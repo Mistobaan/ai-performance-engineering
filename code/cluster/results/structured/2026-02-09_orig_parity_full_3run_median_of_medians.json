@@ -1,0 +1,112 @@
+{
+  "old_image": "ghcr.io/jordannanos/cmax-compute@sha256:d9ed224b30be7efff651d40801032c1f0117cab4012f143059af2c494a3e353e",
+  "orig_parity_image": "cfregly/cluster_perf_orig_parity@sha256:d2b8a63cf41af177ffbf205e02ada6a26c646c44c9826934ee625c63b17404f4",
+  "old_runs": [
+    {
+      "summary": "2026-02-09_oldprov_full_old_r1_node1_cluster_perf_grouped_gemm_summary.json",
+      "torch_fp16_median_tflops": 1676.85,
+      "torch_fp8_median_tflops": 783.2,
+      "deepgemm_median_tflops": 2501.8999999999996,
+      "deepgemm_over_torch_fp8_median_ratio": 3.29714631411116
+    },
+    {
+      "summary": "2026-02-09_oldprov_full_old_r2_node1_cluster_perf_grouped_gemm_summary.json",
+      "torch_fp16_median_tflops": 1662.9,
+      "torch_fp8_median_tflops": 807.25,
+      "deepgemm_median_tflops": 2532.55,
+      "deepgemm_over_torch_fp8_median_ratio": 3.124568815547492
+    },
+    {
+      "summary": "2026-02-09_oldprov_full_old_r3_node1_cluster_perf_grouped_gemm_summary.json",
+      "torch_fp16_median_tflops": 1680.35,
+      "torch_fp8_median_tflops": 803.6,
+      "deepgemm_median_tflops": 2500.5,
+      "deepgemm_over_torch_fp8_median_ratio": 3.147108724189205
+    }
+  ],
+  "orig_parity_runs": [
+    {
+      "summary": "2026-02-09_oldprov_full_parity_r1_node1_cluster_perf_grouped_gemm_summary.json",
+      "torch_fp16_median_tflops": 1671.8,
+      "torch_fp8_median_tflops": 816.5999999999999,
+      "deepgemm_median_tflops": 2523.95,
+      "deepgemm_over_torch_fp8_median_ratio": 3.1643772188918113
+    },
+    {
+      "summary": "2026-02-09_oldprov_full_parity_r2_node1_cluster_perf_grouped_gemm_summary.json",
+      "torch_fp16_median_tflops": 1681.6,
+      "torch_fp8_median_tflops": 790.05,
+      "deepgemm_median_tflops": 2494.5,
+      "deepgemm_over_torch_fp8_median_ratio": 3.1579185519282698
+    },
+    {
+      "summary": "2026-02-09_oldprov_full_parity_r3_node1_cluster_perf_grouped_gemm_summary.json",
+      "torch_fp16_median_tflops": 1678.4,
+      "torch_fp8_median_tflops": 826.0,
+      "deepgemm_median_tflops": 2503.75,
+      "deepgemm_over_torch_fp8_median_ratio": 3.195922467120638
+    }
+  ],
+  "median_of_medians": {
+    "torch_fp16_median_tflops": {
+      "old_container": 1676.85,
+      "orig_parity_container": 1678.4,
+      "ratio_orig_parity_over_old": 1.0009243522080091,
+      "old_runs": [
+        1676.85,
+        1662.9,
+        1680.35
+      ],
+      "orig_parity_runs": [
+        1671.8,
+        1681.6,
+        1678.4
+      ]
+    },
+    "torch_fp8_median_tflops": {
+      "old_container": 803.6,
+      "orig_parity_container": 816.5999999999999,
+      "ratio_orig_parity_over_old": 1.0161772025883522,
+      "old_runs": [
+        783.2,
+        807.25,
+        803.6
+      ],
+      "orig_parity_runs": [
+        816.5999999999999,
+        790.05,
+        826.0
+      ]
+    },
+    "deepgemm_median_tflops": {
+      "old_container": 2501.8999999999996,
+      "orig_parity_container": 2503.75,
+      "ratio_orig_parity_over_old": 1.0007394380270995,
+      "old_runs": [
+        2501.8999999999996,
+        2532.55,
+        2500.5
+      ],
+      "orig_parity_runs": [
+        2523.95,
+        2494.5,
+        2503.75
+      ]
+    },
+    "deepgemm_over_torch_fp8_median_ratio": {
+      "old_container": 3.147108724189205,
+      "orig_parity_container": 3.1643772188918113,
+      "ratio_orig_parity_over_old": 1.0054870982276138,
+      "old_runs": [
+        3.29714631411116,
+        3.124568815547492,
+        3.147108724189205
+      ],
+      "orig_parity_runs": [
+        3.1643772188918113,
+        3.1579185519282698,
+        3.195922467120638
+      ]
+    }
+  }
+}

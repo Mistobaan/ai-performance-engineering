@@ -67,7 +67,7 @@ Options:
   --disable-fp4            Disable FP4 checks
   --fp4-runtime <mode>     FP4 execution mode: host|container (default: host)
   --fp4-stack-profile <name>
-                           FP4 stack profile: old_container|old_parity_container|new_container|host_only
+                           FP4 stack profile: old_container|orig_parity_container|new_container|host_only
                            (default: runtime-specific from configs/cluster_perf_stack_profiles.json)
   --fp4-image <image>      FP4 container image for --fp4-runtime container
                            (default: fp4-stack-profile image_ref or $CONTAINER_IMAGE)
@@ -91,8 +91,11 @@ Options:
   --bootstrap-skip-sync-code       Skip code sync during bootstrap
   --bootstrap-install-python-deps  Ensure env/venv + Python deps during bootstrap (default: on)
   --bootstrap-skip-python-deps     Skip python dep install during bootstrap
-  --bootstrap-torch-index-url <url>  Torch wheel index used by bootstrap (default: cu130 index)
-  --bootstrap-torch-version <ver>    Torch version used by bootstrap fallback install (default: 2.9.1+cu130)
+  --bootstrap-host-parity-image <ref>  Source image for host-only parity install
+                                        (default: cfregly/cluster_perf_orig_parity:latest)
+  --bootstrap-torch-index-url <url>  Legacy fallback torch index (default: https://pypi.ngc.nvidia.com)
+  --bootstrap-torch-version <ver>    Expected torch version after bootstrap parity install
+                                     (default: 2.10.0a0+a36e1d39eb.nv26.01.42222806)
 
   --fio-test-dir <path>    fio directory (default: /tmp)
   --fio-runtime <sec>      fio runtime per test (default: 30)
@@ -228,8 +231,9 @@ BOOTSTRAP_NODES=1
 BOOTSTRAP_INSTALL_SYSTEM_PACKAGES=1
 BOOTSTRAP_SYNC_CODE=1
 BOOTSTRAP_INSTALL_PYTHON_DEPS=1
-BOOTSTRAP_TORCH_INDEX_URL="https://download.pytorch.org/whl/cu130"
-BOOTSTRAP_TORCH_VERSION="2.9.1+cu130"
+BOOTSTRAP_HOST_PARITY_IMAGE="${BOOTSTRAP_HOST_PARITY_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+BOOTSTRAP_TORCH_INDEX_URL="https://pypi.ngc.nvidia.com"
+BOOTSTRAP_TORCH_VERSION="2.10.0a0+a36e1d39eb.nv26.01.42222806"
 
 FIO_TEST_DIR="/tmp"
 FIO_RUNTIME="30"
@@ -354,6 +358,7 @@ while [[ $# -gt 0 ]]; do
     --bootstrap-skip-sync-code) BOOTSTRAP_SYNC_CODE=0; shift ;;
     --bootstrap-install-python-deps) BOOTSTRAP_INSTALL_PYTHON_DEPS=1; shift ;;
     --bootstrap-skip-python-deps) BOOTSTRAP_INSTALL_PYTHON_DEPS=0; shift ;;
+    --bootstrap-host-parity-image) BOOTSTRAP_HOST_PARITY_IMAGE="$2"; shift 2 ;;
     --bootstrap-torch-index-url) BOOTSTRAP_TORCH_INDEX_URL="$2"; shift 2 ;;
     --bootstrap-torch-version) BOOTSTRAP_TORCH_VERSION="$2"; shift 2 ;;
 
@@ -431,8 +436,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Defensive defaults: keep bootstrap torch args defined even if unset in caller env.
-BOOTSTRAP_TORCH_INDEX_URL="${BOOTSTRAP_TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu130}"
-BOOTSTRAP_TORCH_VERSION="${BOOTSTRAP_TORCH_VERSION:-2.9.1+cu130}"
+BOOTSTRAP_HOST_PARITY_IMAGE="${BOOTSTRAP_HOST_PARITY_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+BOOTSTRAP_TORCH_INDEX_URL="${BOOTSTRAP_TORCH_INDEX_URL:-https://pypi.ngc.nvidia.com}"
+BOOTSTRAP_TORCH_VERSION="${BOOTSTRAP_TORCH_VERSION:-2.10.0a0+a36e1d39eb.nv26.01.42222806}"
 
 if [[ -z "$HOSTS" ]]; then
   echo "ERROR: --hosts is required" >&2
@@ -677,6 +683,7 @@ if [[ "$ENABLE_FP4" -eq 1 ]]; then
   fi
 fi
 echo "bootstrap_nodes: ${BOOTSTRAP_NODES} (sync_code=${BOOTSTRAP_SYNC_CODE} system_packages=${BOOTSTRAP_INSTALL_SYSTEM_PACKAGES} python_deps=${BOOTSTRAP_INSTALL_PYTHON_DEPS})"
+echo "bootstrap_host_parity_image: ${BOOTSTRAP_HOST_PARITY_IMAGE}"
 echo "mamf: ${ENABLE_MAMF} (mode=${MAMF_MODE} concurrent=${MAMF_CONCURRENT})"
 echo "allreduce_stability: ${ENABLE_ALLREDUCE_STABILITY} (payload_gib=${ALLREDUCE_PAYLOAD_GIB} iters=${ALLREDUCE_ITERS} warmup=${ALLREDUCE_WARMUP})"
 echo "allreduce_latency_comp: ${ENABLE_ALLREDUCE_LATENCY_COMP} (payload_gib=${ALLREDUCE_LATENCY_PAYLOAD_GIB} chunks=${ALLREDUCE_LATENCY_CHUNKS} iters=${ALLREDUCE_LATENCY_ITERS} warmup=${ALLREDUCE_LATENCY_WARMUP})"
@@ -698,6 +705,7 @@ if [[ "$BOOTSTRAP_NODES" -eq 1 ]]; then
     --run-id "$RUN_ID"
     --hosts "$HOSTS"
     --ssh-user "$SSH_USER"
+    --host-parity-image "$BOOTSTRAP_HOST_PARITY_IMAGE"
     --torch-index-url "$BOOTSTRAP_TORCH_INDEX_URL"
     --torch-version "$BOOTSTRAP_TORCH_VERSION"
   )

@@ -1,0 +1,56 @@
+{
+  "description": "Open orig-parity stack that matches legacy old_container software versions; pass --image explicitly (use immutable repo@sha256 or local sha256:image_id).",
+  "detected_math_policy": {
+    "allow_tf32": true,
+    "cudnn_allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "detected_stack": {
+    "cuda_version": "13.1",
+    "cudnn_version": "91701",
+    "deep_gemm_installed": true,
+    "deep_gemm_version": "2.3.0+0f5f266",
+    "nccl_version": "2.29.2",
+    "torch_version": "2.10.0a0+a36e1d39eb.nv26.01.42222806"
+  },
+  "errors": [],
+  "expected_image": "",
+  "expected_stack": {
+    "cuda_version": "13.1",
+    "cudnn_version": "91701",
+    "deep_gemm_installed": true,
+    "deep_gemm_version": "2.3.0+0f5f266",
+    "nccl_version": "2.29.2",
+    "torch_version": "2.10.0a0+a36e1d39eb.nv26.01.42222806"
+  },
+  "image_info": {
+    "id": "sha256:d2b8a63cf41af177ffbf205e02ada6a26c646c44c9826934ee625c63b17404f4",
+    "repo_digests": [
+      "cfregly/cluster_perf_old_parity@sha256:d2b8a63cf41af177ffbf205e02ada6a26c646c44c9826934ee625c63b17404f4",
+      "cfregly/cluster_perf_orig_parity@sha256:d2b8a63cf41af177ffbf205e02ada6a26c646c44c9826934ee625c63b17404f4"
+    ]
+  },
+  "math_policy": {
+    "allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "math_policy_probe_error": "",
+  "peermem": {
+    "attempted_modprobe": false,
+    "loaded_after": true,
+    "loaded_before": true,
+    "modprobe_errors": []
+  },
+  "peermem_loaded": true,
+  "probe_error": "",
+  "profiles_json": "/home/ubuntu/ai-performance-engineering/code/cluster/configs/cluster_perf_stack_profiles.json",
+  "requested_image": "sha256:d2b8a63cf41af177ffbf205e02ada6a26c646c44c9826934ee625c63b17404f4",
+  "requested_math_policy": {
+    "allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "runtime": "container",
+  "stack_profile": "orig_parity_container",
+  "status": "ok",
+  "timestamp_utc": "2026-02-09T16:48:08.841890+00:00"
+}

@@ -21,8 +21,8 @@
         "float32_matmul_precision": "high"
       }
     },
-    "old_parity_container": {
-      "description": "Open old-parity stack that matches legacy old_container software versions; pass --image explicitly (use immutable repo@sha256 or local sha256:image_id).",
+    "orig_parity_container": {
+      "description": "Open orig-parity stack that matches legacy old_container software versions; pass --image explicitly (use immutable repo@sha256 or local sha256:image_id).",
       "allowed_runtimes": [
         "container"
       ],
@@ -60,17 +60,17 @@
       }
     },
     "host_only": {
-      "description": "Host-native venv stack for containerless fallback.",
+      "description": "Host-native venv stack that reuses orig-parity container binaries for parity with old_container.",
       "allowed_runtimes": [
         "host"
       ],
       "expected_stack": {
-        "torch_version": "2.9.1+cu130",
-        "cuda_version": "13.0",
-        "cudnn_version": "91300",
-        "nccl_version": "2.27.7",
+        "torch_version": "2.10.0a0+a36e1d39eb.nv26.01.42222806",
+        "cuda_version": "13.1",
+        "cudnn_version": "91701",
+        "nccl_version": "2.29.2",
         "deep_gemm_installed": true,
-        "deep_gemm_version": "2.3.0+477618c"
+        "deep_gemm_version": "2.3.0+0f5f266"
       },
       "math_policy": {
         "allow_tf32": true,

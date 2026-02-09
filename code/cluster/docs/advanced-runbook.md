@@ -480,17 +480,19 @@ scripts/run_fp4_checks_all_nodes.sh \
   --warmup 5 \
   --iters 30
 ```
-Host bootstrap installs pinned `deep_gemm` (`DeepGEMM@477618c`) into `env/venv` by default.
+Host bootstrap now installs `host_only` from `orig_parity` image provenance
+(Torch/CUDA/NCCL/cuDNN/DeepGEMM) and installs host `nvbandwidth` from the same
+image by default. Override source image with `--bootstrap-host-parity-image`.
 If host bootstrap cannot satisfy prerequisites, switch to container runtime:
 ```bash
 scripts/repro/build_cluster_perf_image.sh --profile open --tag cfregly/cluster_perf:latest
 scripts/run_fp4_checks_all_nodes.sh ... --runtime container --stack-profile new_container
 ```
-Old-parity open container profile (legacy version matching without `jordannanos` dependency):
+Orig-parity open container profile (legacy version matching without `jordannanos` dependency):
 ```bash
-scripts/repro/build_cluster_perf_image.sh --profile old_parity --tag cfregly/cluster_perf_old_parity:latest
-IMAGE_ID="$(docker image inspect --format '{{.Id}}' cfregly/cluster_perf_old_parity:latest)"
-scripts/run_fp4_checks_all_nodes.sh ... --runtime container --stack-profile old_parity_container --image "${IMAGE_ID}"
+scripts/repro/build_cluster_perf_image.sh --profile orig_parity --tag cfregly/cluster_perf_orig_parity:latest
+IMAGE_ID="$(docker image inspect --format '{{.Id}}' cfregly/cluster_perf_orig_parity:latest)"
+scripts/run_fp4_checks_all_nodes.sh ... --runtime container --stack-profile orig_parity_container --image "${IMAGE_ID}"
 ```
 Outputs:
 `results/structured/<run_id>_<label>_cluster_perf_fp4_platform.json`,

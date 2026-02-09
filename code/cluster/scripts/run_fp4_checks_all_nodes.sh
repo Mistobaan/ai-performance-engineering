@@ -26,7 +26,7 @@ Options:
   --ssh-key <path>       SSH key (default: $SSH_KEY)
   --remote-root <path>   Repo root on remote hosts (default: this repo root)
   --runtime <mode>       host|container (default: host)
-  --stack-profile <name> Stack profile: old_container|old_parity_container|new_container|host_only
+  --stack-profile <name> Stack profile: old_container|orig_parity_container|new_container|host_only
                          (default: runtime-specific from configs/cluster_perf_stack_profiles.json)
   --image <image>        Container image for runtime=container
                          (default: stack-profile image_ref or $CONTAINER_IMAGE)
@@ -52,8 +52,11 @@ Bootstrap (recommended for reproducibility; default: enabled):
   --bootstrap-skip-sync-code       Skip code sync
   --bootstrap-install-python-deps  Ensure env/venv + python deps (default: on)
   --bootstrap-skip-python-deps     Skip python dependency install
-  --bootstrap-torch-index-url <url>  Torch wheel index for bootstrap (default: cu130 index)
-  --bootstrap-torch-version <ver>    Torch version for bootstrap fallback install (default: 2.9.1+cu130)
+  --bootstrap-host-parity-image <ref>  Source image for host-only parity install
+                                       (default: cfregly/cluster_perf_orig_parity:latest)
+  --bootstrap-torch-index-url <url>  Legacy fallback torch index (default: https://pypi.ngc.nvidia.com)
+  --bootstrap-torch-version <ver>    Expected torch version after bootstrap parity install
+                                     (default: 2.10.0a0+a36e1d39eb.nv26.01.42222806)
 EOF
 }
 
@@ -89,8 +92,9 @@ BOOTSTRAP_NODES=1
 BOOTSTRAP_INSTALL_SYSTEM_PACKAGES=1
 BOOTSTRAP_SYNC_CODE=1
 BOOTSTRAP_INSTALL_PYTHON_DEPS=1
-BOOTSTRAP_TORCH_INDEX_URL="https://download.pytorch.org/whl/cu130"
-BOOTSTRAP_TORCH_VERSION="2.9.1+cu130"
+BOOTSTRAP_HOST_PARITY_IMAGE="${BOOTSTRAP_HOST_PARITY_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+BOOTSTRAP_TORCH_INDEX_URL="https://pypi.ngc.nvidia.com"
+BOOTSTRAP_TORCH_VERSION="2.10.0a0+a36e1d39eb.nv26.01.42222806"
 ATTESTATION_MODE="balanced"
 ATTESTATION_PROFILE="gb200_grouped_gemm_balanced_v1"
 ATTESTATION_TARGET_REL="scripts/benchmarks/grouped_gemm_bench.py"
@@ -125,6 +129,7 @@ while [[ $# -gt 0 ]]; do
     --bootstrap-skip-sync-code) BOOTSTRAP_SYNC_CODE=0; shift ;;
     --bootstrap-install-python-deps) BOOTSTRAP_INSTALL_PYTHON_DEPS=1; shift ;;
     --bootstrap-skip-python-deps) BOOTSTRAP_INSTALL_PYTHON_DEPS=0; shift ;;
+    --bootstrap-host-parity-image) BOOTSTRAP_HOST_PARITY_IMAGE="${2:-}"; shift 2 ;;
     --bootstrap-torch-index-url) BOOTSTRAP_TORCH_INDEX_URL="${2:-}"; shift 2 ;;
     --bootstrap-torch-version) BOOTSTRAP_TORCH_VERSION="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -184,6 +189,7 @@ if [[ "$BOOTSTRAP_NODES" -eq 1 ]]; then
     --hosts "${HOSTS}"
     --ssh-user "${SSH_USER}"
     --remote-root "${REMOTE_ROOT}"
+    --host-parity-image "${BOOTSTRAP_HOST_PARITY_IMAGE}"
     --torch-index-url "${BOOTSTRAP_TORCH_INDEX_URL}"
     --torch-version "${BOOTSTRAP_TORCH_VERSION}"
   )
@@ -822,31 +828,18 @@ if [[ ! -x ./env/venv/bin/python ]]; then
   echo 'ERROR: missing env/venv/bin/python; run bootstrap with --bootstrap-install-python-deps.' >&2
   exit 2
 fi
-if ! ./env/venv/bin/python -c 'import deep_gemm' >/dev/null 2>&1; then
-  if [[ -f ./env/requirements.txt ]]; then
-    echo 'INFO: deep_gemm missing in env/venv; installing host requirements first.' >&2
-    ./env/venv/bin/pip install -r ./env/requirements.txt
-  fi
-  cuda_home=\"\${CUDA_HOME:-}\"
-  if [[ -z \"\${cuda_home}\" ]]; then
-    if [[ -d /usr/local/cuda ]]; then
-      cuda_home=/usr/local/cuda
-    elif command -v nvcc >/dev/null 2>&1; then
-      nvcc_path=\"\$(command -v nvcc)\"
-      cuda_home=\"\$(cd \"\$(dirname \"\${nvcc_path}\")/..\" && pwd -P)\"
-    fi
-  fi
-  if [[ -z \"\${cuda_home}\" || ! -f \"\${cuda_home}/include/cuda.h\" ]]; then
-    echo 'ERROR: CUDA toolkit headers not found; cannot self-install pinned deep_gemm.' >&2
-    echo \"Resolved CUDA_HOME=\${cuda_home:-<empty>}\" >&2
+if [[ $(printf '%q' "${STACK_PROFILE}") == host_only ]]; then
+  if [[ ! -f ./env/venv/orig_parity_runtime_env.sh ]]; then
+    echo 'ERROR: missing env/venv/orig_parity_runtime_env.sh for host_only parity.' >&2
+    echo 'Run bootstrap with --bootstrap-host-parity-image to install host orig-parity binaries.' >&2
     exit 2
   fi
-  echo 'INFO: installing pinned deep_gemm (DeepGEMM@477618c) for host-only FP4 parity.' >&2
-  CUDA_HOME=\"\${cuda_home}\" CUDACXX=\"\${cuda_home}/bin/nvcc\" ./env/venv/bin/pip install --no-build-isolation --upgrade 'deep_gemm @ git+https://github.com/deepseek-ai/DeepGEMM.git@477618c'
+  # shellcheck disable=SC1091
+  source ./env/venv/orig_parity_runtime_env.sh
 fi
 if ! ./env/venv/bin/python -c 'import deep_gemm' >/dev/null 2>&1; then
-  echo 'ERROR: deep_gemm is still not importable in env/venv on this host.' >&2
-  echo 'Run bootstrap with --bootstrap-install-python-deps or use --runtime container with a digest-pinned open image.' >&2
+  echo 'ERROR: deep_gemm is not importable in env/venv on this host.' >&2
+  echo 'Run bootstrap with --bootstrap-install-python-deps (host_only uses orig-parity image provenance).' >&2
   exit 2
 fi
 "

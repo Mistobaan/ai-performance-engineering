@@ -1,0 +1,50 @@
+{
+  "description": "Host-native venv stack for containerless fallback.",
+  "detected_math_policy": {
+    "allow_tf32": true,
+    "cudnn_allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "detected_stack": {
+    "cuda_version": "13.0",
+    "cudnn_version": "91300",
+    "deep_gemm_installed": true,
+    "deep_gemm_version": "2.3.0+477618c",
+    "nccl_version": "2.27.7",
+    "torch_version": "2.9.1+cu130"
+  },
+  "errors": [],
+  "expected_image": "",
+  "expected_stack": {
+    "cuda_version": "13.0",
+    "cudnn_version": "91300",
+    "deep_gemm_installed": true,
+    "deep_gemm_version": "2.3.0+477618c",
+    "nccl_version": "2.27.7",
+    "torch_version": "2.9.1+cu130"
+  },
+  "image_info": {},
+  "math_policy": {
+    "allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "math_policy_probe_error": "",
+  "peermem": {
+    "attempted_modprobe": false,
+    "loaded_after": true,
+    "loaded_before": true,
+    "modprobe_errors": []
+  },
+  "peermem_loaded": true,
+  "probe_error": "",
+  "profiles_json": "configs/cluster_perf_stack_profiles.json",
+  "requested_image": "",
+  "requested_math_policy": {
+    "allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "runtime": "host",
+  "stack_profile": "host_only",
+  "status": "ok",
+  "timestamp_utc": "2026-02-09T16:45:25.239198+00:00"
+}

@@ -9,7 +9,7 @@ Usage:
   scripts/repro/build_cluster_perf_image.sh [options]
 
 Options:
-  --profile <name>       Build profile: open|old_parity (default: open)
+  --profile <name>       Build profile: open|orig_parity (default: open)
   --tag <image:tag>      Output image tag (default depends on --profile)
   --dockerfile <path>    Dockerfile path (default depends on --profile)
   --pull                 Pull newer base layers before build
@@ -35,8 +35,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$PROFILE" != "open" && "$PROFILE" != "old_parity" ]]; then
-  echo "ERROR: unsupported --profile: ${PROFILE} (expected open|old_parity)" >&2
+if [[ "$PROFILE" != "open" && "$PROFILE" != "orig_parity" ]]; then
+  echo "ERROR: unsupported --profile: ${PROFILE} (expected open|orig_parity)" >&2
   exit 2
 fi
 if [[ "$PROFILE" == "open" ]]; then
@@ -48,10 +48,10 @@ if [[ "$PROFILE" == "open" ]]; then
   fi
 else
   if [[ "$TAG_SET" -eq 0 ]]; then
-    TAG="cfregly/cluster_perf_old_parity:latest"
+    TAG="cfregly/cluster_perf_orig_parity:latest"
   fi
   if [[ "$DOCKERFILE_SET" -eq 0 ]]; then
-    DOCKERFILE="${ROOT_DIR}/docker/cluster_perf_old_parity.Dockerfile"
+    DOCKERFILE="${ROOT_DIR}/docker/cluster_perf_orig_parity.Dockerfile"
   fi
 fi
 

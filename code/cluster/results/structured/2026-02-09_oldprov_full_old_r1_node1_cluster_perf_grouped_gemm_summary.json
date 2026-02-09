@@ -1,0 +1,1498 @@
+{
+  "counts": {
+    "deepgemm_datapoints_ok": 48,
+    "deepgemm_lines_seen": true,
+    "shapes": 48
+  },
+  "deepgemm": {
+    "unsupported_reason": null
+  },
+  "input_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_oldprov_full_old_r1_node1_cluster_perf_grouped_gemm.txt",
+  "shapes": [
+    {
+      "deepgemm_fp8": {
+        "detail": "2963.4 TFLOPS, 0.974 ms",
+        "elapsed_ms": 0.974,
+        "status": "ok",
+        "tflops": 2963.4
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.7166193593234085,
+        "deepgemm_over_torch_fp8": 2.104836991263584,
+        "fp16_over_fp8": 1.2261524255984089
+      },
+      "shape": {
+        "groups": 4,
+        "k": 7168,
+        "m": 8192,
+        "n": 6144
+      },
+      "torch_fp16": {
+        "elapsed_ms": 1.672,
+        "tflops": 1726.3
+      },
+      "torch_fp8": {
+        "elapsed_ms": 2.05,
+        "tflops": 1407.9
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2878.8 TFLOPS, 0.501 ms",
+        "elapsed_ms": 0.501,
+        "status": "ok",
+        "tflops": 2878.8
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.6625086625086627,
+        "deepgemm_over_torch_fp8": 2.643040763863386,
+        "fp16_over_fp8": 1.5897906720528827
+      },
+      "shape": {
+        "groups": 4,
+        "k": 3072,
+        "m": 8192,
+        "n": 7168
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.833,
+        "tflops": 1731.6
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.325,
+        "tflops": 1089.2
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2882.7 TFLOPS, 0.381 ms",
+        "elapsed_ms": 0.381,
+        "status": "ok",
+        "tflops": 2882.7
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.6612113179277357,
+        "deepgemm_over_torch_fp8": 3.384642479746389,
+        "fp16_over_fp8": 2.0374545027591875
+      },
+      "shape": {
+        "groups": 4,
+        "k": 4096,
+        "m": 8192,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.634,
+        "tflops": 1735.3
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.291,
+        "tflops": 851.7
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2550.1 TFLOPS, 0.216 ms",
+        "elapsed_ms": 0.216,
+        "status": "ok",
+        "tflops": 2550.1
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.513412462908012,
+        "deepgemm_over_torch_fp8": 2.6502806069424234,
+        "fp16_over_fp8": 1.7511951777177301
+      },
+      "shape": {
+        "groups": 4,
+        "k": 2048,
+        "m": 8192,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.326,
+        "tflops": 1685.0
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.571,
+        "tflops": 962.2
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2898.0 TFLOPS, 0.996 ms",
+        "elapsed_ms": 0.996,
+        "status": "ok",
+        "tflops": 2898.0
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.8196659550420697,
+        "deepgemm_over_torch_fp8": 2.4877671903167653,
+        "fp16_over_fp8": 1.3671559790539958
+      },
+      "shape": {
+        "groups": 8,
+        "k": 7168,
+        "m": 4096,
+        "n": 6144
+      },
+      "torch_fp16": {
+        "elapsed_ms": 1.812,
+        "tflops": 1592.6
+      },
+      "torch_fp8": {
+        "elapsed_ms": 2.478,
+        "tflops": 1164.9
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2826.4 TFLOPS, 0.511 ms",
+        "elapsed_ms": 0.511,
+        "status": "ok",
+        "tflops": 2826.4
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.6885118585339625,
+        "deepgemm_over_torch_fp8": 3.787216936888651,
+        "fp16_over_fp8": 2.242931796864532
+      },
+      "shape": {
+        "groups": 8,
+        "k": 3072,
+        "m": 4096,
+        "n": 7168
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.862,
+        "tflops": 1673.9
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.934,
+        "tflops": 746.3
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2804.1 TFLOPS, 0.392 ms",
+        "elapsed_ms": 0.392,
+        "status": "ok",
+        "tflops": 2804.1
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.6515106896754814,
+        "deepgemm_over_torch_fp8": 3.8757429163787145,
+        "fp16_over_fp8": 2.3467864547339325
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.648,
+        "tflops": 1697.9
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.52,
+        "tflops": 723.5
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2488.1 TFLOPS, 0.221 ms",
+        "elapsed_ms": 0.221,
+        "status": "ok",
+        "tflops": 2488.1
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4975022569966896,
+        "deepgemm_over_torch_fp8": 3.0024134186074574,
+        "fp16_over_fp8": 2.0049475081452877
+      },
+      "shape": {
+        "groups": 8,
+        "k": 2048,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.331,
+        "tflops": 1661.5
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.663,
+        "tflops": 828.7
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "1812.6 TFLOPS, 0.133 ms",
+        "elapsed_ms": 0.133,
+        "status": "ok",
+        "tflops": 1812.6
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.2265529841656517,
+        "deepgemm_over_torch_fp8": 2.353109178242243,
+        "fp16_over_fp8": 1.9184733220823056
+      },
+      "shape": {
+        "groups": 8,
+        "k": 7168,
+        "m": 1024,
+        "n": 2048
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.163,
+        "tflops": 1477.8
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.312,
+        "tflops": 770.3
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2238.3 TFLOPS, 0.215 ms",
+        "elapsed_ms": 0.215,
+        "status": "ok",
+        "tflops": 2238.3
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4103081091298597,
+        "deepgemm_over_torch_fp8": 2.738986784140969,
+        "fp16_over_fp8": 1.9421194322075377
+      },
+      "shape": {
+        "groups": 8,
+        "k": 7168,
+        "m": 2048,
+        "n": 2048
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.303,
+        "tflops": 1587.1
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.589,
+        "tflops": 817.2
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2575.2 TFLOPS, 0.374 ms",
+        "elapsed_ms": 0.374,
+        "status": "ok",
+        "tflops": 2575.2
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.5625265457193132,
+        "deepgemm_over_torch_fp8": 3.2519257482005304,
+        "fp16_over_fp8": 2.081197120848592
+      },
+      "shape": {
+        "groups": 8,
+        "k": 7168,
+        "m": 4096,
+        "n": 2048
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.584,
+        "tflops": 1648.1
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.215,
+        "tflops": 791.9
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "1995.2 TFLOPS, 0.121 ms",
+        "elapsed_ms": 0.121,
+        "status": "ok",
+        "tflops": 1995.2
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.2418772563176896,
+        "deepgemm_over_torch_fp8": 4.042139384116694,
+        "fp16_over_fp8": 3.254862236628849
+      },
+      "shape": {
+        "groups": 8,
+        "k": 2048,
+        "m": 1024,
+        "n": 7168
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.15,
+        "tflops": 1606.6
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.487,
+        "tflops": 493.6
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2376.4 TFLOPS, 0.202 ms",
+        "elapsed_ms": 0.202,
+        "status": "ok",
+        "tflops": 2376.4
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4323428364776085,
+        "deepgemm_over_torch_fp8": 3.194515391853744,
+        "fp16_over_fp8": 2.23027288614061
+      },
+      "shape": {
+        "groups": 8,
+        "k": 2048,
+        "m": 2048,
+        "n": 7168
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.29,
+        "tflops": 1659.1
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.647,
+        "tflops": 743.9
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2454.3 TFLOPS, 0.392 ms",
+        "elapsed_ms": 0.392,
+        "status": "ok",
+        "tflops": 2454.3
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.443026810912512,
+        "deepgemm_over_torch_fp8": 3.34236688002179,
+        "fp16_over_fp8": 2.3162195288029417
+      },
+      "shape": {
+        "groups": 8,
+        "k": 2048,
+        "m": 4096,
+        "n": 7168
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.566,
+        "tflops": 1700.8
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.31,
+        "tflops": 734.3
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2209.1 TFLOPS, 0.171 ms",
+        "elapsed_ms": 0.171,
+        "status": "ok",
+        "tflops": 2209.1
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.3583594662731353,
+        "deepgemm_over_torch_fp8": 5.106564956079518,
+        "fp16_over_fp8": 3.759361997226075
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 1024,
+        "n": 5632
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.232,
+        "tflops": 1626.3
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.874,
+        "tflops": 432.6
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2539.7 TFLOPS, 0.298 ms",
+        "elapsed_ms": 0.298,
+        "status": "ok",
+        "tflops": 2539.7
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.513437816578273,
+        "deepgemm_over_torch_fp8": 3.5475625087302696,
+        "fp16_over_fp8": 2.3440424640312894
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 2048,
+        "n": 5632
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.45,
+        "tflops": 1678.1
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.056,
+        "tflops": 715.9
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2878.0 TFLOPS, 0.525 ms",
+        "elapsed_ms": 0.525,
+        "status": "ok",
+        "tflops": 2878.0
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.6408209806157354,
+        "deepgemm_over_torch_fp8": 3.715945771465462,
+        "fp16_over_fp8": 2.26468689477082
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 4096,
+        "n": 5632
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.862,
+        "tflops": 1754.0
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.952,
+        "tflops": 774.5
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2241.2 TFLOPS, 0.169 ms",
+        "elapsed_ms": 0.169,
+        "status": "ok",
+        "tflops": 2241.2
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4055816870492317,
+        "deepgemm_over_torch_fp8": 4.960602036299247,
+        "fp16_over_fp8": 3.5292164674634794
+      },
+      "shape": {
+        "groups": 8,
+        "k": 5632,
+        "m": 1024,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.237,
+        "tflops": 1594.5
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.837,
+        "tflops": 451.8
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2557.8 TFLOPS, 0.296 ms",
+        "elapsed_ms": 0.296,
+        "status": "ok",
+        "tflops": 2557.8
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.5264979708761042,
+        "deepgemm_over_torch_fp8": 3.759811847714244,
+        "fp16_over_fp8": 2.463031015728355
+      },
+      "shape": {
+        "groups": 8,
+        "k": 5632,
+        "m": 2048,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.451,
+        "tflops": 1675.6
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.111,
+        "tflops": 680.3
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2939.8 TFLOPS, 0.514 ms",
+        "elapsed_ms": 0.514,
+        "status": "ok",
+        "tflops": 2939.8
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.7037380469429153,
+        "deepgemm_over_torch_fp8": 3.929688544312258,
+        "fp16_over_fp8": 2.3065098248897207
+      },
+      "shape": {
+        "groups": 8,
+        "k": 5632,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.876,
+        "tflops": 1725.5
+      },
+      "torch_fp8": {
+        "elapsed_ms": 2.021,
+        "tflops": 748.1
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2101.4 TFLOPS, 0.114 ms",
+        "elapsed_ms": 0.114,
+        "status": "ok",
+        "tflops": 2101.4
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.286203941730934,
+        "deepgemm_over_torch_fp8": 4.088326848249028,
+        "fp16_over_fp8": 3.178599221789883
+      },
+      "shape": {
+        "groups": 2,
+        "k": 4096,
+        "m": 1024,
+        "n": 14336
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.147,
+        "tflops": 1633.8
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.468,
+        "tflops": 514.0
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2516.7 TFLOPS, 0.191 ms",
+        "elapsed_ms": 0.191,
+        "status": "ok",
+        "tflops": 2516.7
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.483291094477515,
+        "deepgemm_over_torch_fp8": 3.095191243389497,
+        "fp16_over_fp8": 2.086705202312139
+      },
+      "shape": {
+        "groups": 2,
+        "k": 4096,
+        "m": 2048,
+        "n": 14336
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.284,
+        "tflops": 1696.7
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.592,
+        "tflops": 813.1
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2594.7 TFLOPS, 0.371 ms",
+        "elapsed_ms": 0.371,
+        "status": "ok",
+        "tflops": 2594.7
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4632041955675859,
+        "deepgemm_over_torch_fp8": 2.3672110208922543,
+        "fp16_over_fp8": 1.6178268406167322
+      },
+      "shape": {
+        "groups": 2,
+        "k": 4096,
+        "m": 4096,
+        "n": 14336
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.543,
+        "tflops": 1773.3
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.878,
+        "tflops": 1096.1
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2020.4 TFLOPS, 0.119 ms",
+        "elapsed_ms": 0.119,
+        "status": "ok",
+        "tflops": 2020.4
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.2250045473837385,
+        "deepgemm_over_torch_fp8": 1.8827695461746345,
+        "fp16_over_fp8": 1.536949026185817
+      },
+      "shape": {
+        "groups": 2,
+        "k": 14336,
+        "m": 1024,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.146,
+        "tflops": 1649.3
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.224,
+        "tflops": 1073.1
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2374.6 TFLOPS, 0.203 ms",
+        "elapsed_ms": 0.203,
+        "status": "ok",
+        "tflops": 2374.6
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4622821602315412,
+        "deepgemm_over_torch_fp8": 2.12416137400483,
+        "fp16_over_fp8": 1.4526344037928258
+      },
+      "shape": {
+        "groups": 2,
+        "k": 14336,
+        "m": 2048,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.296,
+        "tflops": 1623.9
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.43,
+        "tflops": 1117.9
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2470.5 TFLOPS, 0.111 ms",
+        "elapsed_ms": 0.111,
+        "status": "ok",
+        "tflops": 2470.5
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4705357142857143,
+        "deepgemm_over_torch_fp8": 2.9421221864951765,
+        "fp16_over_fp8": 2.0007145409074667
+      },
+      "shape": {
+        "groups": 2,
+        "k": 4096,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.164,
+        "tflops": 1680.0
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.327,
+        "tflops": 839.7
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2654.8 TFLOPS, 0.207 ms",
+        "elapsed_ms": 0.207,
+        "status": "ok",
+        "tflops": 2654.8
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.5646843873401308,
+        "deepgemm_over_torch_fp8": 3.1032144944476916,
+        "fp16_over_fp8": 1.9832846288720047
+      },
+      "shape": {
+        "groups": 4,
+        "k": 4096,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.324,
+        "tflops": 1696.7
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.643,
+        "tflops": 855.5
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2863.3 TFLOPS, 0.384 ms",
+        "elapsed_ms": 0.384,
+        "status": "ok",
+        "tflops": 2863.3
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.6901599669441003,
+        "deepgemm_over_torch_fp8": 3.376134889753567,
+        "fp16_over_fp8": 1.9975238769013086
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.649,
+        "tflops": 1694.1
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.296,
+        "tflops": 848.1
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2880.2 TFLOPS, 0.763 ms",
+        "elapsed_ms": 0.763,
+        "status": "ok",
+        "tflops": 2880.2
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.6935379549597223,
+        "deepgemm_over_torch_fp8": 3.1522381525664875,
+        "fp16_over_fp8": 1.8613330414796978
+      },
+      "shape": {
+        "groups": 16,
+        "k": 4096,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 1.293,
+        "tflops": 1700.7
+      },
+      "torch_fp8": {
+        "elapsed_ms": 2.407,
+        "tflops": 913.7
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2803.3 TFLOPS, 1.569 ms",
+        "elapsed_ms": 1.569,
+        "status": "ok",
+        "tflops": 2803.3
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.8547704115389705,
+        "deepgemm_over_torch_fp8": 3.049053730693931,
+        "fp16_over_fp8": 1.6438981944746576
+      },
+      "shape": {
+        "groups": 32,
+        "k": 4096,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 2.91,
+        "tflops": 1511.4
+      },
+      "torch_fp8": {
+        "elapsed_ms": 4.784,
+        "tflops": 919.4
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "1342.2 TFLOPS, 0.051 ms",
+        "elapsed_ms": 0.051,
+        "status": "ok",
+        "tflops": 1342.2
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.1296078101329743,
+        "deepgemm_over_torch_fp8": 9.81140350877193,
+        "fp16_over_fp8": 8.685672514619883
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 256,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.058,
+        "tflops": 1188.2
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.502,
+        "tflops": 136.8
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "1747.9 TFLOPS, 0.079 ms",
+        "elapsed_ms": 0.079,
+        "status": "ok",
+        "tflops": 1747.9
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.297239127207956,
+        "deepgemm_over_torch_fp8": 6.20703125,
+        "fp16_over_fp8": 4.784801136363637
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 512,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.102,
+        "tflops": 1347.4
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.488,
+        "tflops": 281.6
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2142.1 TFLOPS, 0.128 ms",
+        "elapsed_ms": 0.128,
+        "status": "ok",
+        "tflops": 2142.1
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.3530192016169782,
+        "deepgemm_over_torch_fp8": 4.5839931521506525,
+        "fp16_over_fp8": 3.387973464583779
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 1024,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.174,
+        "tflops": 1583.2
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.588,
+        "tflops": 467.3
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2407.8 TFLOPS, 0.228 ms",
+        "elapsed_ms": 0.228,
+        "status": "ok",
+        "tflops": 2407.8
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.418188243609377,
+        "deepgemm_over_torch_fp8": 3.5681683461766456,
+        "fp16_over_fp8": 2.516004742145821
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 2048,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.324,
+        "tflops": 1697.8
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.815,
+        "tflops": 674.8
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2848.9 TFLOPS, 0.386 ms",
+        "elapsed_ms": 0.386,
+        "status": "ok",
+        "tflops": 2848.9
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.6486689814814814,
+        "deepgemm_over_torch_fp8": 3.398830827964686,
+        "fp16_over_fp8": 2.061560486757337
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.636,
+        "tflops": 1728.0
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.312,
+        "tflops": 838.2
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "3011.1 TFLOPS, 0.730 ms",
+        "elapsed_ms": 0.73,
+        "status": "ok",
+        "tflops": 3011.1
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.765523306948109,
+        "deepgemm_over_torch_fp8": 3.59835086042065,
+        "fp16_over_fp8": 2.038121414913958
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 8192,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 1.289,
+        "tflops": 1705.5
+      },
+      "torch_fp8": {
+        "elapsed_ms": 2.628,
+        "tflops": 836.8
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2134.9 TFLOPS, 0.129 ms",
+        "elapsed_ms": 0.129,
+        "status": "ok",
+        "tflops": 2134.9
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.3530008238798403,
+        "deepgemm_over_torch_fp8": 4.972979268576753,
+        "fp16_over_fp8": 3.675518285581179
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 1024,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.174,
+        "tflops": 1577.9
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.64,
+        "tflops": 429.3
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2466.9 TFLOPS, 0.223 ms",
+        "elapsed_ms": 0.223,
+        "status": "ok",
+        "tflops": 2466.9
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4440672013112452,
+        "deepgemm_over_torch_fp8": 3.646024238841265,
+        "fp16_over_fp8": 2.5248300325155184
+      },
+      "shape": {
+        "groups": 8,
+        "k": 4096,
+        "m": 2048,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.322,
+        "tflops": 1708.3
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.812,
+        "tflops": 676.6
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2296.6 TFLOPS, 0.239 ms",
+        "elapsed_ms": 0.239,
+        "status": "ok",
+        "tflops": 2296.6
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.400109736023898,
+        "deepgemm_over_torch_fp8": 5.0231846019247595,
+        "fp16_over_fp8": 3.587707786526684
+      },
+      "shape": {
+        "groups": 16,
+        "k": 4096,
+        "m": 1024,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.335,
+        "tflops": 1640.3
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.203,
+        "tflops": 457.2
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2583.9 TFLOPS, 0.426 ms",
+        "elapsed_ms": 0.426,
+        "status": "ok",
+        "tflops": 2583.9
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.5190476190476192,
+        "deepgemm_over_torch_fp8": 3.86811377245509,
+        "fp16_over_fp8": 2.5464071856287425
+      },
+      "shape": {
+        "groups": 16,
+        "k": 4096,
+        "m": 2048,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.646,
+        "tflops": 1701.0
+      },
+      "torch_fp8": {
+        "elapsed_ms": 1.646,
+        "tflops": 668.0
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2223.0 TFLOPS, 0.216 ms",
+        "elapsed_ms": 0.216,
+        "status": "ok",
+        "tflops": 2223.0
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.401639344262295,
+        "deepgemm_over_torch_fp8": 2.938144329896907,
+        "fp16_over_fp8": 2.0962199312714778
+      },
+      "shape": {
+        "groups": 8,
+        "k": 7168,
+        "m": 2048,
+        "n": 2048
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.303,
+        "tflops": 1586.0
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.636,
+        "tflops": 756.6
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2203.5 TFLOPS, 0.218 ms",
+        "elapsed_ms": 0.218,
+        "status": "ok",
+        "tflops": 2203.5
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.2882951356407857,
+        "deepgemm_over_torch_fp8": 2.916225516146109,
+        "fp16_over_fp8": 2.2636315510852305
+      },
+      "shape": {
+        "groups": 8,
+        "k": 2048,
+        "m": 2048,
+        "n": 7168
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.281,
+        "tflops": 1710.4
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.637,
+        "tflops": 755.6
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2311.3 TFLOPS, 0.059 ms",
+        "elapsed_ms": 0.059,
+        "status": "ok",
+        "tflops": 2311.3
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.6515183994283673,
+        "deepgemm_over_torch_fp8": 3.3825552465973954,
+        "fp16_over_fp8": 2.048148690180009
+      },
+      "shape": {
+        "groups": 1,
+        "k": 4096,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.098,
+        "tflops": 1399.5
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.201,
+        "tflops": 683.3
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2560.9 TFLOPS, 0.107 ms",
+        "elapsed_ms": 0.107,
+        "status": "ok",
+        "tflops": 2560.9
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.5459704195593118,
+        "deepgemm_over_torch_fp8": 2.677925337237269,
+        "fp16_over_fp8": 1.732197009306703
+      },
+      "shape": {
+        "groups": 1,
+        "k": 4096,
+        "m": 8192,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.166,
+        "tflops": 1656.5
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.287,
+        "tflops": 956.3
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2515.7 TFLOPS, 0.191 ms",
+        "elapsed_ms": 0.191,
+        "status": "ok",
+        "tflops": 2515.7
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4524826789838337,
+        "deepgemm_over_torch_fp8": 2.3469540069036285,
+        "fp16_over_fp8": 1.6158223714898776
+      },
+      "shape": {
+        "groups": 1,
+        "k": 4096,
+        "m": 4096,
+        "n": 14336
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.278,
+        "tflops": 1732.0
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.449,
+        "tflops": 1071.9
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2476.3 TFLOPS, 0.111 ms",
+        "elapsed_ms": 0.111,
+        "status": "ok",
+        "tflops": 2476.3
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.4959826013411468,
+        "deepgemm_over_torch_fp8": 2.973463016330452,
+        "fp16_over_fp8": 1.9876320845341018
+      },
+      "shape": {
+        "groups": 2,
+        "k": 4096,
+        "m": 4096,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.166,
+        "tflops": 1655.3
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.33,
+        "tflops": 832.8
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2572.6 TFLOPS, 0.214 ms",
+        "elapsed_ms": 0.214,
+        "status": "ok",
+        "tflops": 2572.6
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.5198204052696873,
+        "deepgemm_over_torch_fp8": 2.509119282161319,
+        "fp16_over_fp8": 1.6509314347020385
+      },
+      "shape": {
+        "groups": 2,
+        "k": 4096,
+        "m": 8192,
+        "n": 4096
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.325,
+        "tflops": 1692.7
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.536,
+        "tflops": 1025.3
+      }
+    },
+    {
+      "deepgemm_fp8": {
+        "detail": "2054.5 TFLOPS, 0.468 ms",
+        "elapsed_ms": 0.468,
+        "status": "ok",
+        "tflops": 2054.5
+      },
+      "ratios": {
+        "deepgemm_over_torch_fp16": 1.1627051499717034,
+        "deepgemm_over_torch_fp8": 1.8764270709653847,
+        "fp16_over_fp8": 1.613846013334551
+      },
+      "shape": {
+        "groups": 2,
+        "k": 4096,
+        "m": 4096,
+        "n": 14336
+      },
+      "torch_fp16": {
+        "elapsed_ms": 0.544,
+        "tflops": 1767.0
+      },
+      "torch_fp8": {
+        "elapsed_ms": 0.879,
+        "tflops": 1094.9
+      }
+    }
+  ],
+  "stats": {
+    "best5_by_ratio": [
+      {
+        "groups": 4,
+        "k": 7168,
+        "m": 8192,
+        "n": 6144,
+        "ratio": 1.2261524255984089
+      },
+      {
+        "groups": 8,
+        "k": 7168,
+        "m": 4096,
+        "n": 6144,
+        "ratio": 1.3671559790539958
+      },
+      {
+        "groups": 2,
+        "k": 14336,
+        "m": 2048,
+        "n": 4096,
+        "ratio": 1.4526344037928258
+      },
+      {
+        "groups": 2,
+        "k": 14336,
+        "m": 1024,
+        "n": 4096,
+        "ratio": 1.536949026185817
+      },
+      {
+        "groups": 4,
+        "k": 3072,
+        "m": 8192,
+        "n": 7168,
+        "ratio": 1.5897906720528827
+      }
+    ],
+    "deepgemm_best5_by_speedup_over_torch_fp8": [
+      {
+        "groups": 8,
+        "k": 4096,
+        "m": 256,
+        "n": 4096,
+        "speedup": 9.81140350877193
+      },
+      {
+        "groups": 8,
+        "k": 4096,
+        "m": 512,
+        "n": 4096,
+        "speedup": 6.20703125
+      },
+      {
+        "groups": 8,
+        "k": 4096,
+        "m": 1024,
+        "n": 5632,
+        "speedup": 5.106564956079518
+      },
+      {
+        "groups": 16,
+        "k": 4096,
+        "m": 1024,
+        "n": 4096,
+        "speedup": 5.0231846019247595
+      },
+      {
+        "groups": 8,
+        "k": 4096,
+        "m": 1024,
+        "n": 4096,
+        "speedup": 4.972979268576753
+      }
+    ],
+    "deepgemm_fp8_tflops": {
+      "max": 3011.1,
+      "min": 1342.2,
+      "p50": 2501.8999999999996
+    },
+    "deepgemm_over_torch_fp16_ratio": {
+      "max": 1.8547704115389705,
+      "min": 1.1296078101329743,
+      "p50": 1.489636847909331
+    },
+    "deepgemm_over_torch_fp8_ratio": {
+      "count_speedup_ge_1_2": 48,
+      "count_speedup_ge_1_5": 48,
+      "count_speedup_ge_2": 46,
+      "max": 9.81140350877193,
+      "min": 1.8764270709653847,
+      "p50": 3.29714631411116
+    },
+    "deepgemm_worst5_by_speedup_over_torch_fp8": [
+      {
+        "groups": 2,
+        "k": 4096,
+        "m": 4096,
+        "n": 14336,
+        "speedup": 1.8764270709653847
+      },
+      {
+        "groups": 2,
+        "k": 14336,
+        "m": 1024,
+        "n": 4096,
+        "speedup": 1.8827695461746345
+      },
+      {
+        "groups": 4,
+        "k": 7168,
+        "m": 8192,
+        "n": 6144,
+        "speedup": 2.104836991263584
+      },
+      {
+        "groups": 2,
+        "k": 14336,
+        "m": 2048,
+        "n": 4096,
+        "speedup": 2.12416137400483
+      },
+      {
+        "groups": 1,
+        "k": 4096,
+        "m": 4096,
+        "n": 14336,
+        "speedup": 2.3469540069036285
+      }
+    ],
+    "fp16_over_fp8_ratio": {
+      "count_fp8_faster_than_fp16": 0,
+      "count_fp8_slower_than_fp16": 48,
+      "count_ratio_ge_10": 0,
+      "count_ratio_ge_2": 30,
+      "count_ratio_ge_5": 1,
+      "max": 8.685672514619883,
+      "min": 1.2261524255984089,
+      "p50": 2.071378803802965
+    },
+    "torch_fp16_tflops": {
+      "max": 1773.3,
+      "min": 1188.2,
+      "p50": 1676.85
+    },
+    "torch_fp8_tflops": {
+      "max": 1407.9,
+      "min": 136.8,
+      "p50": 783.2
+    },
+    "worst5_by_ratio": [
+      {
+        "groups": 8,
+        "k": 4096,
+        "m": 256,
+        "n": 4096,
+        "ratio": 8.685672514619883
+      },
+      {
+        "groups": 8,
+        "k": 4096,
+        "m": 512,
+        "n": 4096,
+        "ratio": 4.784801136363637
+      },
+      {
+        "groups": 8,
+        "k": 4096,
+        "m": 1024,
+        "n": 5632,
+        "ratio": 3.759361997226075
+      },
+      {
+        "groups": 8,
+        "k": 4096,
+        "m": 1024,
+        "n": 4096,
+        "ratio": 3.675518285581179
+      },
+      {
+        "groups": 16,
+        "k": 4096,
+        "m": 1024,
+        "n": 4096,
+        "ratio": 3.587707786526684
+      }
+    ]
+  },
+  "timestamp": "2026-02-09T16:26:50+0000"
+}

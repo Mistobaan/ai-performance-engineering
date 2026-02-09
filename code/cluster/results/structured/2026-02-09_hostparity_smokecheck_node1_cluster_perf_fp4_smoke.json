@@ -1,0 +1,52 @@
+{
+  "correctness": {
+    "max_abs_diff": 18.83106231689453,
+    "max_rel_diff_vs_fp32_ref": 0.12003456952806302
+  },
+  "device": {
+    "capability": "10.0",
+    "name": "NVIDIA GB200",
+    "use_ue8m0": true
+  },
+  "iters": 1,
+  "quantization": {
+    "gran_k_a": 128,
+    "gran_k_b": 32,
+    "recipe_a": [
+      1,
+      128
+    ],
+    "recipe_b": [
+      1,
+      32
+    ]
+  },
+  "results": {
+    "deepgemm_fp8_fp4": {
+      "avg_ms": 0.14441600441932678,
+      "avg_tflops": 14.870122301435233,
+      "p50_ms": 0.14441600441932678,
+      "p50_tflops": 14.870122301435233,
+      "p99_ms": 0.14441600441932678,
+      "p99_tflops": 14.870122301435233
+    },
+    "deepgemm_over_torch_bf16_speedup": 1.4888100966672768,
+    "torch_bf16_baseline": {
+      "avg_ms": 0.21500800549983978,
+      "avg_tflops": 9.987924138022853,
+      "p50_ms": 0.21500800549983978,
+      "p50_tflops": 9.987924138022853,
+      "p99_ms": 0.21500800549983978,
+      "p99_tflops": 9.987924138022853
+    }
+  },
+  "seed": 0,
+  "shape": {
+    "k": 1024,
+    "m": 1024,
+    "n": 1024
+  },
+  "status": "ok",
+  "timestamp": "2026-02-09T17:12:08+0000",
+  "warmup": 1
+}
