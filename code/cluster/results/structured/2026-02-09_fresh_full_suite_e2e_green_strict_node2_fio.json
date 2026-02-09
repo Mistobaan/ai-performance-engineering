@@ -1,0 +1,39 @@
+{
+  "bs_rand": "4K",
+  "bs_seq": "1M",
+  "file_size": "8G",
+  "iodepth": 64,
+  "label": "node2",
+  "numjobs": 4,
+  "raw": {
+    "rand_read_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_node2_fio/rand_read.json",
+    "rand_write_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_node2_fio/rand_write.json",
+    "seq_read_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_node2_fio/seq_read.json",
+    "seq_write_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_node2_fio/seq_write.json"
+  },
+  "results": {
+    "rand_read": {
+      "bw_mb_s": 150.70016384124756,
+      "iops": 38579.242076,
+      "p99_lat_ms": null
+    },
+    "rand_write": {
+      "bw_mb_s": 70.75143051147461,
+      "iops": 18112.36629,
+      "p99_lat_ms": null
+    },
+    "seq_read": {
+      "bw_mb_s": 1460.3539638519287,
+      "iops": 1460.353965,
+      "p99_lat_ms": null
+    },
+    "seq_write": {
+      "bw_mb_s": 775.5299291610718,
+      "iops": 775.529929,
+      "p99_lat_ms": null
+    }
+  },
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_strict",
+  "runtime_s": 30,
+  "work_dir": "/tmp/aisp_fio_2026-02-09_fresh_full_suite_e2e_green_strict_node2"
+}

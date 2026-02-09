@@ -1,0 +1,84 @@
+{
+  "commands": {
+    "date": {
+      "cmd": "date -Iseconds",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "2026-02-09T23:29:00+00:00"
+    },
+    "dpkg_nccl": {
+      "cmd": "dpkg-query -W -f='${Package} ${Version}\\n' libnccl2 libnccl-dev 2>/dev/null || true",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "libnccl-dev 2.28.9-1+cuda13.0\nlibnccl2 2.28.9-1+cuda13.0"
+    },
+    "hostname": {
+      "cmd": "hostname",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "node2"
+    },
+    "mpirun_version": {
+      "cmd": "mpirun --version",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "mpirun (Open MPI) 4.1.6\n\nReport bugs to http://www.open-mpi.org/community/help/"
+    },
+    "nvcc_version": {
+      "cmd": "nvcc --version",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:57:39_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0"
+    },
+    "nvidia_smi": {
+      "cmd": "nvidia-smi",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "Mon Feb  9 23:29:01 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 580.105.08             Driver Version: 580.105.08     CUDA Version: 13.0     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  NVIDIA GB200                   Off |   00000008:01:00.0 Off |                    0 |\n| N/A   44C    P0            173W / 1200W |       2MiB / 189471MiB |      0%      Default |\n|                                         |                        |             Disabled |\n+-----------------------------------------+------------------------+----------------------+\n|   1  NVIDIA GB200                   Off |   00000009:01:00.0 Off |                    0 |\n| N/A   45C    P0            164W / 1200W |       7MiB / 189471MiB |      0%      Default |\n|                                         |                        |             Disabled |\n+-----------------------------------------+------------------------+----------------------+\n|   2  NVIDIA GB200                   Off |   00000018:01:00.0 Off |                    0 |\n| N/A   45C    P0            158W / 1200W |       4MiB / 189471MiB |      0%      Default |\n|                                         |                        |             Disabled |\n+-----------------------------------------+------------------------+----------------------+\n|   3  NVIDIA GB200                   Off |   00000019:01:00.0 Off |                    0 |\n| N/A   44C    P0            165W / 1200W |       9MiB / 189471MiB |      0%      Default |\n|                                         |                        |             Disabled |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|  No running processes found                                                             |\n+-----------------------------------------------------------------------------------------+"
+    },
+    "ompi_info_version": {
+      "cmd": "ompi_info --version",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "Open MPI v4.1.6\n\nhttp://www.open-mpi.org/community/help/"
+    },
+    "os_release": {
+      "cmd": "cat /etc/os-release",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "PRETTY_NAME=\"Ubuntu 24.04.3 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.3 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo"
+    },
+    "python3_version": {
+      "cmd": "python3 --version",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "Python 3.12.3"
+    },
+    "uname": {
+      "cmd": "uname -a",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "Linux node2 6.14.0-1015-nvidia-64k #15-Ubuntu SMP PREEMPT_DYNAMIC Tue Nov 25 21:56:38 UTC 2025 aarch64 aarch64 aarch64 GNU/Linux"
+    },
+    "venv_pip_show_torch": {
+      "cmd": "/home/ubuntu/ai-performance-engineering/code/cluster/env/venv/bin/pip show torch",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "Name: torch\nVersion: 2.10.0a0+a36e1d39eb.nv26.1.42222806\nSummary: Tensors and Dynamic neural networks in Python with strong GPU acceleration\nHome-page: https://pytorch.org\nAuthor: \nAuthor-email: PyTorch Team <packages@pytorch.org>\nLicense: BSD-3-Clause\nLocation: /home/ubuntu/ai-performance-engineering/code/cluster/env/venv/lib/python3.12/site-packages\nRequires: filelock, fsspec, jinja2, networkx, setuptools, sympy, typing-extensions\nRequired-by: compressed-tensors, flashinfer-python, torchaudio, torchvision, vllm, xgrammar"
+    },
+    "venv_python_version": {
+      "cmd": "/home/ubuntu/ai-performance-engineering/code/cluster/env/venv/bin/python --version",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "Python 3.12.3"
+    },
+    "venv_torch_info": {
+      "cmd": "/home/ubuntu/ai-performance-engineering/code/cluster/env/venv/bin/python - <<'EOF'\nimport json\nimport torch\npayload = {\n  'torch': torch.__version__,\n  'cuda': torch.version.cuda,\n  'git': getattr(torch.version, 'git_version', None),\n  'nccl': None,\n}\ntry:\n  payload['nccl'] = torch.cuda.nccl.version()\nexcept Exception as exc:\n  payload['nccl'] = f'<error: {exc}>'\nprint(json.dumps(payload, sort_keys=True))\nEOF",
+      "rc": 0,
+      "stderr": "",
+      "stdout": "{\"cuda\": \"13.1\", \"git\": \"Unknown\", \"nccl\": [2, 29, 2], \"torch\": \"2.10.0a0+a36e1d39eb.nv26.01.42222806\"}"
+    }
+  },
+  "label": "node2",
+  "timestamp": "2026-02-09T23:29:00+0000"
+}

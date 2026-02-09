@@ -1,0 +1,30 @@
+{
+  "cmd": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_c2c_memcpy_bench.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --label node1 --device 0 --bw-sizes 4194304,67108864,1073741824 --lat-sizes 4,4096,65536 --bw-iters 20 --lat-iters 20000 --warmup 5",
+  "command_end_ts": "2026-02-09T23:08:06+0000",
+  "command_start_ts": "2026-02-09T23:07:57+0000",
+  "devices": [
+    0
+  ],
+  "label": "node1",
+  "locks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 0
+    }
+  ],
+  "require_clock_lock": true,
+  "returncode": 0,
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_strict",
+  "timestamp": "2026-02-09T23:07:57+0000"
+}

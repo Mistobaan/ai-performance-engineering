@@ -1,0 +1,55 @@
+{
+  "consistency": {
+    "deep_gemm_versions": [
+      "2.3.0+0f5f266"
+    ],
+    "image_ids": [],
+    "runtimes": [
+      "host"
+    ],
+    "semantic_signatures": [
+      "26ecfe550b58560d7d087cfba41f6a7887e88e5cf4b109cbb798489af07c18d4"
+    ],
+    "source_sha256": [
+      "203f982cb45a94ba4f32600ff9ef95ef303317839f1ac88d60a2bde1d62900ee"
+    ]
+  },
+  "hosts": [
+    {
+      "deep_gemm_version": "2.3.0+0f5f266",
+      "image_id": null,
+      "label": "node1",
+      "platform_file": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_cluster_perf_fp4_platform.json",
+      "repo_digests": [],
+      "runtime": "host",
+      "semantic_signature": "26ecfe550b58560d7d087cfba41f6a7887e88e5cf4b109cbb798489af07c18d4",
+      "semantic_status": "pass",
+      "source_sha256": "203f982cb45a94ba4f32600ff9ef95ef303317839f1ac88d60a2bde1d62900ee",
+      "torch_version": "2.10.0a0+a36e1d39eb.nv26.01.42222806"
+    },
+    {
+      "deep_gemm_version": "2.3.0+0f5f266",
+      "image_id": null,
+      "label": "node2",
+      "platform_file": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_cluster_perf_fp4_platform.json",
+      "repo_digests": [],
+      "runtime": "host",
+      "semantic_signature": "26ecfe550b58560d7d087cfba41f6a7887e88e5cf4b109cbb798489af07c18d4",
+      "semantic_status": "pass",
+      "source_sha256": "203f982cb45a94ba4f32600ff9ef95ef303317839f1ac88d60a2bde1d62900ee",
+      "torch_version": "2.10.0a0+a36e1d39eb.nv26.01.42222806"
+    }
+  ],
+  "labels": [
+    "node1",
+    "node2"
+  ],
+  "missing_platform_files": [],
+  "mode": "balanced",
+  "reasons": [],
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_strict",
+  "runtime_mode": "host",
+  "status": "pass",
+  "timestamp": "2026-02-09T23:01:26+0000",
+  "warnings": []
+}

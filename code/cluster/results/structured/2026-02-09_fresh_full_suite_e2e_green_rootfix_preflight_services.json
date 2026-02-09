@@ -1,0 +1,64 @@
+{
+  "hosts": [
+    "node1",
+    "node2"
+  ],
+  "imex": {
+    "checked": true,
+    "domain_state": "UP",
+    "imex_ctl_N_path": "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_imex_ctl_N.txt"
+  },
+  "per_host": [
+    {
+      "dcgm_active_after": "active",
+      "dcgm_active_before": "active",
+      "dcgm_started_by_preflight": false,
+      "dcgmi": {
+        "discovery_list_path": "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_dcgmi_discovery_node1.txt",
+        "discovery_list_rc": 0
+      },
+      "host": "node1",
+      "nvidia_dcgm": {
+        "active_after": "active",
+        "active_before": "active",
+        "present": true,
+        "restart": "on-abort",
+        "started_by_preflight": false
+      },
+      "nvidia_imex": {
+        "active": "active"
+      },
+      "nvidia_persistenced": {
+        "active": "active",
+        "socket": "present"
+      }
+    },
+    {
+      "dcgm_active_after": "active",
+      "dcgm_active_before": "active",
+      "dcgm_started_by_preflight": false,
+      "dcgmi": {
+        "discovery_list_path": "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_dcgmi_discovery_node2.txt",
+        "discovery_list_rc": 0
+      },
+      "host": "node2",
+      "nvidia_dcgm": {
+        "active_after": "active",
+        "active_before": "active",
+        "present": true,
+        "restart": "on-abort",
+        "started_by_preflight": false
+      },
+      "nvidia_imex": {
+        "active": "active"
+      },
+      "nvidia_persistenced": {
+        "active": "active",
+        "socket": "present"
+      }
+    }
+  ],
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_rootfix",
+  "ssh_user": "ubuntu",
+  "timestamp_utc": "2026-02-09T23:28:52Z"
+}

@@ -1,0 +1,35 @@
+{
+  "block_bytes": 4194304,
+  "bytes_per_file": 4294967296,
+  "files": 1,
+  "fsync": true,
+  "host": "node1",
+  "label": "node1",
+  "notes": {
+    "cleanup": "This tool does not delete checkpoint files by default. Files are under work_dir.",
+    "read_cache": "Read results may be affected by page cache unless you drop caches separately."
+  },
+  "results": {
+    "read": [
+      {
+        "bytes": 4294967296,
+        "mb_s": 7496.183347145581,
+        "path": "/tmp/aisp_checkpoint_io_2026-02-09_fresh_full_suite_e2e_green_strict_node1/ckpt_000.bin",
+        "seconds": 0.5464113950147294
+      }
+    ],
+    "read_mb_s_mean": 7496.183347145581,
+    "write": [
+      {
+        "bytes": 4294967296,
+        "fsync_seconds": 5.137806357990485,
+        "mb_s": 716.5864778531753,
+        "path": "/tmp/aisp_checkpoint_io_2026-02-09_fresh_full_suite_e2e_green_strict_node1/ckpt_000.bin",
+        "seconds": 5.7159884069697
+      }
+    ],
+    "write_mb_s_mean": 716.5864778531753
+  },
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_strict",
+  "work_dir": "/tmp/aisp_checkpoint_io_2026-02-09_fresh_full_suite_e2e_green_strict_node1"
+}

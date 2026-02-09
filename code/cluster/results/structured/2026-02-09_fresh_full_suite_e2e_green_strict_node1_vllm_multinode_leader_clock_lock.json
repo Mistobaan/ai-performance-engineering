@@ -1,0 +1,78 @@
+{
+  "cmd": "docker run --rm --name vllm_multinode_leader_2026-02-09_fresh_full_suite_e2e_green_strict_node1 --gpus all --privileged --ipc=host --network host --ulimit memlock=-1 --ulimit stack=67108864 -e TIKTOKEN_RS_CACHE_DIR=/root/.cache/tiktoken_rs -e RAY_USAGE_STATS_ENABLED=0 -v /dev/infiniband:/dev/infiniband -v /dev/nvidia_imex:/dev/nvidia_imex -e NCCL_SOCKET_IFNAME=enP22p3s0f3 -e GLOO_SOCKET_IFNAME=enP22p3s0f3 -e NCCL_IB_HCA=mlx5_0,mlx5_1,mlx5_4,mlx5_5 -e NCCL_CROSS_NIC=1 -v /home/ubuntu/ai-performance-engineering/code/cluster/scripts/repro/vllm_multinode_inner.sh:/vllm_multinode_inner.sh:ro -v /home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_node1_vllm_multinode_serve:/results -v /home/ubuntu/.cache/huggingface:/root/.cache/huggingface -v /home/ubuntu/.cache/tiktoken_rs:/root/.cache/tiktoken_rs -v /home/ubuntu/.cache/vllm:/root/.cache/vllm -v /home/ubuntu/.cache/flashinfer:/root/.cache/flashinfer --entrypoint bash vllm/vllm-openai@sha256:2338992e8e6413ba65a768e8e767a8092037316107739fa41057be3b0aaa0f90 /vllm_multinode_inner.sh openai/gpt-oss-120b 8 1024 1024 2304 8888 6379 2 1200 300 64 640 /results bench_result.json /results/server.log /results/bench.log",
+  "command_end_ts": "2026-02-09T22:58:18+0000",
+  "command_start_ts": "2026-02-09T22:41:38+0000",
+  "devices": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "label": "node1",
+  "locks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 0
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 1,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 1
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 2,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 2
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 3,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 3
+    }
+  ],
+  "require_clock_lock": true,
+  "returncode": 0,
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_strict",
+  "timestamp": "2026-02-09T22:41:37+0000"
+}

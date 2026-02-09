@@ -1,0 +1,50 @@
+[
+  {
+    "name": "bootstrap_nodes",
+    "start_time": "2026-02-09T23:27:54+00:00",
+    "end_time": "2026-02-09T23:28:48+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/bootstrap_nodes.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/bootstrap_cluster_nodes.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_rootfix --hosts node1\\,node2 --ssh-user ubuntu --host-parity-image cfregly/cluster_perf_orig_parity:latest --torch-index-url https://pypi.ngc.nvidia.com --torch-version 2.10.0a0+a36e1d39eb.nv26.01.42222806 --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem"
+  },
+  {
+    "name": "preflight_services",
+    "start_time": "2026-02-09T23:28:48+00:00",
+    "end_time": "2026-02-09T23:28:52+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/preflight_services.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/preflight_cluster_services.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_rootfix --hosts node1\\,node2 --ssh-user ubuntu --ssh-key /home/ubuntu/.ssh/ssh_key.pem"
+  },
+  {
+    "name": "discovery",
+    "start_time": "2026-02-09T23:28:52+00:00",
+    "end_time": "2026-02-09T23:29:04+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/discovery.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/collect_discovery_and_tcp_sysctl.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_rootfix --hosts node1\\,node2 --ssh-user ubuntu --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem"
+  },
+  {
+    "name": "nccl_single_node",
+    "start_time": "2026-02-09T23:29:04+00:00",
+    "end_time": "2026-02-09T23:29:17+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/nccl_single_node.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_nccl_all_reduce.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_rootfix_node1 --hosts localhost --label node1"
+  },
+  {
+    "name": "nccl_multi_node",
+    "start_time": "2026-02-09T23:29:17+00:00",
+    "end_time": "2026-02-09T23:29:33+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/nccl_multi_node.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_nccl_all_reduce.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_rootfix_2nodes --hosts node1\\,node2 --label node1node2 --oob-if enP22p3s0f3 --socket-ifname enP22p3s0f3 --ssh-key /home/ubuntu/.ssh/ssh_key.pem --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5"
+  },
+  {
+    "name": "health_suite_extended",
+    "start_time": "2026-02-09T23:29:33+00:00",
+    "end_time": "2026-02-09T23:35:05+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/health_suite_extended.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_cluster_health_suite.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended --hosts node1\\,node2 --ssh-user ubuntu --ssh-key /home/ubuntu/.ssh/ssh_key.pem --oob-if enP22p3s0f3 --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5 --gdr --gdr-gpu 0 --gdr-mem-types 0 --gdr-use-dmabuf --extended"
+  }
+]

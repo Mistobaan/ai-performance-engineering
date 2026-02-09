@@ -20,7 +20,8 @@ Options:
   --remote-root <path>   Repo root on remote hosts (default: this repo's root)
 
   --runtime <mode>       host|container (default: host)
-  --image <image>        Container image for runtime=container
+  --image <image>        Container image for runtime=container, and CUDA compat
+                         source image for runtime=host
                          (default: cfregly/cluster_perf_orig_parity:latest)
   --nvbw-bin <path>      nvbandwidth executable path (default: nvbandwidth)
   --quick                Use reduced testcase subset
@@ -132,6 +133,7 @@ for idx in "${!HOST_ARR[@]}"; do
     bench_args+=(--image "${IMAGE}")
   else
     bench_args+=(--nvbw-bin "${NVBW_BIN}")
+    bench_args+=(--compat-image "${IMAGE}")
   fi
   if [[ "$QUICK" -eq 1 ]]; then
     bench_args+=(--quick)

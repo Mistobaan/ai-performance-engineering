@@ -1,0 +1,71 @@
+{
+  "fp4": {
+    "artifacts": {
+      "grouped_clock_lock": "results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_cluster_perf_grouped_gemm_clock_lock.json",
+      "grouped_log": "results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_cluster_perf_grouped_gemm.txt",
+      "grouped_summary": "results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_cluster_perf_grouped_gemm_summary.json"
+    },
+    "attestation": {
+      "mode": "balanced",
+      "semantic": {
+        "forbidden_hits": {
+          "legacy_disable_true_literal": []
+        },
+        "missing_required_markers": [],
+        "profile": "gb200_grouped_gemm_balanced_v1",
+        "required_markers": {
+          "disable_cast_switch": "disable_ue8m0_cast = not use_ue8m0",
+          "global_unsupported_reason": "DEEPGEMM_UNSUPPORTED_REASON: Optional[str] = None",
+          "kernel_disable_cast_var": "disable_ue8m0_cast=disable_ue8m0_cast",
+          "kernel_fallback_getattr": "getattr(deep_gemm, \"m_grouped_fp8_gemm_nt_contiguous\"",
+          "per_block_use_ue8m0": "per_block_cast_to_fp8(b_bf16[i], use_ue8m0=use_ue8m0)",
+          "per_token_use_ue8m0": "per_token_cast_to_fp8(a_bf16, use_ue8m0=use_ue8m0)",
+          "ue8m0_arch_switch": "use_ue8m0 = arch_major >= 10",
+          "unsupported_print": "DeepGEMM unsupported: {e}"
+        },
+        "semantic_signature": "26ecfe550b58560d7d087cfba41f6a7887e88e5cf4b109cbb798489af07c18d4",
+        "source_sha256": "203f982cb45a94ba4f32600ff9ef95ef303317839f1ac88d60a2bde1d62900ee",
+        "status": "pass"
+      },
+      "snapshot_relative_path": "results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_node1_grouped_gemm_bench.snapshot.py",
+      "target_relative_path": "scripts/benchmarks/grouped_gemm_bench.py"
+    },
+    "image": null,
+    "provenance": {
+      "container": {
+        "image_id": null,
+        "image_ref": null,
+        "repo_digests": []
+      },
+      "note": "metadata capture only; no state mutation or locking",
+      "python": {
+        "deep_gemm_version": "2.3.0+0f5f266",
+        "torch_version": "2.10.0a0+a36e1d39eb.nv26.01.42222806"
+      },
+      "repo": {
+        "git_commit": "b98a49d13d35f566cfb5a5d486df5599369d3c78",
+        "git_dirty": true,
+        "path": "."
+      },
+      "runtime": {
+        "cuda_version": "13.0",
+        "driver_version": "580.105.08"
+      }
+    },
+    "requested_preset": "auto",
+    "runtime": "host",
+    "selected_preset": "all",
+    "stack_profile": "host_only"
+  },
+  "gb_family_detected": true,
+  "gb_sku": "GB200",
+  "gpu_names": [
+    "NVIDIA GB200",
+    "NVIDIA GB200",
+    "NVIDIA GB200",
+    "NVIDIA GB200"
+  ],
+  "host": "node1",
+  "label": "node1",
+  "timestamp": "2026-02-09T23:00:55+0000"
+}

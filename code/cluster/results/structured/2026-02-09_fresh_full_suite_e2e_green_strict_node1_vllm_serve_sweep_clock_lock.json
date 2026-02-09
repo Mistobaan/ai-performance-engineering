@@ -1,5 +1,6 @@
 {
   "cmd": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_sweep_container.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --label node1 --model openai/gpt-oss-120b --isl 1024 --osl 1024 --concurrency-range '32 64 128 256 512' --port 8888",
+  "command_end_ts": "2026-02-09T22:41:15+0000",
   "command_start_ts": "2026-02-09T22:27:28+0000",
   "devices": [
     0,
@@ -71,6 +72,7 @@
     }
   ],
   "require_clock_lock": true,
+  "returncode": 0,
   "run_id": "2026-02-09_fresh_full_suite_e2e_green_strict",
   "timestamp": "2026-02-09T22:27:27+0000"
 }

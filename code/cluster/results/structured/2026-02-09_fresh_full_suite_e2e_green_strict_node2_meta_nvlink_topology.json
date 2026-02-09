@@ -1,0 +1,48 @@
+{
+  "figure": "/home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_node2_meta_nvlink_topology.png",
+  "label": "node2",
+  "meta_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_meta.json",
+  "run_ref": "2026-02-09_fresh_full_suite_e2e_green_strict_node2",
+  "summary": {
+    "gpu_count": 4,
+    "gpu_labels": [
+      "GPU0",
+      "GPU1",
+      "GPU2",
+      "GPU3"
+    ],
+    "gpu_matrix": {
+      "GPU0": {
+        "GPU0": "X",
+        "GPU1": "NV18",
+        "GPU2": "NV18",
+        "GPU3": "NV18"
+      },
+      "GPU1": {
+        "GPU0": "NV18",
+        "GPU1": "X",
+        "GPU2": "NV18",
+        "GPU3": "NV18"
+      },
+      "GPU2": {
+        "GPU0": "NV18",
+        "GPU1": "NV18",
+        "GPU2": "X",
+        "GPU3": "NV18"
+      },
+      "GPU3": {
+        "GPU0": "NV18",
+        "GPU1": "NV18",
+        "GPU2": "NV18",
+        "GPU3": "X"
+      }
+    },
+    "link_pair_counts": {
+      "NV18": 6
+    },
+    "nvlink_pair_count": 6,
+    "nvlink_width_max": 18,
+    "nvlink_width_mean": 18.0,
+    "nvlink_width_min": 18
+  }
+}

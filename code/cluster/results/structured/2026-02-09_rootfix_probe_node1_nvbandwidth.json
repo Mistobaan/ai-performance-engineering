@@ -1,0 +1,92 @@
+{
+  "artifacts": {
+    "clock_lock": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_rootfix_probe_node1_nvbandwidth_clock_lock.json",
+    "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_rootfix_probe_node1_nvbandwidth/nvbandwidth.log",
+    "sums_csv": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_rootfix_probe_node1_nvbandwidth_sums.csv"
+  },
+  "clock_lock": {
+    "all_devices_locked": true,
+    "application_mem_mhz": [
+      3996
+    ],
+    "application_sm_mhz": [
+      2062
+    ],
+    "device_count": 4,
+    "returncode": 0
+  },
+  "cuda_compat_image": "cfregly/cluster_perf_orig_parity:latest",
+  "cuda_compat_lib_dir": "/home/ubuntu/.cache/nvbandwidth_cuda_compat/cfregly_cluster_perf_old_parity_sha256_d2b8a63cf41af177ffbf205e02ada6a26c646c44c9826934ee625c63b17404f4/lib.real",
+  "effective_runtime": "host",
+  "gpu_inventory": {},
+  "image": null,
+  "key_sum_gbps": {
+    "all_to_host_memcpy_ce": 733.71,
+    "device_to_device_bidirectional_memcpy_read_ce_total": 17228.71,
+    "device_to_device_bidirectional_memcpy_write_ce_total": 17864.71,
+    "device_to_device_memcpy_read_ce": 8652.02,
+    "device_to_device_memcpy_write_ce": 9000.99,
+    "device_to_host_memcpy_ce": 772.18,
+    "host_to_all_memcpy_ce": 701.18,
+    "host_to_device_memcpy_ce": 842.5
+  },
+  "label": "node1",
+  "nvbandwidth_bin": "nvbandwidth",
+  "peak_sum_gbps": 17864.71,
+  "quick": true,
+  "requested_runtime": "host",
+  "run_id": "2026-02-09_rootfix_probe",
+  "runtime": "host",
+  "status": "ok",
+  "sum_count": 12,
+  "sum_entries": [
+    {
+      "sum_gbps": 842.5,
+      "test": "host_to_device_memcpy_ce"
+    },
+    {
+      "sum_gbps": 772.18,
+      "test": "device_to_host_memcpy_ce"
+    },
+    {
+      "sum_gbps": 8652.02,
+      "test": "device_to_device_memcpy_read_ce"
+    },
+    {
+      "sum_gbps": 9000.99,
+      "test": "device_to_device_memcpy_write_ce"
+    },
+    {
+      "sum_gbps": 8619.13,
+      "test": "device_to_device_bidirectional_memcpy_read_ce_read1"
+    },
+    {
+      "sum_gbps": 8609.59,
+      "test": "device_to_device_bidirectional_memcpy_read_ce_read2"
+    },
+    {
+      "sum_gbps": 17228.71,
+      "test": "device_to_device_bidirectional_memcpy_read_ce_total"
+    },
+    {
+      "sum_gbps": 8942.94,
+      "test": "device_to_device_bidirectional_memcpy_write_ce_write1"
+    },
+    {
+      "sum_gbps": 8921.78,
+      "test": "device_to_device_bidirectional_memcpy_write_ce_write2"
+    },
+    {
+      "sum_gbps": 17864.71,
+      "test": "device_to_device_bidirectional_memcpy_write_ce_total"
+    },
+    {
+      "sum_gbps": 733.71,
+      "test": "all_to_host_memcpy_ce"
+    },
+    {
+      "sum_gbps": 701.18,
+      "test": "host_to_all_memcpy_ce"
+    }
+  ]
+}

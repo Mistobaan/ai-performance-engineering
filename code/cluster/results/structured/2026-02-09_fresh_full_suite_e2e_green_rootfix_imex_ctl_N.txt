@@ -1,0 +1,20 @@
+Connectivity Table Legend:
+I - Invalid - Node wasn't reachable, no connection status available
+N - Never Connected
+R - Recovering - Connection was lost, but clean up has not yet been triggered.
+D - Disconnected - Connection was lost, and clean up has been triggreed.
+A - Authenticating - If GSSAPI enabled, client has initiated mutual authentication.
+!V! - Version mismatch, communication disabled.
+!M! - Node map mismatch, communication disabled.
+!A! - Authentication error, communication disabled.
+C - Connected - Ready for operation
+
+2/9/2026 23:28:52.816
+Nodes:
+Node #0   * 10.11.0.3 *        - READY                - Version: 580.105.08     
+Node #1   - 10.11.0.4          - READY                - Version: 580.105.08     
+
+ Nodes From\To  0   1  
+       0        C   C  
+       1        C   C  
+Domain State: UP

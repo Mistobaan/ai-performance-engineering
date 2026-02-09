@@ -1,0 +1,150 @@
+{
+  "app_clocks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 0,
+      "local_rank": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 0
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 1,
+      "local_rank": 1,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 1
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 2,
+      "local_rank": 2,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 2
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "global_rank": 3,
+      "local_rank": 3,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "node": "node1",
+      "physical_gpu": 3
+    }
+  ],
+  "backend": "nccl",
+  "config": {
+    "batch_size_per_rank": 2,
+    "heads": 32,
+    "hidden": 4096,
+    "layers": 24,
+    "mlp_ratio": 4,
+    "seq_len": 2048,
+    "steps": 30,
+    "warmup_steps": 5
+  },
+  "fp8": {
+    "note": "This benchmark currently runs bf16/fp16 only; use FP8 training stacks (e.g. TransformerEngine) separately.",
+    "torch_float8_supported": true,
+    "transformer_engine_available": false
+  },
+  "fsdp": {
+    "enabled": true,
+    "mixed_precision": "bf16",
+    "sharding": "FULL_SHARD"
+  },
+  "hosts": [
+    "node1"
+  ],
+  "label": "node1_single_node",
+  "local_rank_count": 4,
+  "optimizer": {
+    "fused": true,
+    "lr": 0.0001,
+    "name": "AdamW"
+  },
+  "precision": "bf16",
+  "results": {
+    "avg_step_s": 0.15864901294310887,
+    "p50_step_s": 0.15855830907821655,
+    "p99_step_s": 0.160731241106987,
+    "step_times_s": [
+      0.1591266691684723,
+      0.1583303064107895,
+      0.15855830907821655,
+      0.15803545713424683,
+      0.160731241106987,
+      0.1570139080286026,
+      0.15830537676811218,
+      0.16065697371959686,
+      0.1594187319278717,
+      0.15996094048023224,
+      0.16014449298381805,
+      0.15724073350429535,
+      0.15836159884929657,
+      0.15686149895191193,
+      0.16103316843509674,
+      0.1596473753452301,
+      0.15699218213558197,
+      0.15737305581569672,
+      0.15857091546058655,
+      0.15941348671913147,
+      0.15843017399311066,
+      0.15661221742630005,
+      0.15891088545322418,
+      0.1579330861568451,
+      0.15807123482227325,
+      0.15732428431510925,
+      0.15987248718738556,
+      0.1587238758802414,
+      0.16059470176696777,
+      0.1572210192680359
+    ],
+    "tokens_per_s": 103271.99454985112,
+    "tokens_per_step": 16384
+  },
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_strict",
+  "timestamp": "2026-02-09T23:09:18+0000",
+  "versions": {
+    "cuda": "13.1",
+    "torch": "2.10.0a0+a36e1d39eb.nv26.01.42222806"
+  },
+  "world_size": 4
+}

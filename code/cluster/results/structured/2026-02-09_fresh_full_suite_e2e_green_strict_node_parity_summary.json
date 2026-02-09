@@ -1,0 +1,73 @@
+{
+  "generated_at_utc": "2026-02-09T23:18:32.352275Z",
+  "inference": {
+    "concurrency_at_max_throughput": 512,
+    "max_total_token_throughput": 51237.297,
+    "p99_ttft_ms_at_max_throughput": 13156.876
+  },
+  "inputs": {
+    "iperf3_oob_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_iperf3_oob_tcp.json",
+    "nccl_source_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_health_suite_extended_node1node2_nccl_all_reduce_perf.json",
+    "node_labels": [
+      "node1",
+      "node2"
+    ],
+    "structured_dir": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured",
+    "vllm_csv": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_vllm_serve_sweep.csv"
+  },
+  "networking": {
+    "nccl_all_reduce_peak_busbw_gbps": 838.5,
+    "oob_tcp_fwd_gbps": 7.6702680265604375,
+    "oob_tcp_rev_gbps": 7.555793764194805
+  },
+  "node2_over_node1_ratios": {
+    "fio_seq_read_mb_s": 1.0380487568892707,
+    "gemm_mean_tflops": 0.9918429800681178,
+    "numa_local_bw_gbps": 0.9969834005838142
+  },
+  "nodes": [
+    {
+      "fio_seq_read_mb_s": 1406.8259840011597,
+      "gemm": {
+        "max_tflops": 1559.1572559256242,
+        "mean_tflops": 1532.6339702098433,
+        "min_tflops": 1472.8451010601027,
+        "per_gpu_tflops": {
+          "0": 1547.5257312001263,
+          "1": 1472.8451010601027,
+          "2": 1551.0077926535196,
+          "3": 1559.1572559256242
+        }
+      },
+      "label": "node1",
+      "numa_local_bw_gbps": 136.524922,
+      "paths": {
+        "fio_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_fio.json",
+        "gemm_csv": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_gemm_gpu_sanity.csv",
+        "numa_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_numa_mem_bw.json"
+      }
+    },
+    {
+      "fio_seq_read_mb_s": 1460.3539638519287,
+      "gemm": {
+        "max_tflops": 1539.2978643802915,
+        "mean_tflops": 1520.1322443665617,
+        "min_tflops": 1472.4964519698497,
+        "per_gpu_tflops": {
+          "0": 1472.4964519698497,
+          "1": 1539.2978643802915,
+          "2": 1530.9649306349115,
+          "3": 1537.7697304811948
+        }
+      },
+      "label": "node2",
+      "numa_local_bw_gbps": 136.113081,
+      "paths": {
+        "fio_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_fio.json",
+        "gemm_csv": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_gemm_gpu_sanity.csv",
+        "numa_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_numa_mem_bw.json"
+      }
+    }
+  ],
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_strict"
+}

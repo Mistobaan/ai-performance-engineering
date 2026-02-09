@@ -1,0 +1,77 @@
+{
+  "files": [
+    "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_bootstrap_nodes/node1.log",
+    "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_bootstrap_nodes/node2.log",
+    "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/bootstrap_nodes.log",
+    "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/discovery.log",
+    "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/preflight_services.log",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_dcgmi_discovery_node1.txt",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_dcgmi_discovery_node2.txt",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_imex_ctl_N.txt",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_bootstrap_status.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_container_runtime.txt",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_meta.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_software_versions.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_storage.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_tcp_sysctl.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_tcp_sysctl.txt",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_bootstrap_status.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_container_runtime.txt",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_meta.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_software_versions.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_storage.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_tcp_sysctl.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_tcp_sysctl.txt",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_preflight_services.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite_steps.json",
+    "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_tcp_sysctl_diff.json"
+  ],
+  "manifest_version": 1,
+  "nodes": [
+    {
+      "host": "node1",
+      "label": "node1"
+    },
+    {
+      "host": "node2",
+      "label": "node2"
+    }
+  ],
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_rootfix",
+  "summary": {
+    "artifact_counts": {
+      "json": 13,
+      "log": 5,
+      "txt": 7
+    },
+    "file_count": 25,
+    "sha256": {
+      "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_bootstrap_nodes/node1.log": "c270b551ffb7b9661b04b8e2583f7b7e1191680f6017a6f6fc62dcca3d74b45b",
+      "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_bootstrap_nodes/node2.log": "e0570bf57d4034e82e1b0e3a9611d8943dc3847fabf3ed54968b6220ae663dcf",
+      "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/bootstrap_nodes.log": "6c2d3dd106910753045848a19949c5996908a9d82e3cea83d428ace9a6a9d27a",
+      "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/discovery.log": "619b0d2d63b0e52b935bc1bd3d12a23de5a71b2a7940766054625cd9a181b3fc",
+      "results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite/preflight_services.log": "adc184af9309fe3f997db65212d0a03e6d16d36d577caefeb394fbac230f03d9",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_dcgmi_discovery_node1.txt": "4d774405bd64269c58e12915bfa0694f6811695f41493f8c67e09db6e569773e",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_dcgmi_discovery_node2.txt": "c24d3f7fdbfb3b01101e93d584fa8301e24937840f02a45e99ec6de729fc937e",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_imex_ctl_N.txt": "8cb7cef93d55bbef07f136978615a300789ff418b95afaa59c32b33500ab8af6",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_bootstrap_status.json": "be8214b2ff005139ed7f42fcb990bae86ee1286a50ce158bcf41764913fe8cc2",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_container_runtime.txt": "e19019e003bc22c7948a8494c8a4dee1ba47e719bfdfde3e40f54d6ee741fdc0",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_meta.json": "b3a9b2d58e856b8f132bd0b8f3cb3e17dc32b43ae0e3d77fac2241d1707d4984",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_software_versions.json": "067c3c92790452c59953c70e121b74cc23901b6e311f155f4492f777d8a961bb",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_storage.json": "287d0b06cd0d86b50a177fcee6cf7b31220e2403346c561db5762034dbbec517",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_tcp_sysctl.json": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_tcp_sysctl.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_bootstrap_status.json": "212de8602e9c1b8e2a690e9f5763d4f0dd040bd8a77e36b1a4f9af576cd7fb10",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_container_runtime.txt": "ad8ed755900d3614a9739d67df241a4102128d6d0a681695baab8ca2530a0499",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_meta.json": "1893ff99e89c26563c2b068a6b68abc1cae68b316b70bfafc8b9a49869374ad9",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_software_versions.json": "c88920a822b7109940750e134f9a65fcd9f2464a855e33e060c9bc819e873190",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_storage.json": "0b53adf282cbeb5a9894ba6ec129bbb984586d167e98233937c30684838d4d26",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_tcp_sysctl.json": "ba7e6567ec3bc008602bdb39d726b75b686194fe44443de766a4ba7915b87dde",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_tcp_sysctl.txt": "28fa230bfbfe54ff1fc373ef891e72a3c946204d1ebbfb7d499588794a05f552",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_preflight_services.json": "71b1fce59a180f1fdb8dd5c4f388a0dc3f08cf51ec69c460ec3e32d102ca0905",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_suite_steps.json": "aeb07a3444fa8ecb9efe24b258274a032d3ae8849bf6e015e56714dac43ab03f",
+      "results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_tcp_sysctl_diff.json": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    }
+  },
+  "timestamp_utc": "2026-02-09T23:29:04.742046+00:00"
+}

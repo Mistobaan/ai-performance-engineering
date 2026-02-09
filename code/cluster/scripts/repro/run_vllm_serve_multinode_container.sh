@@ -382,12 +382,37 @@ WORKER
 chmod +x "$WORKER_REMOTE_SCRIPT"
 
 WORKER_SSH_PID=""
+WORKER_STOP_REQUESTED=0
+
+stop_remote_worker() {
+  local force_kill="${1:-0}"
+  if [[ -z "${WORKER_SSH_PID:-}" ]]; then
+    return 0
+  fi
+  if ! kill -0 "$WORKER_SSH_PID" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  WORKER_STOP_REQUESTED=1
+  "${SSH_BASE[@]}" "$WORKER_TARGET" "docker exec '$WORKER_CONTAINER_NAME' bash -lc 'ray stop --force >/dev/null 2>&1 || true'" >/dev/null 2>&1 || true
+  "${SSH_BASE[@]}" "$WORKER_TARGET" "docker stop -t 30 '$WORKER_CONTAINER_NAME' >/dev/null 2>&1 || true" >/dev/null 2>&1 || true
+
+  local waited=0
+  while kill -0 "$WORKER_SSH_PID" >/dev/null 2>&1 && [[ "$waited" -lt 30 ]]; do
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  if [[ "$force_kill" -eq 1 ]] && kill -0 "$WORKER_SSH_PID" >/dev/null 2>&1; then
+    kill "$WORKER_SSH_PID" >/dev/null 2>&1 || true
+  fi
+}
+
 cleanup() {
   local rc=$?
   set +e
   if [[ -n "${WORKER_SSH_PID:-}" ]]; then
-    "${SSH_BASE[@]}" "$WORKER_TARGET" "docker rm -f '$WORKER_CONTAINER_NAME' >/dev/null 2>&1 || true" >/dev/null 2>&1 || true
-    kill "$WORKER_SSH_PID" >/dev/null 2>&1 || true
+    stop_remote_worker 1
     wait "$WORKER_SSH_PID" >/dev/null 2>&1 || true
   fi
   rm -f "$WORKER_REMOTE_SCRIPT"
@@ -475,12 +500,18 @@ RUN_ID="$RUN_ID" LABEL="$LEADER_LABEL" \
 LEADER_RC=$?
 set -e
 
-"${SSH_BASE[@]}" "$WORKER_TARGET" "docker rm -f '$WORKER_CONTAINER_NAME' >/dev/null 2>&1 || true" >/dev/null 2>&1 || true
+stop_remote_worker 0
 
 set +e
 wait "$WORKER_SSH_PID"
 WORKER_RC=$?
 set -e
+WORKER_SSH_PID=""
+
+if [[ "$WORKER_STOP_REQUESTED" -eq 1 && "$WORKER_RC" -ne 0 && "$LEADER_RC" -eq 0 && -f "$RESULT_JSON_RAW" ]]; then
+  echo "INFO: worker terminated during intentional teardown; normalizing worker return code ${WORKER_RC} -> 0."
+  WORKER_RC=0
+fi
 
 if "${SSH_BASE[@]}" "$WORKER_TARGET" "test -f '$REMOTE_WORKER_LOCK'" >/dev/null 2>&1; then
   "${SSH_BASE[@]}" "$WORKER_TARGET" "cat '$REMOTE_WORKER_LOCK'" > "$WORKER_LOCK_META" || true
@@ -615,7 +646,7 @@ worker_lock = lock_summary(worker_lock_payload)
 worker_lock["path"] = worker_lock_path
 
 status = "ok"
-if int(leader_rc) != 0:
+if int(leader_rc) != 0 or int(worker_rc) != 0:
     status = "failed"
 if not result:
     status = "failed"
@@ -757,7 +788,10 @@ print(summary_csv)
 print(summary_jsonl)
 PY
 
-FINAL_RC="$LEADER_RC"
+FINAL_RC=0
+if [[ "$LEADER_RC" -ne 0 || "$WORKER_RC" -ne 0 ]]; then
+  FINAL_RC=1
+fi
 if [[ "$FINAL_RC" -eq 0 && ! -f "$RESULT_JSON_RAW" ]]; then
   FINAL_RC=1
 fi

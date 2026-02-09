@@ -14,6 +14,12 @@ Options:
   --runtime <mode>     host|container (default: host)
   --image <image>      Container image for runtime=container
                        (default: cfregly/cluster_perf_orig_parity:latest or $CONTAINER_IMAGE)
+  --compat-lib-dir <path>
+                       Optional CUDA compat library directory for runtime=host
+                       (must contain libcuda.so.1 and libnvidia-ptxjitcompiler.so.1)
+  --compat-image <image>
+                       Image used to source CUDA compat libs for runtime=host when
+                       compat-lib-dir is not present (default: --image value)
   --nvbw-bin <path>    nvbandwidth executable path (default: nvbandwidth)
   --quick              Run reduced testcase subset with lower samples for faster turnaround
 
@@ -30,7 +36,9 @@ RUN_ID="$(date +%Y-%m-%d)"
 LABEL="$(hostname -s)"
 RUNTIME="host"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+COMPAT_IMAGE="${COMPAT_IMAGE:-$CONTAINER_IMAGE}"
 NVBW_BIN="${NVBW_BIN:-nvbandwidth}"
+NVBW_COMPAT_LIB_DIR="${NVBW_COMPAT_LIB_DIR:-}"
 QUICK=0
 
 while [[ $# -gt 0 ]]; do
@@ -39,6 +47,8 @@ while [[ $# -gt 0 ]]; do
     --label) LABEL="${2:-}"; shift 2 ;;
     --runtime) RUNTIME="${2:-}"; shift 2 ;;
     --image) CONTAINER_IMAGE="${2:-}"; shift 2 ;;
+    --compat-lib-dir) NVBW_COMPAT_LIB_DIR="${2:-}"; shift 2 ;;
+    --compat-image) COMPAT_IMAGE="${2:-}"; shift 2 ;;
     --nvbw-bin) NVBW_BIN="${2:-}"; shift 2 ;;
     --quick) QUICK=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -89,6 +99,8 @@ if [[ "$RUNTIME" == "container" ]]; then
   echo "IMAGE=${CONTAINER_IMAGE}"
 else
   echo "NVBW_BIN=${NVBW_BIN}"
+  echo "COMPAT_IMAGE=${COMPAT_IMAGE}"
+  echo "COMPAT_LIB_DIR=${NVBW_COMPAT_LIB_DIR:-<auto>}"
 fi
 echo "QUICK=${QUICK}"
 echo "RAW_LOG=${RAW_LOG}"
@@ -98,10 +110,16 @@ echo "LOCK_META=${LOCK_META}"
 echo ""
 
 run_host_nvbandwidth() {
+  local -a run_cmd=()
+  if [[ -n "$NVBW_COMPAT_LIB_DIR" ]]; then
+    run_cmd+=(env "LD_LIBRARY_PATH=${NVBW_COMPAT_LIB_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}")
+  fi
+  run_cmd+=("$NVBW_BIN")
+  run_cmd+=("${NVBW_ARGS[@]}")
   RUN_ID="$RUN_ID" LABEL="$LABEL" \
     "${ROOT_DIR}/scripts/run_with_gpu_clocks.sh" \
     --lock-meta-out "$LOCK_META" \
-    -- "$NVBW_BIN" "${NVBW_ARGS[@]}" 2>&1 | tee "$RAW_LOG"
+    -- "${run_cmd[@]}" 2>&1 | tee "$RAW_LOG"
   return "${PIPESTATUS[0]}"
 }
 
@@ -130,9 +148,86 @@ run_container_nvbandwidth() {
   return "${PIPESTATUS[0]}"
 }
 
+has_compat_libs() {
+  local d="$1"
+  [[ -n "$d" && -d "$d" && -f "$d/libcuda.so.1" && -f "$d/libnvidia-ptxjitcompiler.so.1" ]]
+}
+
+cache_dir_for_image() {
+  local image="$1"
+  local digest=""
+  digest="$(docker image inspect "$image" --format '{{index .RepoDigests 0}}' 2>/dev/null || true)"
+  if [[ -z "$digest" ]]; then
+    digest="$image"
+  fi
+  digest="${digest//\//_}"
+  digest="${digest//:/_}"
+  digest="${digest//@/_}"
+  printf '%s' "${HOME}/.cache/nvbandwidth_cuda_compat/${digest}"
+}
+
+prepare_host_compat_libs() {
+  if [[ "$RUNTIME" != "host" ]]; then
+    return 0
+  fi
+  if has_compat_libs "$NVBW_COMPAT_LIB_DIR"; then
+    return 0
+  fi
+
+  for candidate in \
+    "/usr/local/cuda/compat/lib.real" \
+    "/usr/local/cuda/compat/lib" \
+    "/usr/local/cuda-13.0/compat/lib.real" \
+    "/usr/local/cuda-13.0/compat/lib"; do
+    if has_compat_libs "$candidate"; then
+      NVBW_COMPAT_LIB_DIR="$candidate"
+      return 0
+    fi
+  done
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "WARNING: docker not available; continuing without CUDA compat libs for host runtime." >&2
+    return 0
+  fi
+
+  if [[ -z "$COMPAT_IMAGE" ]]; then
+    echo "WARNING: no compat image configured; continuing without CUDA compat libs for host runtime." >&2
+    return 0
+  fi
+
+  docker pull "$COMPAT_IMAGE" >/dev/null 2>&1 || true
+  local cache_root=""
+  cache_root="$(cache_dir_for_image "$COMPAT_IMAGE")"
+  mkdir -p "$cache_root"
+
+  if has_compat_libs "${cache_root}/lib.real"; then
+    NVBW_COMPAT_LIB_DIR="${cache_root}/lib.real"
+    return 0
+  fi
+
+  local cid=""
+  cid="$(docker create "$COMPAT_IMAGE" 2>/dev/null || true)"
+  if [[ -z "$cid" ]]; then
+    echo "WARNING: failed to create container from ${COMPAT_IMAGE}; continuing without CUDA compat libs." >&2
+    return 0
+  fi
+  set +e
+  rm -rf "${cache_root}/lib.real"
+  docker cp "${cid}:/usr/local/cuda/compat/lib.real" "${cache_root}/lib.real" >/dev/null 2>&1
+  cp_rc=$?
+  docker rm -f "$cid" >/dev/null 2>&1 || true
+  set -e
+  if [[ "$cp_rc" -ne 0 ]]; then
+    echo "WARNING: could not extract CUDA compat libs from ${COMPAT_IMAGE}; continuing without compat override." >&2
+    return 0
+  fi
+  if has_compat_libs "${cache_root}/lib.real"; then
+    NVBW_COMPAT_LIB_DIR="${cache_root}/lib.real"
+  fi
+}
+
 REQUESTED_RUNTIME="$RUNTIME"
 EFFECTIVE_RUNTIME="$RUNTIME"
-FALLBACK_USED=0
 run_rc=0
 
 if [[ "$REQUESTED_RUNTIME" == "host" ]]; then
@@ -140,6 +235,7 @@ if [[ "$REQUESTED_RUNTIME" == "host" ]]; then
     echo "ERROR: nvbandwidth binary not found on PATH: ${NVBW_BIN}" >&2
     exit 1
   fi
+  prepare_host_compat_libs
   set +e
   run_host_nvbandwidth
   run_rc=$?
@@ -156,11 +252,15 @@ else
 fi
 
 if [[ "$run_rc" -ne 0 ]]; then
-  echo "ERROR: nvbandwidth execution failed (requested_runtime=${REQUESTED_RUNTIME}, effective_runtime=${EFFECTIVE_RUNTIME}, rc=${run_rc})." >&2
+  if [[ "$REQUESTED_RUNTIME" == "host" ]]; then
+    echo "ERROR: nvbandwidth execution failed (runtime=${EFFECTIVE_RUNTIME}, rc=${run_rc}, compat_lib_dir=${NVBW_COMPAT_LIB_DIR:-<none>})." >&2
+  else
+    echo "ERROR: nvbandwidth execution failed (runtime=${EFFECTIVE_RUNTIME}, rc=${run_rc})." >&2
+  fi
   exit "$run_rc"
 fi
 
-python3 - <<'PY' "$RUN_ID" "$LABEL" "$RAW_LOG" "$LOCK_META" "$SUMMARY_JSON" "$SUMS_CSV" "$REQUESTED_RUNTIME" "$EFFECTIVE_RUNTIME" "$FALLBACK_USED" "$NVBW_BIN" "$CONTAINER_IMAGE" "$QUICK"
+python3 - <<'PY' "$RUN_ID" "$LABEL" "$RAW_LOG" "$LOCK_META" "$SUMMARY_JSON" "$SUMS_CSV" "$REQUESTED_RUNTIME" "$EFFECTIVE_RUNTIME" "$NVBW_BIN" "$CONTAINER_IMAGE" "$QUICK" "$NVBW_COMPAT_LIB_DIR" "$COMPAT_IMAGE"
 import csv
 import json
 import re
@@ -176,10 +276,11 @@ from pathlib import Path
     sums_csv_path,
     requested_runtime,
     effective_runtime,
-    fallback_used,
     nvbw_bin,
     container_image,
     quick_flag,
+    compat_lib_dir,
+    compat_image,
 ) = sys.argv[1:]
 
 raw_log = Path(raw_log_path)
@@ -255,10 +356,11 @@ payload = {
     "status": "ok" if sums and clock_summary["all_devices_locked"] else "failed",
     "requested_runtime": requested_runtime,
     "effective_runtime": effective_runtime,
-    "fallback_used": fallback_used == "1",
     "runtime": effective_runtime,
     "image": container_image if "container" in effective_runtime else None,
     "nvbandwidth_bin": nvbw_bin if effective_runtime == "host" else None,
+    "cuda_compat_lib_dir": compat_lib_dir or None,
+    "cuda_compat_image": compat_image if effective_runtime == "host" else None,
     "quick": quick_flag == "1",
     "artifacts": {
         "raw_log": str(raw_log),

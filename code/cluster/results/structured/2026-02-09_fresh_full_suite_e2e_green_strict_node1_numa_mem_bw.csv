@@ -1,0 +1,7 @@
+run_id,label,cpu_node,node,bytes,iters,threads,warmup,elapsed_s,bw_gbps,rc,error
+2026-02-09_fresh_full_suite_e2e_green_strict,node1,0,0,1073741824,10,16,2,0.078648,136.524922,0,
+2026-02-09_fresh_full_suite_e2e_green_strict,node1,0,1,1073741824,10,16,2,0.161552,66.464075,0,
+2026-02-09_fresh_full_suite_e2e_green_strict,node1,0,2,1073741824,10,16,2,0.176251,60.921048,0,
+2026-02-09_fresh_full_suite_e2e_green_strict,node1,0,10,1073741824,10,16,2,0.303042,35.432153,0,
+2026-02-09_fresh_full_suite_e2e_green_strict,node1,0,18,1073741824,10,16,2,0.32729,32.807096,0,
+2026-02-09_fresh_full_suite_e2e_green_strict,node1,0,26,1073741824,10,16,2,0.327637,32.772278,0,

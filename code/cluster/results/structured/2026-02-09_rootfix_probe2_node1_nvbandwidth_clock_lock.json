@@ -1,0 +1,78 @@
+{
+  "cmd": "env LD_LIBRARY_PATH=/home/ubuntu/.cache/nvbandwidth_cuda_compat/cfregly_cluster_perf_old_parity_sha256_d2b8a63cf41af177ffbf205e02ada6a26c646c44c9826934ee625c63b17404f4/lib.real nvbandwidth -i 1 -b 128 -t host_to_device_memcpy_ce -t device_to_host_memcpy_ce -t device_to_device_memcpy_read_ce -t device_to_device_memcpy_write_ce -t device_to_device_bidirectional_memcpy_read_ce -t device_to_device_bidirectional_memcpy_write_ce -t all_to_host_memcpy_ce -t host_to_all_memcpy_ce",
+  "command_end_ts": "2026-02-09T23:27:09+0000",
+  "command_start_ts": "2026-02-09T23:27:01+0000",
+  "devices": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "label": "node1",
+  "locks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 0
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 1,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 1
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 2,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 2
+    },
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 3,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 3
+    }
+  ],
+  "require_clock_lock": true,
+  "returncode": 0,
+  "run_id": "2026-02-09_rootfix_probe2",
+  "timestamp": "2026-02-09T23:27:01+0000"
+}

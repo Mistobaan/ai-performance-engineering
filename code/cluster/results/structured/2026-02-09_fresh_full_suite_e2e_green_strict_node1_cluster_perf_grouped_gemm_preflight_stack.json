@@ -1,0 +1,50 @@
+{
+  "description": "Host-native venv stack that reuses orig-parity container binaries for parity with old_container.",
+  "detected_math_policy": {
+    "allow_tf32": true,
+    "cudnn_allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "detected_stack": {
+    "cuda_version": "13.1",
+    "cudnn_version": "91701",
+    "deep_gemm_installed": true,
+    "deep_gemm_version": "2.3.0+0f5f266",
+    "nccl_version": "2.29.2",
+    "torch_version": "2.10.0a0+a36e1d39eb.nv26.01.42222806"
+  },
+  "errors": [],
+  "expected_image": "",
+  "expected_stack": {
+    "cuda_version": "13.1",
+    "cudnn_version": "91701",
+    "deep_gemm_installed": true,
+    "deep_gemm_version": "2.3.0+0f5f266",
+    "nccl_version": "2.29.2",
+    "torch_version": "2.10.0a0+a36e1d39eb.nv26.01.42222806"
+  },
+  "image_info": {},
+  "math_policy": {
+    "allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "math_policy_probe_error": "",
+  "peermem": {
+    "attempted_modprobe": false,
+    "loaded_after": true,
+    "loaded_before": true,
+    "modprobe_errors": []
+  },
+  "peermem_loaded": true,
+  "probe_error": "",
+  "profiles_json": "/home/ubuntu/ai-performance-engineering/code/cluster/configs/cluster_perf_stack_profiles.json",
+  "requested_image": "",
+  "requested_math_policy": {
+    "allow_tf32": true,
+    "float32_matmul_precision": "high"
+  },
+  "runtime": "host",
+  "stack_profile": "host_only",
+  "status": "ok",
+  "timestamp_utc": "2026-02-09T23:00:34.060533+00:00"
+}

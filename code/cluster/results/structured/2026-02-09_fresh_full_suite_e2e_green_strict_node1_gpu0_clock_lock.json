@@ -1,0 +1,30 @@
+{
+  "cmd": "env/venv/bin/python scripts/torch_gemm_bench.py --m 16384 --n 16384 --k 16384 --dtype bf16 --iters 50 --label node1_gpu0 --output-csv results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_gemm_gpu_sanity.csv",
+  "command_end_ts": "2026-02-09T22:58:37+0000",
+  "command_start_ts": "2026-02-09T22:58:32+0000",
+  "devices": [
+    0
+  ],
+  "label": "node1_gpu0",
+  "locks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 2062,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1950
+      },
+      "device": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 7928.064,
+        "theoretical_tflops_fp16": 641.892352
+      },
+      "physical_gpu": 0
+    }
+  ],
+  "require_clock_lock": true,
+  "returncode": 0,
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_strict",
+  "timestamp": "2026-02-09T22:58:32+0000"
+}

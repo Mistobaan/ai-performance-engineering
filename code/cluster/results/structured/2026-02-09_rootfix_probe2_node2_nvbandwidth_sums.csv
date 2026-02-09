@@ -1,0 +1,13 @@
+test,sum_gbps
+host_to_device_memcpy_ce,842.46
+device_to_host_memcpy_ce,772.16
+device_to_device_memcpy_read_ce,8678.78
+device_to_device_memcpy_write_ce,8997.59
+device_to_device_bidirectional_memcpy_read_ce_read1,8613.73
+device_to_device_bidirectional_memcpy_read_ce_read2,8622.49
+device_to_device_bidirectional_memcpy_read_ce_total,17236.22
+device_to_device_bidirectional_memcpy_write_ce_write1,8933.65
+device_to_device_bidirectional_memcpy_write_ce_write2,8928.48
+device_to_device_bidirectional_memcpy_write_ce_total,17862.13
+all_to_host_memcpy_ce,733.72
+host_to_all_memcpy_ce,702.56

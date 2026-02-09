@@ -46,5 +46,317 @@
     "exit_code": 0,
     "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/health_suite_extended.log",
     "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_cluster_health_suite.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict_health_suite_extended --hosts node1\\,node2 --ssh-user ubuntu --ssh-key /home/ubuntu/.ssh/ssh_key.pem --oob-if enP22p3s0f3 --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5 --gdr --gdr-gpu 0 --gdr-mem-types 0 --gdr-use-dmabuf --extended"
+  },
+  {
+    "name": "vllm_serve_sweep",
+    "start_time": "2026-02-09T22:27:24+00:00",
+    "end_time": "2026-02-09T22:41:16+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/vllm_serve_sweep.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_sweep_container.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --label node1 --model openai/gpt-oss-120b --isl 1024 --osl 1024 --concurrency-range 32\\ 64\\ 128\\ 256\\ 512 --port 8888"
+  },
+  {
+    "name": "vllm_serve_multinode_c64",
+    "start_time": "2026-02-09T22:41:16+00:00",
+    "end_time": "2026-02-09T22:58:29+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/vllm_serve_multinode_c64.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_multinode_container.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --ssh-user ubuntu --model openai/gpt-oss-120b --isl 1024 --osl 1024 --concurrency 64 --port 8888 --ray-port 6379 --ray-ready-timeout 300 --server-ready-timeout 1200 --worker-startup-wait 10 --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem --socket-ifname enP22p3s0f3 --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5"
+  },
+  {
+    "name": "gemm_sanity",
+    "start_time": "2026-02-09T22:58:29+00:00",
+    "end_time": "2026-02-09T22:59:34+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/gemm_sanity.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_gemm_sanity_all_nodes.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --ssh-user ubuntu --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem"
+  },
+  {
+    "name": "fp4_checks",
+    "start_time": "2026-02-09T22:59:34+00:00",
+    "end_time": "2026-02-09T23:03:39+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/fp4_checks.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_fp4_checks_all_nodes.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --ssh-user ubuntu --runtime host --stack-profile host_only --preset auto --warmup 5 --iters 30 --smoke-m 4096 --smoke-n 4096 --smoke-k 4096 --smoke-warmup 10 --smoke-iters 30 --smoke-rounds 3 --smoke-skew-threshold-pct 5 --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem"
+  },
+  {
+    "name": "mamf_finder",
+    "start_time": "2026-02-09T23:03:39+00:00",
+    "end_time": "2026-02-09T23:03:58+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/mamf_finder.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_mamf_finder_all_nodes.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --ssh-user ubuntu --mode quick --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem --concurrent"
+  },
+  {
+    "name": "allreduce_stability",
+    "start_time": "2026-02-09T23:03:58+00:00",
+    "end_time": "2026-02-09T23:04:15+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/allreduce_stability.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_allreduce_stability.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --ssh-user ubuntu --label allreduce_stability --payload-gib 2.0 --iters 200 --warmup 20 --ssh-key /home/ubuntu/.ssh/ssh_key.pem --oob-if enP22p3s0f3 --socket-ifname enP22p3s0f3 --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5"
+  },
+  {
+    "name": "allreduce_latency_comp",
+    "start_time": "2026-02-09T23:04:15+00:00",
+    "end_time": "2026-02-09T23:04:33+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/allreduce_latency_comp.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_allreduce_latency_comp.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --label allreduce_latency_comp --hosts node1\\,node2 --ssh-user ubuntu --payload-gib 4.0 --chunks 1000 --iters 5 --warmup 1 --ssh-key /home/ubuntu/.ssh/ssh_key.pem --oob-if enP22p3s0f3 --socket-ifname enP22p3s0f3 --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5"
+  },
+  {
+    "name": "allgather_control_plane",
+    "start_time": "2026-02-09T23:04:33+00:00",
+    "end_time": "2026-02-09T23:04:53+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/allgather_control_plane.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_allgather_control_plane.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --label allgather_control_plane --hosts node1\\,node2 --ssh-user ubuntu --iters 2000 --warmup 200 --ssh-key /home/ubuntu/.ssh/ssh_key.pem --oob-if enP22p3s0f3 --socket-ifname enP22p3s0f3 --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5"
+  },
+  {
+    "name": "nccl_algo_comparison",
+    "start_time": "2026-02-09T23:04:53+00:00",
+    "end_time": "2026-02-09T23:07:53+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/nccl_algo_comparison.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_nccl_algo_comparison.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --algos Ring\\,Tree\\,NVLS\\,auto --ssh-key /home/ubuntu/.ssh/ssh_key.pem --oob-if enP22p3s0f3 --socket-ifname enP22p3s0f3 --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5"
+  },
+  {
+    "name": "c2c_memcpy",
+    "start_time": "2026-02-09T23:07:53+00:00",
+    "end_time": "2026-02-09T23:08:07+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/c2c_memcpy.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_c2c_memcpy_bench.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --label node1 --device 0 --bw-sizes 4194304\\,67108864\\,1073741824 --lat-sizes 4\\,4096\\,65536 --bw-iters 20 --lat-iters 20000 --warmup 5"
+  },
+  {
+    "name": "numa_mem_bw",
+    "start_time": "2026-02-09T23:08:07+00:00",
+    "end_time": "2026-02-09T23:08:20+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/numa_mem_bw.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_numa_mem_bw_all_nodes.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --ssh-user ubuntu --bytes 1073741824 --iters 10 --threads 16 --warmup 2 --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem"
+  },
+  {
+    "name": "train_step_single_node",
+    "start_time": "2026-02-09T23:08:20+00:00",
+    "end_time": "2026-02-09T23:09:21+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/train_step_single_node.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_torchrun_transformer_train_step.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --ssh-user ubuntu --gpus-per-node 4 --master-port 29510 --steps 30 --warmup-steps 5 --batch-size 2 --seq-len 2048 --hidden 4096 --layers 24 --heads 32 --mlp-ratio 4 --precision bf16 --fsdp 1 --lr 1e-4 --ssh-key /home/ubuntu/.ssh/ssh_key.pem --oob-if enP22p3s0f3 --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5 --hosts node1 --label node1_single_node"
+  },
+  {
+    "name": "train_step_multi_node",
+    "start_time": "2026-02-09T23:09:21+00:00",
+    "end_time": "2026-02-09T23:10:20+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/train_step_multi_node.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_torchrun_transformer_train_step.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --ssh-user ubuntu --gpus-per-node 4 --master-port 29510 --steps 30 --warmup-steps 5 --batch-size 2 --seq-len 2048 --hidden 4096 --layers 24 --heads 32 --mlp-ratio 4 --precision bf16 --fsdp 1 --lr 1e-4 --ssh-key /home/ubuntu/.ssh/ssh_key.pem --oob-if enP22p3s0f3 --nccl-ib-hca mlx5_0\\,mlx5_1\\,mlx5_4\\,mlx5_5 --hosts node1\\,node2 --label node1_multinode"
+  },
+  {
+    "name": "checkpoint_io",
+    "start_time": "2026-02-09T23:10:20+00:00",
+    "end_time": "2026-02-09T23:10:34+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/checkpoint_io.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_checkpoint_io_all_nodes.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --ssh-user ubuntu --test-dir /tmp --bytes 4G --block-size 4M --files 1 --fsync 1 --write 1 --read 1 --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem"
+  },
+  {
+    "name": "fio_all_nodes",
+    "start_time": "2026-02-09T23:10:34+00:00",
+    "end_time": "2026-02-09T23:18:14+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/fio_all_nodes.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_fio_all_nodes.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --ssh-user ubuntu --test-dir /tmp --runtime 30 --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem"
+  },
+  {
+    "name": "nvbandwidth_all_nodes",
+    "start_time": "2026-02-09T23:18:14+00:00",
+    "end_time": "2026-02-09T23:18:21+00:00",
+    "exit_code": 1,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/nvbandwidth_all_nodes.log",
+    "command": "/home/ubuntu/ai-performance-engineering/code/cluster/scripts/run_nvbandwidth_bundle_all_nodes.sh --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --ssh-user ubuntu --runtime host --labels node1\\,node2 --ssh-key /home/ubuntu/.ssh/ssh_key.pem --nvbw-bin nvbandwidth"
+  },
+  {
+    "name": "plot_nccl_single_node",
+    "start_time": "2026-02-09T23:18:21+00:00",
+    "end_time": "2026-02-09T23:18:22+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_nccl_single_node.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_nccl.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_nccl.json --out-dir /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-02-09_fresh_full_suite_e2e_green_strict_node1"
+  },
+  {
+    "name": "plot_nccl_multi_node",
+    "start_time": "2026-02-09T23:18:22+00:00",
+    "end_time": "2026-02-09T23:18:22+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_nccl_multi_node.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_nccl.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_2nodes_nccl.json --out-dir /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-02-09_fresh_full_suite_e2e_green_strict_2nodes --baseline-input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_nccl.json"
+  },
+  {
+    "name": "plot_vllm_serve",
+    "start_time": "2026-02-09T23:18:23+00:00",
+    "end_time": "2026-02-09T23:18:23+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_vllm_serve.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_vllm_serve_sweep.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_vllm_serve_sweep.csv --out-dir /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-02-09_fresh_full_suite_e2e_green_strict_node1"
+  },
+  {
+    "name": "plot_vllm_serve_multinode",
+    "start_time": "2026-02-09T23:18:23+00:00",
+    "end_time": "2026-02-09T23:18:24+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_vllm_serve_multinode.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_vllm_serve_sweep.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_vllm_multinode_serve.csv --out-dir /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-02-09_fresh_full_suite_e2e_green_strict_node1_multinode"
+  },
+  {
+    "name": "plot_iperf3_oob",
+    "start_time": "2026-02-09T23:18:24+00:00",
+    "end_time": "2026-02-09T23:18:24+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_iperf3_oob.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_iperf3.py --summary /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_health_suite_extended_node1node2_cluster_health_suite_summary.json --out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_iperf3_oob_tcp.png --out-json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_iperf3_oob_tcp.json --skip-if-missing"
+  },
+  {
+    "name": "plot_gemm_sanity",
+    "start_time": "2026-02-09T23:18:24+00:00",
+    "end_time": "2026-02-09T23:18:24+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_gemm_sanity.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_gemm_bar.py --inputs /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_gemm_gpu_sanity.csv /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_gemm_gpu_sanity.csv --output /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_gemm_gpu_sanity.png --filter-m 16384"
+  },
+  {
+    "name": "plot_mamf",
+    "start_time": "2026-02-09T23:18:24+00:00",
+    "end_time": "2026-02-09T23:18:25+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_mamf.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_mamf.py --summary-inputs /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_gpu0_mamf_summary.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_gpu1_mamf_summary.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_gpu2_mamf_summary.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_gpu3_mamf_summary.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_gpu0_mamf_summary.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_gpu1_mamf_summary.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_gpu2_mamf_summary.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_gpu3_mamf_summary.json --output /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_mamf_straggler.png --mode straggler --title MAMF\\ Straggler\\ View\\ 2026-02-09_fresh_full_suite_e2e_green_strict"
+  },
+  {
+    "name": "plot_allreduce_stability",
+    "start_time": "2026-02-09T23:18:25+00:00",
+    "end_time": "2026-02-09T23:18:26+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_allreduce_stability.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_allreduce_stability.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_allreduce_stability.json --output /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_allreduce_stability.png"
+  },
+  {
+    "name": "plot_allreduce_latency_comp",
+    "start_time": "2026-02-09T23:18:26+00:00",
+    "end_time": "2026-02-09T23:18:26+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_allreduce_latency_comp.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_allreduce_latency_comp.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_allreduce_latency_comp.json --output /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_allreduce_latency_comp.png"
+  },
+  {
+    "name": "plot_allgather_control_plane",
+    "start_time": "2026-02-09T23:18:26+00:00",
+    "end_time": "2026-02-09T23:18:27+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_allgather_control_plane.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_allgather_control_plane.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_allgather_control_plane.json --output /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_allgather_control_plane.png"
+  },
+  {
+    "name": "plot_nccl_algo_comparison",
+    "start_time": "2026-02-09T23:18:27+00:00",
+    "end_time": "2026-02-09T23:18:27+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_nccl_algo_comparison.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_nccl_algo_comparison.py --inputs /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_nccl_algo_auto.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_nccl_algo_comparison.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_nccl_algo_nvls.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_nccl_algo_ring.json /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_nccl_algo_tree.json --output /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_nccl_algo_comparison.png --title NCCL\\ Algorithm\\ Comparison\\ 2026-02-09_fresh_full_suite_e2e_green_strict"
+  },
+  {
+    "name": "plot_fio_2026-02-09_fresh_full_suite_e2e_green_strict_node1_fio",
+    "start_time": "2026-02-09T23:18:27+00:00",
+    "end_time": "2026-02-09T23:18:28+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_fio_2026-02-09_fresh_full_suite_e2e_green_strict_node1_fio.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_fio.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_fio.json --out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_node1_fio.png"
+  },
+  {
+    "name": "plot_fio_2026-02-09_fresh_full_suite_e2e_green_strict_node2_fio",
+    "start_time": "2026-02-09T23:18:28+00:00",
+    "end_time": "2026-02-09T23:18:28+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_fio_2026-02-09_fresh_full_suite_e2e_green_strict_node2_fio.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_fio.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_fio.json --out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_node2_fio.png"
+  },
+  {
+    "name": "plot_c2c_memcpy",
+    "start_time": "2026-02-09T23:18:28+00:00",
+    "end_time": "2026-02-09T23:18:29+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_c2c_memcpy.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_c2c_memcpy.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_c2c_memcpy.json --out-dir /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-02-09_fresh_full_suite_e2e_green_strict_node1"
+  },
+  {
+    "name": "plot_numa_mem_bw_2026-02-09_fresh_full_suite_e2e_green_strict_node1_numa_mem_bw",
+    "start_time": "2026-02-09T23:18:29+00:00",
+    "end_time": "2026-02-09T23:18:29+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_numa_mem_bw_2026-02-09_fresh_full_suite_e2e_green_strict_node1_numa_mem_bw.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_numa_mem_bw.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_numa_mem_bw.json --out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_node1_numa_mem_bw.png --title NUMA\\ memcpy\\ bandwidth:\\ 2026-02-09_fresh_full_suite_e2e_green_strict_node1_numa_mem_bw"
+  },
+  {
+    "name": "plot_numa_mem_bw_2026-02-09_fresh_full_suite_e2e_green_strict_node2_numa_mem_bw",
+    "start_time": "2026-02-09T23:18:29+00:00",
+    "end_time": "2026-02-09T23:18:29+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_numa_mem_bw_2026-02-09_fresh_full_suite_e2e_green_strict_node2_numa_mem_bw.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_numa_mem_bw.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_numa_mem_bw.json --out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_node2_numa_mem_bw.png --title NUMA\\ memcpy\\ bandwidth:\\ 2026-02-09_fresh_full_suite_e2e_green_strict_node2_numa_mem_bw"
+  },
+  {
+    "name": "plot_train_step_single",
+    "start_time": "2026-02-09T23:18:29+00:00",
+    "end_time": "2026-02-09T23:18:30+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_train_step_single.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_torchrun_train_step.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_single_node_torchrun_train_step.json --out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_node1_single_node_torchrun_train_step.png"
+  },
+  {
+    "name": "plot_train_step_multi",
+    "start_time": "2026-02-09T23:18:30+00:00",
+    "end_time": "2026-02-09T23:18:30+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_train_step_multi.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_torchrun_train_step.py --input /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_multinode_torchrun_train_step.json --out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_node1_multinode_torchrun_train_step.png"
+  },
+  {
+    "name": "plot_nvlink_topology_2026-02-09_fresh_full_suite_e2e_green_strict_node1_meta",
+    "start_time": "2026-02-09T23:18:30+00:00",
+    "end_time": "2026-02-09T23:18:31+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_nvlink_topology_2026-02-09_fresh_full_suite_e2e_green_strict_node1_meta.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_nvlink_topology.py --meta /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_meta.json --fig-out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_node1_meta_nvlink_topology.png --summary-out /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node1_meta_nvlink_topology.json"
+  },
+  {
+    "name": "plot_nvlink_topology_2026-02-09_fresh_full_suite_e2e_green_strict_node2_meta",
+    "start_time": "2026-02-09T23:18:31+00:00",
+    "end_time": "2026-02-09T23:18:31+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_nvlink_topology_2026-02-09_fresh_full_suite_e2e_green_strict_node2_meta.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_nvlink_topology.py --meta /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_meta.json --fig-out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_node2_meta_nvlink_topology.png --summary-out /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node2_meta_nvlink_topology.json"
+  },
+  {
+    "name": "plot_cluster_story_dashboard",
+    "start_time": "2026-02-09T23:18:31+00:00",
+    "end_time": "2026-02-09T23:18:32+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/plot_cluster_story_dashboard.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/analysis/plot_cluster_story_dashboard.py --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --structured-dir /home/ubuntu/ai-performance-engineering/code/cluster/results/structured --node-labels node1\\,node2 --fig-out /home/ubuntu/ai-performance-engineering/code/cluster/docs/figures/2026-02-09_fresh_full_suite_e2e_green_strict_cluster_story_dashboard.png --summary-out /home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_strict_node_parity_summary.json"
+  },
+  {
+    "name": "validate_required_artifacts",
+    "start_time": "2026-02-09T23:18:32+00:00",
+    "end_time": "2026-02-09T23:18:32+00:00",
+    "exit_code": 1,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/validate_required_artifacts.log",
+    "command": "validate_required_artifacts"
+  },
+  {
+    "name": "manifest_refresh",
+    "start_time": "2026-02-09T23:18:32+00:00",
+    "end_time": "2026-02-09T23:18:32+00:00",
+    "exit_code": 0,
+    "log_path": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_strict_suite/manifest_refresh.log",
+    "command": "python3 /home/ubuntu/ai-performance-engineering/code/cluster/scripts/write_manifest.py --run-id 2026-02-09_fresh_full_suite_e2e_green_strict --hosts node1\\,node2 --include-figures --labels node1\\,node2"
   }
 ]

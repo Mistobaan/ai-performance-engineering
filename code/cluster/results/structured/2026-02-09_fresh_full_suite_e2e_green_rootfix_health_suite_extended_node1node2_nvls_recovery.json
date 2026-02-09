@@ -1,0 +1,77 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "bin": "all_reduce_perf",
+      "cmd_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_all_reduce_perf_attempt1.cmd.txt",
+      "error_excerpt": null,
+      "nccl_nvls_enable_env": "",
+      "nvls_init_failure": false,
+      "phase": "run",
+      "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_all_reduce_perf_attempt1.log",
+      "rc": 0,
+      "reset": null,
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_all_reduce_perf.json",
+      "timestamp_utc": "2026-02-09T23:33:52Z"
+    },
+    {
+      "attempt": 1,
+      "bin": "all_gather_perf",
+      "cmd_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_all_gather_perf_attempt1.cmd.txt",
+      "error_excerpt": null,
+      "nccl_nvls_enable_env": "",
+      "nvls_init_failure": false,
+      "phase": "run",
+      "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_all_gather_perf_attempt1.log",
+      "rc": 0,
+      "reset": null,
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_all_gather_perf.json",
+      "timestamp_utc": "2026-02-09T23:34:13Z"
+    },
+    {
+      "attempt": 1,
+      "bin": "reduce_scatter_perf",
+      "cmd_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_reduce_scatter_perf_attempt1.cmd.txt",
+      "error_excerpt": null,
+      "nccl_nvls_enable_env": "",
+      "nvls_init_failure": false,
+      "phase": "run",
+      "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_reduce_scatter_perf_attempt1.log",
+      "rc": 0,
+      "reset": null,
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_reduce_scatter_perf.json",
+      "timestamp_utc": "2026-02-09T23:34:33Z"
+    },
+    {
+      "attempt": 1,
+      "bin": "alltoall_perf",
+      "cmd_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_alltoall_perf_attempt1.cmd.txt",
+      "error_excerpt": null,
+      "nccl_nvls_enable_env": "",
+      "nvls_init_failure": false,
+      "phase": "run",
+      "raw_log": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_alltoall_perf_attempt1.log",
+      "rc": 0,
+      "reset": null,
+      "structured_json": "/home/ubuntu/ai-performance-engineering/code/cluster/results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nccl_alltoall_perf.json",
+      "timestamp_utc": "2026-02-09T23:34:51Z"
+    }
+  ],
+  "attempts_jsonl": "/home/ubuntu/ai-performance-engineering/code/cluster/results/raw/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_nvls_recovery.jsonl",
+  "degraded": false,
+  "effective_nccl_nvls_enable": "",
+  "hosts": [
+    "node1",
+    "node2"
+  ],
+  "label": "node1node2",
+  "max_attempts": 3,
+  "remediation": [
+    "Ensure nvidia-imex is active on all nodes and IMEX Domain State is UP (scripts/preflight_cluster_services.sh).",
+    "If NVLS init fails with transport/nvls.cc + Cuda failure 801, try restarting nvidia-imex on all nodes and re-running.",
+    "If NVLS continues to fail after retries, treat the run as invalid and fix service state before rerun."
+  ],
+  "requested_nccl_nvls_enable": "",
+  "run_id": "2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended",
+  "timestamp_utc": "2026-02-09T23:35:05Z"
+}
