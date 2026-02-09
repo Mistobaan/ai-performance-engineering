@@ -13,7 +13,33 @@ def load_data(path: Path):
     cases = data.get("cases") or data.get("results") or []
     if not cases:
         raise SystemExit("No cases/results found in JSON. Expected key 'cases' or 'results'.")
-    return data, cases
+    return data, _enrich_cases(data, cases)
+
+
+def _enrich_cases(payload, cases):
+    hosts = payload.get("hosts") or []
+    default_nodes = len(hosts) if hosts else None
+    default_gpus = payload.get("total_ranks")
+    if default_gpus is None and payload.get("gpus_per_node") and default_nodes:
+        try:
+            default_gpus = int(payload.get("gpus_per_node")) * int(default_nodes)
+        except (TypeError, ValueError):
+            default_gpus = None
+    default_label = payload.get("run_id")
+
+    enriched = []
+    for row in cases:
+        if not isinstance(row, dict):
+            continue
+        out = dict(row)
+        if out.get("nodes") in (None, "") and default_nodes is not None:
+            out["nodes"] = int(default_nodes)
+        if out.get("gpus") in (None, "") and default_gpus is not None:
+            out["gpus"] = int(default_gpus)
+        if out.get("label") in (None, "") and default_label:
+            out["label"] = str(default_label)
+        enriched.append(out)
+    return enriched
 
 
 def group_cases(cases, key_fields):
@@ -60,36 +86,40 @@ def plot_bw_vs_msg(cases, out_path: Path, title: str):
 
 
 def plot_scaling_efficiency(cases, out_path: Path, title: str, target_sizes_mb):
-    # Expect entries with fields: nbytes, busbw_gbps, gpus, nodes
-    # Efficiency = busbw(gpus)/ (busbw(1gpu) * gpus) for each message size
+    # Expect entries with fields: nbytes/size_bytes, busbw_gbps/busbw, gpus, nodes.
+    # Efficiency is normalized to the smallest available GPU-count point.
     fig, ax = plt.subplots(figsize=(8, 5))
 
+    any_series = False
     for target_mb in target_sizes_mb:
         target_bytes = target_mb * 1024 * 1024
-        # pick closest nbytes per (nodes,gpus)
-        by_ng = {}
+        # pick closest size sample per GPU count
+        by_gpu = {}
         for r in cases:
             if _get_nbytes(r) in (None, 0):
                 continue
-            key = (r.get("nodes"), r.get("gpus"))
-            by_ng.setdefault(key, []).append(r)
+            gpus = r.get("gpus")
+            if gpus in (None, ""):
+                continue
+            try:
+                gpus = int(gpus)
+            except (TypeError, ValueError):
+                continue
+            by_gpu.setdefault(gpus, []).append(r)
 
         points = []
-        for key, rows in by_ng.items():
+        for gpus, rows in by_gpu.items():
             rows = sorted(rows, key=lambda r: abs(_get_nbytes(r) - target_bytes))
-            chosen = rows[0]
+            chosen = dict(rows[0])
+            chosen["gpus"] = gpus
             points.append(chosen)
 
-        # baseline = 1 node, 1 gpu if present; else 1 node, min gpus
-        baseline_candidates = [p for p in points if (p.get("nodes") in (None, 1))]
-        baseline = None
-        if baseline_candidates:
-            baseline = sorted(baseline_candidates, key=lambda r: r.get("gpus") or 0)[0]
-
-        if not baseline:
+        if not points:
             continue
 
+        baseline = sorted(points, key=lambda r: int(r.get("gpus") or 0))[0]
         base_bw = baseline.get("busbw_gbps") or baseline.get("busbw") or baseline.get("algbw_gbps")
+        base_gpus = baseline.get("gpus") or 1
         if not base_bw:
             continue
 
@@ -100,19 +130,26 @@ def plot_scaling_efficiency(cases, out_path: Path, title: str, target_sizes_mb):
             bw = p.get("busbw_gbps") or p.get("busbw") or p.get("algbw_gbps")
             if not bw:
                 continue
-            eff = bw / (base_bw * gpus)
+            scale = float(gpus) / float(base_gpus)
+            if scale <= 0:
+                continue
+            eff = bw / (base_bw * scale)
             xs.append(gpus)
             ys.append(eff)
 
         if xs:
+            any_series = True
             ax.plot(xs, ys, marker="o", label=f"~{target_mb}MB")
 
     ax.set_xlabel("GPU count")
-    ax.set_ylabel("Scaling efficiency vs 1 GPU")
+    ax.set_ylabel("Scaling efficiency vs smallest GPU-count sample")
     ax.set_title(title)
     ax.set_ylim(0, 1.2)
     ax.grid(True, linestyle="--", alpha=0.4)
-    ax.legend(fontsize=8)
+    if any_series:
+        ax.legend(fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "No scaling points available", ha="center", va="center", transform=ax.transAxes)
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=200)
@@ -124,6 +161,11 @@ def main():
 
     parser = argparse.ArgumentParser(description="Plot NCCL results.")
     parser.add_argument("--input", required=True, help="Path to structured NCCL JSON")
+    parser.add_argument(
+        "--baseline-input",
+        default="",
+        help="Optional single-node NCCL JSON used to build multi-point scaling efficiency curves",
+    )
     parser.add_argument("--out-dir", required=True, help="Directory for output figures")
     parser.add_argument("--run-id", default="run", help="Run id prefix for file names")
     parser.add_argument("--sizes-mb", default="1,16,64", help="Comma-separated message sizes for efficiency plot")
@@ -134,6 +176,11 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     _, cases = load_data(data_path)
+    if args.baseline_input:
+        base_path = Path(args.baseline_input)
+        if base_path.exists():
+            _, baseline_cases = load_data(base_path)
+            cases = cases + baseline_cases
 
     bw_out = out_dir / f"{args.run_id}_nccl_bw_vs_msg.png"
     eff_out = out_dir / f"{args.run_id}_nccl_scaling_efficiency.png"

@@ -82,11 +82,11 @@ def parse_numa_types(numactl_text: str) -> dict[str, int]:
     cpus: dict[int, str] = {}
     sizes: dict[int, int] = {}
     for line in numactl_text.splitlines():
-        m_cpu = re.match(r"node\\s+(\\d+)\\s+cpus:\\s*(.*)$", line)
+        m_cpu = re.match(r"node\s+(\d+)\s+cpus:\s*(.*)$", line)
         if m_cpu:
             cpus[int(m_cpu.group(1))] = m_cpu.group(2).strip()
             continue
-        m_size = re.match(r"node\\s+(\\d+)\\s+size:\\s+(\\d+)\\s+MB$", line)
+        m_size = re.match(r"node\s+(\d+)\s+size:\s+(\d+)\s+MB$", line)
         if m_size:
             sizes[int(m_size.group(1))] = int(m_size.group(2))
 
@@ -111,15 +111,15 @@ def parse_numa_types(numactl_text: str) -> dict[str, int]:
 
 
 def parse_ib_links(text: str) -> dict[str, int]:
-    blocks = re.split(r"(?=CA 'mlx5_\\d+')", text)
+    blocks = re.split(r"(?=CA 'mlx5_\d+')", text)
     active_ib = 0
     down_eth = 0
     other = 0
     for block in blocks:
         if "CA 'mlx5_" not in block:
             continue
-        state = re.search(r"State:\\s*(\\w+)", block)
-        layer = re.search(r"Link layer:\\s*(\\w+)", block)
+        state = re.search(r"State:\s*(\w+)", block)
+        layer = re.search(r"Link layer:\s*(\w+)", block)
         state_val = state.group(1) if state else "Unknown"
         layer_val = layer.group(1) if layer else "Unknown"
         if layer_val == "InfiniBand" and state_val == "Active":
@@ -250,13 +250,27 @@ def build() -> None:
     categories = ["cpu_nodes", "memory_only_nodes", "memoryless_nodes"]
     width = 0.25
     xx = np.arange(len(categories))
-    ax.bar(xx - width / 2, [numa["node1"][c] for c in categories], width, label="node1", color="#1f77b4")
-    ax.bar(xx + width / 2, [numa["node2"][c] for c in categories], width, label="node2", color="#ff7f0e")
-    ax.set_xticks(xx)
-    ax.set_xticklabels(categories, rotation=20, ha="right")
-    ax.set_ylabel("Count")
-    ax.set_title("NUMA Node Types")
-    ax.legend(fontsize=8)
+    node1_vals = [numa["node1"][c] for c in categories]
+    node2_vals = [numa["node2"][c] for c in categories]
+    if sum(node1_vals) == 0 and sum(node2_vals) == 0:
+        ax.axis("off")
+        ax.text(
+            0.5,
+            0.5,
+            "NUMA node-type counts unavailable\n(check captured numactl output)",
+            ha="center",
+            va="center",
+            fontsize=10,
+        )
+        ax.set_title("NUMA Node Types")
+    else:
+        ax.bar(xx - width / 2, node1_vals, width, label="node1", color="#1f77b4")
+        ax.bar(xx + width / 2, node2_vals, width, label="node2", color="#ff7f0e")
+        ax.set_xticks(xx)
+        ax.set_xticklabels(categories, rotation=20, ha="right")
+        ax.set_ylabel("Count")
+        ax.set_title("NUMA Node Types")
+        ax.legend(fontsize=8)
 
     ax = axs[1, 1]
     total = [storage[n]["samsung_partitions_total"] for n in nodes]

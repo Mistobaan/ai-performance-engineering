@@ -35,8 +35,29 @@ def group_mean(rows, x_key: str, y_key: str):
 
 def plot_line(xs, series, out: Path, title: str, ylabel: str):
     fig, ax = plt.subplots(figsize=(8, 5))
-    for label, ys in series:
-        ax.plot(xs, ys, marker="o", label=label)
+    if not xs:
+        ax.text(0.5, 0.5, "No valid points", ha="center", va="center", transform=ax.transAxes)
+    elif len(xs) == 1:
+        x0 = xs[0]
+        for label, ys in series:
+            if not ys:
+                continue
+            ax.scatter([x0], [ys[0]], label=label, s=55)
+        span = max(1.0, abs(float(x0)) * 0.1)
+        ax.set_xlim(x0 - span, x0 + span)
+        ax.text(
+            0.02,
+            0.98,
+            "single concurrency sample\n(run a concurrency range for a curve)",
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=8,
+            bbox={"boxstyle": "round,pad=0.25", "facecolor": "white", "alpha": 0.85, "edgecolor": "#bbbbbb"},
+        )
+    else:
+        for label, ys in series:
+            ax.plot(xs, ys, marker="o", label=label)
     ax.set_xlabel("Concurrency")
     ax.set_ylabel(ylabel)
     ax.set_title(title)
