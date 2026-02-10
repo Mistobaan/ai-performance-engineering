@@ -7,13 +7,13 @@ Key rule (GPU benchmarks):
 - Practically, this usually means you must configure passwordless sudo for `nvidia-smi` clock locking (so `sudo -n true` succeeds).
 
 ## Validated Reference Package
-- Canonical validated run (used by the current field report): `2026-02-09_gb200_fullflags_all_0117`.
-- Manifest: `results/structured/2026-02-09_gb200_fullflags_all_0117_manifest.json`.
-- Sanitized cluster metadata: `results/structured/2026-02-09_gb200_fullflags_all_0117_cluster_meta.json`.
-- Multi-node vLLM path result (strict-lock + digest-pinned image parity): `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_vllm_multinode_serve.json`.
-- NVLink/NVSwitch topology summaries: `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_nvlink_topology.json`, `results/structured/2026-02-09_gb200_fullflags_all_0117_node2_nvlink_topology.json`.
-- Dedicated nvbandwidth bundle: `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_nvbandwidth.json`, `results/structured/2026-02-09_gb200_fullflags_all_0117_node2_nvbandwidth.json`.
-- Storage parity fio artifacts: `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_fio.json`, `results/structured/2026-02-09_gb200_fullflags_all_0117_node2_fio.json`.
+- Canonical validated run (used by the current field report): `2026-02-09_fresh_full_suite_e2e_green_rootfix`.
+- Manifest: `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_manifest.json`.
+- Sanitized cluster metadata: `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_meta.json`, `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_meta.json`.
+- Multi-node vLLM path result (strict-lock + digest-pinned image parity): `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_vllm_multinode_serve.json`.
+- NVLink/NVSwitch topology summaries: `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_meta_nvlink_topology.json`, `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_meta_nvlink_topology.json`.
+- Dedicated nvbandwidth bundle: `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_nvbandwidth.json`, `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_nvbandwidth.json`.
+- Storage parity fio artifacts: `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_fio.json`, `results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_fio.json`.
 - Narrative report: `field-report.md`.
 - Claim-to-evidence ledger: `field-report-notes.md`.
 
@@ -559,11 +559,12 @@ cluster/
   results/raw/            # raw logs
   results/structured/     # structured JSON/CSV
   scripts/                # discovery + run helpers
-  field-report.md         # clean write-up (no results/raw links)
+  field-report.md         # clean write-up (structured/figures links; raw links only for root-cause evidence)
 ```
 
 ## Notes
-- `results/raw/` is intentionally gitignored; the field report should link only to `results/structured/` and `docs/figures/`.
+- `results/raw/` is intentionally gitignored; the field report should primarily link to `results/structured/` and `docs/figures/`, with `results/raw/` links allowed only when required to prove root-cause claims.
+- Before report sign-off, run: `cluster/scripts/validate_field_report_requirements.sh --report cluster/field-report.md --notes cluster/field-report-notes.md`.
 
 ## Current Dependency Disclosure
 - Core runtime: NVIDIA GPU + CUDA + NVML + working `nvidia-smi`; benchmark paths require successful clock locking via `scripts/run_with_gpu_clocks.sh`.

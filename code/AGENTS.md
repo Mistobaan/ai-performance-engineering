@@ -41,6 +41,38 @@
 - If report numbers diverge from current canonical artifacts, treat that as a blocker and fix the report (or rerun collection) before sign-off.
 - Explicitly include required issue ledgers (missing artifacts, GDR requested vs effective, latency knees) and verify each claim against canonical structured artifacts.
 
+### Case Study Contract (CRITICAL)
+- Treat the cluster case study prompt as a hard contract, not guidance.
+- Mandatory narrative outcomes:
+- tell a clear cluster story (first-contact timeline + operator reality),
+- explicitly call out what is weird/new/interesting,
+- anchor on 1-2 primary benchmarks for small-team AI relevance (Benchmark A/B),
+- provide reproducible scripts/commands and structured outputs,
+- include visualizations and table-based interpretation,
+- include insights from direct operator experience that are not obvious from specs alone.
+- Table-forward rule: all high-value sections must be table-first (narrative can follow), including TL;DR, scope, merged weird/normal findings (baseline + deep-dive), benchmark summaries, required issues, risks, recommendations, reproducibility, and activity log.
+- Do not remove high-value sections during rewrites. If cleanup removes historical artifacts, rewrite the section against current canonical evidence instead of dropping the section.
+- Before sign-off, run the field-report validator and treat any missing section/requirement as a blocker:
+- `cluster/scripts/validate_field_report_requirements.sh --report cluster/field-report.md --notes cluster/field-report-notes.md`
+- Required high-value section inventory (must remain present):
+- `TL;DR`
+- `Scope + Canonical Artifacts`
+- `Cluster Story (First Contact)`
+- `Weird / New / Interesting (with Normal Baseline)`
+- `Baseline vs Weird Log` (subsection)
+- `Deep-Dive Findings` (subsection)
+- `Benchmark A (Networking Story)`
+- `Benchmark B (Inference Story)`
+- `Required Issues (Explicit)`
+- `Root Cause + Fix Mapping`
+- `Report Completeness Delta`
+- `Gaps, Risks, and Smell Checks`
+- `Implications for Small AI Teams`
+- `Stakeholder Recommendations`
+- `Repro Steps`
+- `Reproducibility Package`
+- `Appendix (Coverage vs Case-Study Goals)`
+
 ### Engagement Scope (CRITICAL)
 - Explicitly declare the evaluation scope: which hosts/nodes are in-scope, GPU count per host, and any excluded nodes. Never use excluded nodes for discovery or benchmarks.
 - Preserve SSH trust by default: do not rotate SSH host keys or machine-ids unless explicitly requested and logged, with pre/post identity snapshots.

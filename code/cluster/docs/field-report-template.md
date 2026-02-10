@@ -6,48 +6,60 @@ Last updated: YYYY-MM-DD
 1. [TL;DR](#tldr)
 2. [Scope + Artifacts](#scope--artifacts)
 3. [Cluster Story (First Contact)](#cluster-story-first-contact)
-4. [Normal vs Typical Cluster (Operator Reality)](#normal-vs-typical-cluster-operator-reality)
-5. [Weird / New / Interesting](#weird--new--interesting)
-6. [Capability Demonstration (Causal Debugging Workflow)](#capability-demonstration-causal-debugging-workflow)
-7. [Benchmark A (Networking Story): NCCL `all_reduce_perf`](#benchmark-a-networking-story-nccl-all_reduce_perf)
-8. [Benchmark B (Inference Story): vLLM Online Serving](#benchmark-b-inference-story-vllm-online-serving)
-9. [Supporting: nvbandwidth Bundle](#supporting-nvbandwidth-bundle)
-10. [Supporting: Compute Sanity (BF16 GEMM)](#supporting-compute-sanity-bf16-gemm)
-11. [Supporting: Storage (fio)](#supporting-storage-fio)
-12. [Supporting: Health / GDR / NUMA / Train Step / Checkpoint](#supporting-health--gdr--numa--train-step--checkpoint)
-13. [Required Issues (Explicit)](#required-issues-explicit)
-14. [Root Cause + Fix Mapping](#root-cause--fix-mapping)
-15. [Report Completeness Delta](#report-completeness-delta)
-16. [Gaps, Risks, and Smell Checks](#gaps-risks-and-smell-checks)
-17. [Canonical Cleanup + Artifact Hygiene](#canonical-cleanup--artifact-hygiene)
-18. [Implications For Small AI Teams](#implications-for-small-ai-teams)
-19. [FP4 Extension Outcomes](#fp4-extension-outcomes)
-20. [Reproducibility Package](#reproducibility-package)
-21. [Repository Handoff (GitHub)](#repository-handoff-github)
+4. [Weird / New / Interesting (with Normal Baseline)](#weird--new--interesting-with-normal-baseline)
+5. [Capability Demonstration (Causal Debugging Workflow)](#capability-demonstration-causal-debugging-workflow)
+6. [Benchmark A (Networking Story): NCCL `all_reduce_perf`](#benchmark-a-networking-story-nccl-all_reduce_perf)
+7. [Benchmark B (Inference Story): vLLM Online Serving](#benchmark-b-inference-story-vllm-online-serving)
+8. [Supporting: nvbandwidth Bundle](#supporting-nvbandwidth-bundle)
+9. [Supporting: Compute Sanity (BF16 GEMM)](#supporting-compute-sanity-bf16-gemm)
+10. [Supporting: Storage (fio)](#supporting-storage-fio)
+11. [Supporting: Health / GDR / NUMA / Train Step / Checkpoint](#supporting-health--gdr--numa--train-step--checkpoint)
+12. [Required Issues (Explicit)](#required-issues-explicit)
+13. [Root Cause + Fix Mapping](#root-cause--fix-mapping)
+14. [Report Completeness Delta](#report-completeness-delta)
+15. [Gaps, Risks, and Smell Checks](#gaps-risks-and-smell-checks)
+16. [Canonical Cleanup + Artifact Hygiene](#canonical-cleanup--artifact-hygiene)
+17. [Implications For Small AI Teams](#implications-for-small-ai-teams)
+18. [FP4 Extension Outcomes](#fp4-extension-outcomes)
+19. [Reproducibility Package](#reproducibility-package)
+20. [Repository Handoff (GitHub)](#repository-handoff-github)
+21. [Case Study Requirement Mapping](#case-study-requirement-mapping)
 22. [Repro Steps](#repro-steps)
 23. [Appendix](#appendix)
 24. [Activity Log](#activity-log)
 
 | Rule | Requirement |
 | --- | --- |
-| Artifact paths | Link only to `results/structured/` and `docs/figures/`. Do not link to `results/raw/`. |
+| Artifact paths | Prefer `results/structured/` and `docs/figures/`; link `results/raw/` only when raw logs are required to prove a root-cause claim. |
 | Benchmark validity | GPU benchmark runs are valid only if clock locking succeeded; include clock-lock artifacts. |
 | Stakeholder handoff | Include repo URL, commit/tag, and collaborator invite/access status. |
 | Visual formatting | Show full-size inline images under each subsection; link each image to itself. |
 | Evidence formatting | Put `Evidence data:` immediately below visuals, one link per line (`<br/>`), no comma-chained lists. |
-| Table preference | Use tables for dense sections (scope, findings, handoff, reproducibility, activity log). |
+| Table preference | Use tables for all high-value sections; narrative is additive and should not replace tables. |
 | Chart quality gate | Any curve chart should have at least 3 unique x-values; if fewer, label as `canary/sparse` and state why. |
 
 ## Section Retention Gate (CRITICAL)
 | Gate | Requirement |
 | --- | --- |
 | Mandatory sections | Do not remove or collapse required sections. Keep all ToC entries listed in this template. |
+| Weird/normal structure | Keep a single merged section `Weird / New / Interesting (with Normal Baseline)` with both subsections: `Baseline vs Weird Log` and `Deep-Dive Findings`. |
 | Required issue ledger | Include the `Required Issues (Explicit)` section with the 5 required issue lines verbatim, each with current status + evidence links. |
 | Report parity | Include `Report Completeness Delta` section comparing prior report revision vs current report so section/visual loss is visible. |
 | Risk transparency | Include `Gaps, Risks, and Smell Checks` even when suite is green. |
 | Cleanup disclosure | Include `Canonical Cleanup + Artifact Hygiene` showing what superseded artifacts were removed and what canonical set was preserved. |
 | Synchronization | `field-report.md` and `field-report-notes.md` must use the same canonical RUN_ID and issue status framing. |
 | Pre-ship section check | Run: `rg -n '^## ' cluster/field-report.md` and verify every mandatory header is present before sign-off. |
+| Pre-ship requirements check | Run: `cluster/scripts/validate_field_report_requirements.sh --report cluster/field-report.md --notes cluster/field-report-notes.md` and fail on any missing section/requirement. |
+
+## Case Study Contract (CRITICAL)
+| Prompt requirement | Required report coverage |
+| --- | --- |
+| Tell us a story about this cluster | `Cluster Story (First Contact)` with timeline table + interpretation. |
+| What is weird, new, or interesting | One merged section: `Weird / New / Interesting (with Normal Baseline)` with two subsections (`Baseline vs Weird Log`, `Deep-Dive Findings`). |
+| Use 1-2 relevant benchmarks for small AI teams | `Benchmark A` and `Benchmark B` are mandatory and must include why they matter to small teams. |
+| Repeatable scripts and structured outputs | `Repro Steps` and `Reproducibility Package` must include concrete commands and JSON/CSV/JSONL artifact links. |
+| Include visualizations | Each benchmark arc and each high-value supporting section must include at least one linked visual. |
+| Provide unique operator insights | `Implications For Small AI Teams` and `Gaps, Risks, and Smell Checks` must include experience-derived insights. |
 
 ## TL;DR
 | Item | Value |
@@ -91,39 +103,36 @@ Evidence data:
 `results/structured/<RUN_ID>_preflight_services.json`<br/>
 `results/structured/<RUN_ID>_node_parity_summary.json`
 
-## Normal vs Typical Cluster (Operator Reality)
-| Area | Typical small-team expectation | Observed on this cluster | Why it matters |
+## Weird / New / Interesting (with Normal Baseline)
+### Baseline vs Weird Log
+| Area | Normal (canonical) | Weird / notable | Why it matters | Evidence |
+| --- | --- | --- | --- | --- |
+| Launch path | <normal> | <notable> | <impact> | <links> |
+| Networking | <normal> | <notable> | <impact> | <links> |
+| Services/health gates | <normal> | <notable> | <impact> | <links> |
+| Storage/scratch | <normal> | <notable> | <impact> | <links> |
+| Serving behavior | <normal> | <notable> | <impact> | <links> |
+
+### Deep-Dive Findings
+| Finding | Baseline anchor | Reinforcement insight | Evidence |
 | --- | --- | --- | --- |
-| Launch path | <example> | <example> | <impact> |
-| Networking | <example> | <example> | <impact> |
-| Services/health gates | <example> | <example> | <impact> |
-| Storage/scratch | <example> | <example> | <impact> |
-| Observability | <example> | <example> | <impact> |
+| 1 | <Baseline vs Weird row reference> | <what is weird/new and why it matters> | <links> |
+| 2 | <Baseline vs Weird row reference> | <what is weird/new and why it matters> | <links> |
+| 3 | <Baseline vs Weird row reference> | <what is weird/new and why it matters> | <links> |
 
-## Weird / New / Interesting
-| Finding | What happened | Why it matters |
-| --- | --- | --- |
-| 1 | <summary> | <impact> |
-| 2 | <summary> | <impact> |
-| 3 | <summary> | <impact> |
-
-### Finding 1 Evidence
+### Weird/Normal Evidence
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_finding1.png"><img src="docs/figures/<RUN_ID>_finding1.png" alt="Finding 1 visualization" width="920"/></a></p>
+<p><a href="docs/figures/<RUN_ID>_cluster_story_dashboard.png"><img src="docs/figures/<RUN_ID>_cluster_story_dashboard.png" alt="Weird/normal baseline dashboard" width="920"/></a></p>
+<p><a href="docs/figures/<RUN_ID>_finding1.png"><img src="docs/figures/<RUN_ID>_finding1.png" alt="Weird/normal deep-dive finding 1" width="920"/></a></p>
+<p><a href="docs/figures/<RUN_ID>_finding2.png"><img src="docs/figures/<RUN_ID>_finding2.png" alt="Weird/normal deep-dive finding 2" width="920"/></a></p>
 
 Evidence data:
 
+`results/structured/<RUN_ID>_preflight_services.json`<br/>
+`results/structured/<RUN_ID>_node_parity_summary.json`<br/>
 `results/structured/<RUN_ID>_finding1.json`<br/>
-`results/structured/<RUN_ID>_finding1.csv`
-
-### Finding 2 Evidence
-Visualization:
-
-<p><a href="docs/figures/<RUN_ID>_finding2.png"><img src="docs/figures/<RUN_ID>_finding2.png" alt="Finding 2 visualization" width="920"/></a></p>
-
-Evidence data:
-
+`results/structured/<RUN_ID>_finding1.csv`<br/>
 `results/structured/<RUN_ID>_finding2.json`
 
 ## Capability Demonstration (Causal Debugging Workflow)
@@ -314,6 +323,16 @@ Evidence data:
 | Repository URL | `<url>` |
 | Commit/Tag for review | `<commit or tag>` |
 | Collaborator access (`JordanNanos`) status | `<invited|already has access>` |
+
+## Case Study Requirement Mapping
+| Case-study requirement | Where addressed in report | Evidence links |
+| --- | --- | --- |
+| Tell the cluster story | `Cluster Story (First Contact)` | <links> |
+| Highlight weird/new/interesting aspects | `Weird / New / Interesting (with Normal Baseline)` (`Baseline vs Weird Log` + `Deep-Dive Findings`) | <links> |
+| Use 1-2 relevant benchmarks for small-team AI | `Benchmark A` + `Benchmark B` | <links> |
+| Provide reproducible scripts/notes + structured outputs | `Repro Steps` + `Reproducibility Package` | <links> |
+| Include visualizations | benchmark and supporting visuals | <links> |
+| Provide unique operator insights | `Gaps, Risks, and Smell Checks` + `Implications For Small AI Teams` | <links> |
 
 ## Repro Steps
 | Profile | Command |
