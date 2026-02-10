@@ -295,11 +295,19 @@ if "dcgmi_dmon" in checks_selected:
     check_map["dcgmi_dmon"] = rec
 
 if "dmesg_tail" in checks_selected:
-    rec = _run(
-        "dmesg_tail",
-        ["bash", "-lc", f"set -o pipefail; dmesg -T | tail -n {dmesg_lines}"],
-        min(timeout_sec, 120),
-    )
+    dmesg_cmd_sudo = ["bash", "-lc", f"set -o pipefail; sudo -n dmesg -T | tail -n {dmesg_lines}"]
+    dmesg_cmd_user = ["bash", "-lc", f"set -o pipefail; dmesg -T | tail -n {dmesg_lines}"]
+    rec = _run("dmesg_tail", dmesg_cmd_sudo, min(timeout_sec, 120))
+    rec["details"]["path"] = "sudo"
+    if rec.get("status") != "ok":
+        sudo_stderr = rec.get("stderr_excerpt") or ""
+        fallback = _run("dmesg_tail", dmesg_cmd_user, min(timeout_sec, 120))
+        if fallback.get("status") == "ok":
+            fallback["details"]["path"] = "user"
+            fallback["details"]["sudo_stderr_excerpt"] = sudo_stderr
+            rec = fallback
+        else:
+            rec["details"]["sudo_stderr_excerpt"] = sudo_stderr
     records.append(rec)
     check_map["dmesg_tail"] = rec
 
