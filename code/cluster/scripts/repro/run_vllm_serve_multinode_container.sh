@@ -508,14 +508,43 @@ WORKER_RC=$?
 set -e
 WORKER_SSH_PID=""
 
+WORKER_RC_RAW="$WORKER_RC"
+WORKER_RC_NORMALIZED=0
 if [[ "$WORKER_STOP_REQUESTED" -eq 1 && "$WORKER_RC" -ne 0 && "$LEADER_RC" -eq 0 && -f "$RESULT_JSON_RAW" ]]; then
   echo "INFO: worker terminated during intentional teardown; normalizing worker return code ${WORKER_RC} -> 0."
   WORKER_RC=0
+  WORKER_RC_NORMALIZED=1
 fi
 
 if "${SSH_BASE[@]}" "$WORKER_TARGET" "test -f '$REMOTE_WORKER_LOCK'" >/dev/null 2>&1; then
   "${SSH_BASE[@]}" "$WORKER_TARGET" "cat '$REMOTE_WORKER_LOCK'" > "$WORKER_LOCK_META" || true
   "${SSH_BASE[@]}" "$WORKER_TARGET" "rm -f '$REMOTE_WORKER_LOCK'" >/dev/null 2>&1 || true
+fi
+
+if [[ "$WORKER_RC_NORMALIZED" -eq 1 && -f "$WORKER_LOCK_META" ]]; then
+  python3 - <<'PY' "$WORKER_LOCK_META" "$WORKER_RC_RAW"
+import json
+import sys
+from pathlib import Path
+
+lock_path = Path(sys.argv[1])
+raw_rc = int(sys.argv[2])
+
+try:
+    payload = json.loads(lock_path.read_text(encoding="utf-8"))
+except Exception:
+    payload = {}
+
+if not isinstance(payload, dict):
+    payload = {}
+
+payload["returncode_raw"] = raw_rc
+payload["returncode"] = 0
+payload["teardown_normalized"] = True
+payload["teardown_reason"] = "intentional worker shutdown after successful leader completion"
+
+lock_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
 fi
 
 if [[ -f "$RESULT_JSON_RAW" ]]; then
