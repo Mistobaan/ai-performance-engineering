@@ -62,7 +62,7 @@ cmds = [
     ("nvidia_smi_l", "nvidia-smi -L"),
     ("nvidia_smi_topo", "nvidia-smi topo -m"),
     ("nvidia_smi_clocks_power", "nvidia-smi -q -d CLOCK,POWER"),
-    ("nvidia_smi_query_telemetry", "nvidia-smi --query-gpu=timestamp,index,uuid,pci.bus_id,temperature.gpu,power.draw,utilization.gpu,utilization.memory,clocks.current.sm,clocks.current.memory,clocks.applications.graphics,clocks.applications.memory,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake,fan.speed --format=csv"),
+    ("nvidia_smi_query_telemetry", "nvidia-smi --query-gpu=timestamp,index,uuid,pci.bus_id,temperature.gpu,power.draw,utilization.gpu,utilization.memory,clocks.current.sm,clocks.current.memory,clocks.applications.graphics,clocks.applications.memory,clocks_event_reasons.sw_power_cap,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_power_brake_slowdown,fan.speed --format=csv"),
     ("nvcc_version", "nvcc --version"),
     ("lspci_nvidia", "lspci -nn | grep -i nvidia"),
     ("lscpu", "lscpu"),
