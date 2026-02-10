@@ -285,10 +285,10 @@ Artifacts:
 - `results/structured/<run_id>_<worker_label>_vllm_multinode_worker_clock_lock.json`
 - `results/raw/<run_id>_<leader_label>_vllm_multinode_serve/leader.log`
 
-Latest known state for the canonical run (`2026-02-09_gb200_fullflags_all_0117`):
+Latest known state for the canonical run (`2026-02-09_fresh_full_suite_e2e_green_rootfix`):
 - command path executed correctly with strict lock on both nodes
 - benchmark completed successfully (`status=ok`) at TP=8 across both nodes
-- result includes image provenance showing identical digest on both nodes (`sha256:5b0c4bc6be06fcbff9bfa9200981a402e1b3d7e50b58793f814c20c0f91f6962`)
+- result includes image provenance showing identical digest on both nodes (`sha256:2338992e8e6413ba65a768e8e767a8092037316107739fa41057be3b0aaa0f90`)
 
 ### 8c) NVLink/NVSwitch Topology Artifact
 Generate topology figure + structured summary from node meta (`nvidia-smi topo -m`):
