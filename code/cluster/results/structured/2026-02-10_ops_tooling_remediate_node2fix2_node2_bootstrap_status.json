@@ -1,0 +1,43 @@
+{
+  "bootstrap": {
+    "install_python_deps": false,
+    "install_system_packages": true,
+    "installed_system_packages": [
+      "whois",
+      "speedtest-cli"
+    ],
+    "sync_code": false
+  },
+  "commands": {
+    "curl": "/usr/bin/curl",
+    "dcgmi": "/usr/bin/dcgmi",
+    "docker": "/usr/bin/docker",
+    "fio": "/usr/bin/fio",
+    "ib_write_bw": "/usr/bin/ib_write_bw",
+    "ibstat": "/usr/sbin/ibstat",
+    "iperf3": "/usr/bin/iperf3",
+    "jq": "/usr/bin/jq",
+    "mpirun": "/usr/bin/mpirun",
+    "ncu": "/usr/local/bin/ncu",
+    "nsys": "/usr/local/bin/nsys",
+    "numactl": "/usr/bin/numactl",
+    "nvbandwidth": "/usr/local/bin/nvbandwidth",
+    "nvcc": "/usr/local/bin/nvcc",
+    "nvidia-smi": "/usr/bin/nvidia-smi",
+    "pip3": "/usr/bin/pip3",
+    "python3": "/usr/bin/python3",
+    "wget": "/usr/bin/wget"
+  },
+  "host": "node2",
+  "label": "node2",
+  "python_env": {
+    "deep_gemm_version": "2.3.0+0f5f266",
+    "matplotlib_version": "3.10.8",
+    "numpy_version": "2.2.6",
+    "torch_cuda_available": true,
+    "torch_version": "2.10.0a0+a36e1d39eb.nv26.01.42222806",
+    "venv_python": "/home/ubuntu/ai-performance-engineering/code/cluster/env/venv/bin/python"
+  },
+  "remote_root": "/home/ubuntu/ai-performance-engineering/code/cluster",
+  "timestamp": "2026-02-10T22:29:02+0000"
+}

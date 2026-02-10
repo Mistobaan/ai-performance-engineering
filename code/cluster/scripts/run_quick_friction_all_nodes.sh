@@ -169,7 +169,11 @@ tmp_root = tempfile.mkdtemp(prefix=f"quick_friction_{run_id}_{hostname}_")
 python_bin = shutil.which("python3") or sys.executable
 uv_bin = shutil.which("uv")
 docker_bin = shutil.which("docker")
+repo_root = Path(os.getcwd())
+venv_hf = repo_root / "env" / "venv" / "bin" / "huggingface-cli"
 hf_bin = shutil.which("huggingface-cli")
+if not hf_bin and venv_hf.exists():
+    hf_bin = str(venv_hf)
 curl_bin = shutil.which("curl")
 whois_bin = shutil.which("whois")
 speedtest_bin = shutil.which("speedtest-cli") or shutil.which("speedtest")

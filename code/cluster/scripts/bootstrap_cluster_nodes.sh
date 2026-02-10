@@ -201,7 +201,9 @@ RSYNC_SSH_CMD="$(build_rsync_ssh)"
 run_remote() {
   local host="$1"
   shift
-  ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "$@"
+  # Avoid consuming stdin of callers (e.g., here-doc loops) during SSH command execution.
+  # Note: do NOT add -n to SSH_OPTS globally because rsync and docker streaming use SSH stdin.
+  ssh -n "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "$@"
 }
 
 run_host_cmd() {
@@ -326,6 +328,8 @@ bc:bc
 ping:iputils-ping
 ip:iproute2
 docker:docker.io
+whois:whois
+speedtest-cli:speedtest-cli
 EOF
 
   # python -m venv capability.
