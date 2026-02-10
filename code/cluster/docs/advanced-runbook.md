@@ -36,6 +36,22 @@ scripts/run_cluster_eval_suite.sh \
   --osl 1024 \
   --concurrency-range "32 64 128 256 512"
 ```
+The full suite now also includes three required reliability gates by default:
+- Hang triage readiness bundle (`py-spy` + `strace`) on all hosts.
+- Fast torchrun connectivity probe before network benchmarks.
+- NCCL env sensitivity sweep (`NCCL_CROSS_NIC`, `NCCL_IB_QPS_PER_CONNECTION`, `NCCL_MIN_CTAS/NCCL_MAX_CTAS`).
+
+New explicit knobs for those required gates:
+```bash
+  --connectivity-probe-master-port 29504 \
+  --connectivity-probe-barrier-iters 5 \
+  --connectivity-probe-payload-bytes 8388608 \
+  --connectivity-probe-timeout-sec 120 \
+  --nccl-env-min-bytes 1M \
+  --nccl-env-max-bytes 64M \
+  --nccl-env-warmup 5 \
+  --nccl-env-iters 20
+```
 Optional GB200-focused diagnostics can be toggled in the same suite run:
 ```bash
   --fp4-runtime host \
@@ -185,6 +201,8 @@ If you hit an NCCL NVLS failure like `transport/nvls.cc: NCCL WARN Cuda failure 
 ```bash
 scripts/run_cluster_health_suite.sh --hosts node1,node2 --ssh-key ~/.ssh/ssh_key.pem --extended --nccl-nvls-enable 0
 ```
+Health suite now also runs a required fast connectivity gate:
+- `scripts/run_torchrun_connectivity_probe.sh` (single all-reduce + barrier timing, structured artifact: `results/structured/<run_id>_torchrun_connectivity_probe.json`).
 
 Repeat the suite to quantify variance (base + extended per repetition):
 ```bash
@@ -207,6 +225,143 @@ Compare two suite summaries (flags regressions/improvements):
 ```bash
 python3 analysis/compare_cluster_health_summaries.py --baseline results/structured/<baseline>_cluster_health_suite_summary.json --candidate results/structured/<candidate>_cluster_health_suite_summary.json --threshold 0.05 --output-md results/structured/<baseline>_vs_<candidate>.md --output-json results/structured/<baseline>_vs_<candidate>.json
 ```
+
+### 4a) Hang Triage Readiness Bundle
+Standalone run:
+```bash
+scripts/collect_hang_triage_bundle.sh \
+  --run-id <run_id> \
+  --hosts node1,node2 \
+  --labels node1,node2 \
+  --ssh-key ~/.ssh/ssh_key.pem
+```
+Artifacts:
+- `results/structured/<run_id>_<label>_hang_triage_readiness.json`
+- `results/raw/<run_id>_<label>_hang_triage_readiness.log`
+
+### 4b) Fast Connectivity Probe (Standalone)
+```bash
+scripts/run_torchrun_connectivity_probe.sh \
+  --run-id <run_id> \
+  --hosts node1,node2 \
+  --ssh-key ~/.ssh/ssh_key.pem \
+  --oob-if <iface> \
+  --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5
+```
+Artifact:
+- `results/structured/<run_id>_torchrun_connectivity_probe.json`
+
+### 4c) NCCL Env Sensitivity Sweep (Standalone)
+```bash
+scripts/run_nccl_env_sensitivity.sh \
+  --run-id <run_id> \
+  --hosts node1,node2 \
+  --ssh-key ~/.ssh/ssh_key.pem \
+  --oob-if <iface> \
+  --socket-ifname <iface> \
+  --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5
+```
+Artifacts:
+- `results/structured/<run_id>_nccl_env_sensitivity.json`
+- `docs/figures/<run_id>_nccl_env_sensitivity.png` (via suite plot phase)
+
+### 4d) Validated Smoke Example (`2026-02-10_required_gates_smoke_node1node2_v2`)
+Command sequence used on in-scope hosts (`node1,node2`):
+```bash
+SMOKE_RUN_ID=2026-02-10_required_gates_smoke_node1node2_v2
+
+scripts/collect_hang_triage_bundle.sh \
+  --run-id "${SMOKE_RUN_ID}" \
+  --hosts node1,node2 \
+  --labels node1,node2 \
+  --ssh-key ~/.ssh/ssh_key.pem
+
+scripts/run_torchrun_connectivity_probe.sh \
+  --run-id "${SMOKE_RUN_ID}" \
+  --hosts node1,node2 \
+  --ssh-key ~/.ssh/ssh_key.pem \
+  --oob-if enP22p3s0f3 \
+  --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5 \
+  --master-port 29544 \
+  --barrier-iters 3 \
+  --payload-bytes 4194304 \
+  --timeout-sec 180
+
+scripts/run_nccl_env_sensitivity.sh \
+  --run-id "${SMOKE_RUN_ID}" \
+  --hosts node1,node2 \
+  --ssh-key ~/.ssh/ssh_key.pem \
+  --oob-if enP22p3s0f3 \
+  --socket-ifname enP22p3s0f3 \
+  --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5 \
+  --min-bytes 8M \
+  --max-bytes 16M \
+  --warmup 2 \
+  --iters 5
+
+python3 analysis/plot_nccl_env_sensitivity.py \
+  --input "results/structured/${SMOKE_RUN_ID}_nccl_env_sensitivity.json" \
+  --output "docs/figures/${SMOKE_RUN_ID}_nccl_env_sensitivity.png" \
+  --title "NCCL Env Sensitivity (${SMOKE_RUN_ID})"
+
+python3 scripts/write_manifest.py \
+  --run-id "${SMOKE_RUN_ID}" \
+  --hosts node1,node2 \
+  --labels node1,node2 \
+  --include-figures
+```
+Expected package output:
+- `results/structured/2026-02-10_required_gates_smoke_node1node2_v2_manifest.json`
+- `results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.json`
+- `results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.json`
+- `results/structured/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe.json`
+- `results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.json`
+- `docs/figures/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.png`
+
+### 4e) Debug-Only Playbook (Non-Canonical)
+Use these only for root-cause debugging, not for canonical performance numbers:
+```bash
+CUDA_LAUNCH_BLOCKING=1 python your_workload.py
+```
+For backward-path anomaly correlation:
+```python
+with torch.autograd.detect_anomaly():
+    loss = model(inputs)
+    loss.backward()
+```
+Operational rule:
+- If these debug modes are required to make a run complete, treat that run as diagnostic-only and rerun canonical collection without debug-mode side effects.
+
+### 4f) Quick Friction Checks (Recommended)
+Use the executable battery script to catch provider friction before long benchmark runs:
+```bash
+scripts/run_quick_friction_all_nodes.sh \
+  --run-id <run_id> \
+  --hosts node1,node2 \
+  --labels node1,node2 \
+  --ssh-key ~/.ssh/ssh_key.pem \
+  --checks uv_torch_install,pip_torch_install,ngc_pull,torch_import,hf_download,ip_owner,speedtest \
+  --timeout-sec 900
+```
+Artifacts:
+- `results/structured/<run_id>_<label>_quick_friction.json`
+- `results/raw/<run_id>_<label>_quick_friction.log`
+
+### 4g) Monitoring Expectations Snapshot (Recommended)
+Use the executable collection script for stakeholder monitoring expectations:
+```bash
+scripts/collect_monitoring_expectations_all_nodes.sh \
+  --run-id <run_id> \
+  --hosts node1,node2 \
+  --labels node1,node2 \
+  --ssh-key ~/.ssh/ssh_key.pem \
+  --checks kubectl_pods,kubectl_top_nodes,kubectl_top_pods,nvidia_dmon,nvidia_nvlink,dcgmi_discovery,dcgmi_dmon,dmesg_tail \
+  --sample-count 20 \
+  --dmesg-lines 400
+```
+Artifacts:
+- `results/structured/<run_id>_<label>_monitoring_expectations.json`
+- `results/raw/<run_id>_<label>_monitoring_expectations.log`
 
 ### 5) Plotting (after results exist)
 ```bash

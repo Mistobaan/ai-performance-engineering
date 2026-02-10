@@ -5,32 +5,34 @@ Last updated: 2026-02-10. Canonical run: `2026-02-09_fresh_full_suite_e2e_green_
 ## Table of Contents
 1. [TL;DR](#tldr)
 2. [Scope + Canonical Artifacts](#scope--canonical-artifacts)
-3. [TL;DR Evidence Anchors](#tldr-evidence-anchors)
-4. [Cluster Story (First Contact)](#cluster-story-first-contact)
-5. [Weird / New / Interesting (with Normal Baseline)](#weird--new--interesting-with-normal-baseline)
-6. [Benchmark A (Networking Story)](#benchmark-a-networking-story)
-7. [Benchmark B (Inference Story)](#benchmark-b-inference-story)
-8. [Node Parity Snapshot (node1 vs node2)](#node-parity-snapshot-node1-vs-node2)
-9. [Per-Node Deep-Dive Visuals (Restored)](#per-node-deep-dive-visuals-restored)
-10. [NVLink/NVSwitch Topology Snapshot](#nvlinknvswitch-topology-snapshot)
-11. [Dedicated nvbandwidth Snapshot](#dedicated-nvbandwidth-snapshot)
-12. [GB200 Extensions (Enabled in Canonical Run)](#gb200-extensions-enabled-in-canonical-run)
-13. [Required Issues (Explicit)](#required-issues-explicit)
-14. [Root Cause + Fix Mapping](#root-cause--fix-mapping)
-15. [Report Completeness Delta (vs prior condensed revision)](#report-completeness-delta-vs-prior-condensed-revision)
-16. [Gaps, Risks, and Smell Checks](#gaps-risks-and-smell-checks)
-17. [Implications for Small AI Teams](#implications-for-small-ai-teams)
-18. [Stakeholder Recommendations (Prioritized)](#stakeholder-recommendations-prioritized)
-19. [Repro Steps](#repro-steps)
-20. [Reproducibility Package](#reproducibility-package)
-21. [Activity Log](#activity-log)
-22. [Appendix (Coverage vs Case-Study Goals)](#appendix-coverage-vs-case-study-goals)
+3. [Required Reliability Gates Smoke Validation (2026-02-10)](#required-reliability-gates-smoke-validation-2026-02-10)
+4. [TL;DR Evidence Anchors](#tldr-evidence-anchors)
+5. [Cluster Story (First Contact)](#cluster-story-first-contact)
+6. [Weird / New / Interesting (with Normal Baseline)](#weird--new--interesting-with-normal-baseline)
+7. [Benchmark A (Networking Story)](#benchmark-a-networking-story)
+8. [Benchmark B (Inference Story)](#benchmark-b-inference-story)
+9. [Node Parity Snapshot (node1 vs node2)](#node-parity-snapshot-node1-vs-node2)
+10. [Per-Node Deep-Dive Visuals (Restored)](#per-node-deep-dive-visuals-restored)
+11. [NVLink/NVSwitch Topology Snapshot](#nvlinknvswitch-topology-snapshot)
+12. [Dedicated nvbandwidth Snapshot](#dedicated-nvbandwidth-snapshot)
+13. [GB200 Extensions (Enabled in Canonical Run)](#gb200-extensions-enabled-in-canonical-run)
+14. [Required Issues (Explicit)](#required-issues-explicit)
+15. [Root Cause + Fix Mapping](#root-cause--fix-mapping)
+16. [Report Completeness Delta (vs prior condensed revision)](#report-completeness-delta-vs-prior-condensed-revision)
+17. [Gaps, Risks, and Smell Checks](#gaps-risks-and-smell-checks)
+18. [Implications for Small AI Teams](#implications-for-small-ai-teams)
+19. [Stakeholder Recommendations (Prioritized)](#stakeholder-recommendations-prioritized)
+20. [Repro Steps](#repro-steps)
+21. [Reproducibility Package](#reproducibility-package)
+22. [Activity Log](#activity-log)
+23. [Appendix (Coverage vs Case-Study Goals)](#appendix-coverage-vs-case-study-goals)
 
 ## TL;DR
 | Topic | Summary |
 | --- | --- |
 | Scope | In-scope hosts: `node1`, `node2`; 4x GB200 per host; excluded nodes: none. |
 | Canonical run | `2026-02-09_fresh_full_suite_e2e_green_rootfix` |
+| Required-gate smoke run | `2026-02-10_required_gates_smoke_node1node2_v2` green on all 3 required gates (`hang_triage_bundle`, `connectivity_probe`, `nccl_env_sensitivity`). |
 | Suite health | `47/47` suite steps green; `validate_required_artifacts=0`; no remediation-only state required for canonical package. |
 | Networking headline | NCCL all-reduce peak `840.56 GB/s`; torch distributed all-reduce peak `719.31 GB/s`; IB write BW `~387.13 Gbps` per active HCA; OOB TCP `7.446/7.593 Gbps` (fwd/rev). |
 | Inference headline | Single-node vLLM reaches `48,368.629 tok/s` at `c=512`, but mean TTFT rises to `5,174.169 ms` and p99 TTFT to `12,834.962 ms` (severe latency knee). |
@@ -50,6 +52,30 @@ Last updated: 2026-02-10. Canonical run: `2026-02-09_fresh_full_suite_e2e_green_
 | Health summary | [results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_cluster_health_suite_summary.json](results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_health_suite_extended_node1node2_cluster_health_suite_summary.json) |
 | Node parity summary | [results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node_parity_summary.json](results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node_parity_summary.json) |
 | Manifest summary counts | `494` files (`178 json`, `26 csv`, `4 jsonl`, `222 log`, `32 png`, `30 txt`, `2 py`) |
+
+## Required Reliability Gates Smoke Validation (2026-02-10)
+This smoke run validates the newly-required reliability gates on in-scope hosts (`node1,node2`) without replacing canonical benchmark metrics.
+
+| Gate | Status | Key result | Structured artifact |
+| --- | --- | --- | --- |
+| Hang-triage readiness (`py-spy` + `strace`) | `ok` on both hosts | `py-spy 0.4.1`, `strace 6.8`, semantic status `ok` on node1+node2 | [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.json), [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.json) |
+| Torchrun connectivity probe | `ok` | `world_size=8`, barrier mean `0.153 ms` (`p95=0.237 ms`), payload probe busbw range `0.030072-0.030080 Gbps` | [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe.json) |
+| NCCL env sensitivity sweep | `ok` (`failure_count=0`) | Baseline peak `277.40 GB/s`; best profile `cross_nic_2` at `281.47 GB/s` (`1.014672x`) | [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.json) |
+
+| NCCL profile | Peak bus BW (GB/s) | Speedup vs baseline |
+| --- | ---: | ---: |
+| baseline_auto | `277.40` | `1.000000x` |
+| cross_nic_0 | `278.12` | `1.002596x` |
+| cross_nic_1 | `276.23` | `0.995782x` |
+| cross_nic_2 | `281.47` | `1.014672x` |
+| qps_4 | `279.58` | `1.007859x` |
+| ctas_16_16 | `246.68` | `0.889257x` |
+
+<p><a href="docs/figures/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.png"><img src="docs/figures/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.png" alt="NCCL env sensitivity smoke validation" width="920"/></a></p>
+
+Data: [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_manifest.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_manifest.json), [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.json), [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.json), [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe.json), [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.json)
+
+Raw logs: [results/raw/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.log](results/raw/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.log), [results/raw/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.log](results/raw/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.log), [results/raw/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe_node0.log](results/raw/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe_node0.log), [results/raw/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe_node1.log](results/raw/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe_node1.log), [results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_2_nccl_env_cross_nic_2_nccl_all_reduce.log](results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_2_nccl_env_cross_nic_2_nccl_all_reduce.log)
 
 ## TL;DR Evidence Anchors
 | Claim | Data | Visual |
@@ -295,6 +321,8 @@ Data: [results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_allreduc
 | `P0` | Keep vLLM serving policy split (`latency mode` vs `throughput mode`) and publish hard concurrency guardrails. |
 | `P1` | Keep strict GDR mem-type preflight probes and fail early on unsupported requested modes. |
 | `P1` | Keep host nvbandwidth compat-lib prep in the default path for this cluster profile until host user-mode stack is harmonized. |
+| `P1` | Add a fast provider-friction check using set of example tests into onboarding CI (`uv/pip torch install`, NGC pull time, `import torch`, model download/load, IP ownership check, speedtest) to catch peering/virtualization regressions before full benchmarks. |
+| `P1` | Expand monitoring stack to include monitoring expectations: DCGM tensor/SM active/occupancy, PCIe AER, dmesg ingestion, control-plane health, and KV-cache usage signals for serving autoscaling. |
 | `P2` | Add repeated-run trend snapshots for MAMF spread, allreduce stability CV, and serving tail-latency p99. |
 
 ## Repro Steps
@@ -354,6 +382,7 @@ scripts/run_cluster_eval_suite.sh \
 | Multinode serving | [results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_vllm_multinode_serve.json](results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_vllm_multinode_serve.json) |
 | nvbandwidth | [results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_nvbandwidth.json](results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_nvbandwidth.json), [results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_nvbandwidth.json](results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_nvbandwidth.json) |
 | fio all nodes | [results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_fio.json](results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_fio.json), [results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_fio.json](results/structured/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_fio.json) |
+| Required-gate smoke package | [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_manifest.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_manifest.json), [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe.json), [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.json), [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.json), [results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.json](results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.json) |
 | Topology visuals | [docs/figures/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_meta_nvlink_topology.png](docs/figures/2026-02-09_fresh_full_suite_e2e_green_rootfix_node1_meta_nvlink_topology.png), [docs/figures/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_meta_nvlink_topology.png](docs/figures/2026-02-09_fresh_full_suite_e2e_green_rootfix_node2_meta_nvlink_topology.png) |
 
 ## Activity Log
@@ -366,6 +395,7 @@ scripts/run_cluster_eval_suite.sh \
 | 2026-02-10 | Regenerated stakeholder report to canonical run and restored richer report sections/visual coverage. |
 | 2026-02-10 | Performed targeted cleanup of superseded intermediate artifacts while preserving canonical run artifacts. |
 | 2026-02-10 | Added case-study anti-regression guardrails: AGENTS contract updates, template retention gates, and report validator script with zero-failure pass. |
+| 2026-02-10 | Ran required-gate smoke on `node1,node2` (`2026-02-10_required_gates_smoke_node1node2_v2`), remediated missing `py-spy` on both hosts, and verified all three new required gates are green with structured artifacts + env-sensitivity visualization. |
 
 ## Appendix (Coverage vs Case-Study Goals)
 | Case-study requirement | Coverage status | Where addressed | Evidence |

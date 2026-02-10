@@ -1,0 +1,46 @@
+{
+  "checks": [
+    {
+      "command": "<missing:whois>",
+      "details": {
+        "public_ip": "138.252.188.89"
+      },
+      "duration_sec": 0.0,
+      "exit_code": 127,
+      "name": "ip_owner",
+      "status": "error",
+      "stderr_excerpt": "whois is not available",
+      "stdout_excerpt": "",
+      "timed_out": false
+    }
+  ],
+  "config": {
+    "hf_local_dir_base": "/tmp",
+    "hf_model": "openai-community/gpt2",
+    "ngc_image": "nvcr.io/nvidia/pytorch:24.05-py3",
+    "timeout_sec": 60,
+    "torch_index_url": "https://download.pytorch.org/whl/cu124",
+    "torch_version": "2.5.1"
+  },
+  "failed_checks": [
+    "ip_owner"
+  ],
+  "host": "node1",
+  "passed_checks": [],
+  "run_id": "2026-02-10_script_wire_smoke_strict",
+  "selected_checks": [
+    "ip_owner"
+  ],
+  "status": "error",
+  "test": "quick_friction",
+  "timestamp_utc": "2026-02-10T05:26:27Z",
+  "tool_paths": {
+    "curl": "/usr/bin/curl",
+    "docker": "/usr/bin/docker",
+    "huggingface_cli": null,
+    "python3": "/usr/bin/python3",
+    "speedtest": null,
+    "uv": "/home/ubuntu/.local/bin/uv",
+    "whois": null
+  }
+}

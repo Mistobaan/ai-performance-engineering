@@ -10,7 +10,8 @@ Runs a 2-node "cluster health suite":
   1) iperf3 (TCP throughput on the OOB interface)
   2) ib_write_bw (RDMA write BW per active IB HCA)
   3) nccl-tests (all_reduce_perf, all_gather_perf, reduce_scatter_perf)
-  4) torchrun torch.distributed all-reduce sanity (timed)
+  4) torchrun fast NCCL connectivity probe (required gate)
+  5) torchrun torch.distributed all-reduce sanity (timed)
 
 Options:
   --run-id <id>             Output prefix (default: YYYY-MM-DD_HHMMSS_cluster_health_suite)
@@ -1378,6 +1379,34 @@ run_nccl_collective() {
   return 1
 }
 
+run_connectivity_probe() {
+  local probe_port=$((TORCH_MASTER_PORT + 4))
+  local -a probe_args=(
+    --run-id "$RUN_ID"
+    --hosts "$HOSTS"
+    --ssh-user "$SSH_USER"
+    --gpus-per-node "$GPUS_PER_NODE"
+    --master-addr "$LOCAL_IP"
+    --master-port "$probe_port"
+    --barrier-iters 5
+    --payload-bytes 8388608
+    --timeout-sec 120
+  )
+  if [[ -n "$CUDA_VISIBLE_DEVICES_LIST" ]]; then
+    probe_args+=(--cuda-visible-devices "$CUDA_VISIBLE_DEVICES_LIST")
+  fi
+  if [[ -n "$OOB_IF" ]]; then
+    probe_args+=(--oob-if "$OOB_IF")
+  fi
+  if [[ -n "$NCCL_IB_HCA" ]]; then
+    probe_args+=(--nccl-ib-hca "$NCCL_IB_HCA")
+  fi
+  if [[ -n "$SSH_KEY" ]]; then
+    probe_args+=(--ssh-key "$SSH_KEY")
+  fi
+  "${ROOT_DIR}/scripts/run_torchrun_connectivity_probe.sh" "${probe_args[@]}"
+}
+
 write_summary() {
   local out="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_health_suite_summary.json"
   local require_clock_lock=0
@@ -1577,6 +1606,7 @@ payload = {
     "ib_send_bw": {},
     "ib_send_lat": {},
     "nccl": {},
+    "connectivity_probe": {},
     "torchdist": {},
 }
 
@@ -1640,6 +1670,25 @@ for bin_name in ("all_reduce_perf", "all_gather_perf", "reduce_scatter_perf", "a
     p = out_struct_dir / f"{run_id}_{label}_nccl_{bin_name}.json"
     if p.exists():
         payload["nccl"][bin_name] = {"structured_json": str(p), "max_busbw": nccl_max_busbw(p)}
+
+probe_p = out_struct_dir / f"{run_id}_torchrun_connectivity_probe.json"
+if probe_p.exists():
+    probe_d = read_json(probe_p)
+    probe_rec = {"structured_json": str(probe_p)}
+    if isinstance(probe_d, dict):
+        probe_rec["status"] = probe_d.get("status")
+        probe_rec["world_size"] = probe_d.get("world_size")
+        ranks = probe_d.get("ranks") or []
+        best = None
+        for rank_rec in ranks:
+            try:
+                busbw = float((rank_rec or {}).get("payload_probe", {}).get("busbw_gbps", 0.0))
+            except Exception:
+                continue
+            best = busbw if best is None else max(best, busbw)
+        if best is not None:
+            probe_rec["max_payload_busbw_gbps"] = best
+    payload["connectivity_probe"] = probe_rec
 
 torch_p = out_struct_dir / f"{run_id}_torchrun_allreduce.json"
 if torch_p.exists():
@@ -1752,6 +1801,9 @@ if [[ "$SKIP_NCCL" -eq 0 ]]; then
     esac
   done
 fi
+
+run_step connectivity_probe run_connectivity_probe
+
 if [[ "$SKIP_TORCHDIST" -eq 0 ]]; then
   torch_args=(
     --run-id "$RUN_ID"

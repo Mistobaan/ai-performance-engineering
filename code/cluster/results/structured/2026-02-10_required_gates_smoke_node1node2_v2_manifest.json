@@ -1,0 +1,82 @@
+{
+  "files": [
+    "docs/figures/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.png",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_baseline_auto_nccl_env_baseline_auto_hosts.txt",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_baseline_auto_nccl_env_baseline_auto_nccl_all_reduce.log",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_0_nccl_env_cross_nic_0_hosts.txt",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_0_nccl_env_cross_nic_0_nccl_all_reduce.log",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_1_nccl_env_cross_nic_1_hosts.txt",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_1_nccl_env_cross_nic_1_nccl_all_reduce.log",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_2_nccl_env_cross_nic_2_hosts.txt",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_2_nccl_env_cross_nic_2_nccl_all_reduce.log",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_ctas_16_16_nccl_env_ctas_16_16_hosts.txt",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_ctas_16_16_nccl_env_ctas_16_16_nccl_all_reduce.log",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_qps_4_nccl_env_qps_4_hosts.txt",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_qps_4_nccl_env_qps_4_nccl_all_reduce.log",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.log",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.log",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe_node0.log",
+    "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe_node1.log",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_baseline_auto_nccl.json",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_0_nccl.json",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_1_nccl.json",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_2_nccl.json",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_ctas_16_16_nccl.json",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_qps_4_nccl.json",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.json",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.json",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.json",
+    "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe.json"
+  ],
+  "manifest_version": 1,
+  "nodes": [
+    {
+      "host": "node1",
+      "label": "node1"
+    },
+    {
+      "host": "node2",
+      "label": "node2"
+    }
+  ],
+  "run_id": "2026-02-10_required_gates_smoke_node1node2_v2",
+  "summary": {
+    "artifact_counts": {
+      "json": 10,
+      "log": 10,
+      "png": 1,
+      "txt": 6
+    },
+    "file_count": 27,
+    "sha256": {
+      "docs/figures/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.png": "0e5fc1d15f5fc18244cb2bc0e8b9b5f9389a4a9bfdd93f0c98510c3097072ab5",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_baseline_auto_nccl_env_baseline_auto_hosts.txt": "4550e6797987670f6dc90e8090be0327737be60825c56d89e95e4fba6c40e8ae",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_baseline_auto_nccl_env_baseline_auto_nccl_all_reduce.log": "40f507b56353b362f24a03a3791d5707bd664d7f09a48d9909b84bd5929dcf36",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_0_nccl_env_cross_nic_0_hosts.txt": "4550e6797987670f6dc90e8090be0327737be60825c56d89e95e4fba6c40e8ae",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_0_nccl_env_cross_nic_0_nccl_all_reduce.log": "cc718c79a30b2dd63a8d74d163af3044083beec50e1a08027b1b9365cdbfaf86",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_1_nccl_env_cross_nic_1_hosts.txt": "4550e6797987670f6dc90e8090be0327737be60825c56d89e95e4fba6c40e8ae",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_1_nccl_env_cross_nic_1_nccl_all_reduce.log": "f012180dfcb46b7cb019d34fc7f041f972bf97239d90e2fe70afdcb44f66ddf0",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_2_nccl_env_cross_nic_2_hosts.txt": "4550e6797987670f6dc90e8090be0327737be60825c56d89e95e4fba6c40e8ae",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_2_nccl_env_cross_nic_2_nccl_all_reduce.log": "ec18b30ca1dd8c277acb11023a3384a82d211e1c1eefbfa5290efc2fe866d7b4",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_ctas_16_16_nccl_env_ctas_16_16_hosts.txt": "4550e6797987670f6dc90e8090be0327737be60825c56d89e95e4fba6c40e8ae",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_ctas_16_16_nccl_env_ctas_16_16_nccl_all_reduce.log": "7d43bc07bc4fdac0823f99b4a7004190cdaef520101129833ddc67d1ae160f7b",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_qps_4_nccl_env_qps_4_hosts.txt": "4550e6797987670f6dc90e8090be0327737be60825c56d89e95e4fba6c40e8ae",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_qps_4_nccl_env_qps_4_nccl_all_reduce.log": "57556c4e5f80719f5fa78960d83bc25ed4b7b24deaa102f2cc397744ff3da1c7",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.log": "8d34eaafead57a04e5af7133cefa130c586fe5df89643396c74c75c4d79acd5d",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.log": "062b17b463aeb76303aa27bc47bdee621b433c31277e66afde89408b8c8b89b0",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe_node0.log": "ca804de8ae958439675b209851ab101d02f78a52a0cabd19beacf6e318204422",
+      "results/raw/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe_node1.log": "4d24f942329133e822c2708794d52da063fedd0ec2c6e7ba19a3700865664e9d",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_baseline_auto_nccl.json": "7b64dede30d24eef42747a80432dd667df8c03c3d06a13b36411559ba8c7defe",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_0_nccl.json": "ad5b0b816aa9413988bdc8f88255ab26cf1717a9f00e1adafc3473536da8543b",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_1_nccl.json": "64f2f32c008a5af56ef90d410021ca2850fd6e49e7ecc77ef2b7eeafdda370ba",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_cross_nic_2_nccl.json": "d636ea43b6ca1aad0a9dbd4a7ab02c5e7294a2f010777c0c2b2c5f8ae02a17b8",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_ctas_16_16_nccl.json": "71470caea89304e74d2f776ae35041373a2ebb1145f2ab06db3ad7f12aa9eb0d",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_qps_4_nccl.json": "6f3bebadfc1538846383dc68d8efcee3d36090d8c891c661d26f66ee98c977b3",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_nccl_env_sensitivity.json": "f02e4a4d1718bb155c316f929321a91e7a7eef2741b7b2441a62a697e4f98deb",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node1_hang_triage_readiness.json": "495496120560ec241d1b5424013454767fb6833d5e2b1b827fd3152ff99c70fe",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_node2_hang_triage_readiness.json": "260c88c581ff74760553faa9d3dd64bf9964fb1799d02ffa91d2688beec34b0a",
+      "results/structured/2026-02-10_required_gates_smoke_node1node2_v2_torchrun_connectivity_probe.json": "a7fd29c98029fecfee8a1b668ccfe48177cec35d5203e131c2ec71ae4314801e"
+    }
+  },
+  "timestamp_utc": "2026-02-10T05:07:47.473807+00:00"
+}

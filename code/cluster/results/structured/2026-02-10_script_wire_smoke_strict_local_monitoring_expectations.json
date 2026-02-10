@@ -1,0 +1,56 @@
+{
+  "categories": {
+    "control_plane": {
+      "checks": [],
+      "status": "not_requested"
+    },
+    "gpu_telemetry": {
+      "checks": [],
+      "status": "not_requested"
+    },
+    "system_signals": {
+      "checks": [
+        "dmesg_tail"
+      ],
+      "ok_checks": [],
+      "status": "error"
+    }
+  },
+  "checks": [
+    {
+      "command": "bash -lc 'set -o pipefail; dmesg -T | tail -n 50'",
+      "details": {},
+      "duration_sec": 0.00549,
+      "exit_code": 1,
+      "name": "dmesg_tail",
+      "status": "error",
+      "stderr_excerpt": "dmesg: read kernel buffer failed: Operation not permitted\n",
+      "stdout_excerpt": "",
+      "timed_out": false
+    }
+  ],
+  "config": {
+    "dmesg_lines": 50,
+    "sample_count": 2,
+    "timeout_sec": 60
+  },
+  "failed_checks": [
+    "dmesg_tail"
+  ],
+  "host": "node1",
+  "missing_categories": [
+    "system_signals"
+  ],
+  "run_id": "2026-02-10_script_wire_smoke_strict",
+  "selected_checks": [
+    "dmesg_tail"
+  ],
+  "status": "error",
+  "test": "monitoring_expectations",
+  "timestamp_utc": "2026-02-10T05:26:26Z",
+  "tool_paths": {
+    "dcgmi": "/usr/bin/dcgmi",
+    "kubectl": null,
+    "nvidia_smi": "/usr/bin/nvidia-smi"
+  }
+}

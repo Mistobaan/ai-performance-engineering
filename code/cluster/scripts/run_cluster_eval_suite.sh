@@ -8,22 +8,27 @@ Usage:
 
 Runs a reusable "field report" eval suite:
   1) Discovery + TCP sysctl + storage layout + manifest
-  2) Benchmark A: NCCL all_reduce_perf (single-node + multi-node)
-  3) Optional: cluster health suite (iperf/IB/NCCL/torchdist, with optional GDR)
-  4) Benchmark B: vLLM online serving sweep (containerized, single-node)
-  5) Optional: vLLM multinode serving benchmark (Ray, 2-node; auto-on for multi-node runs)
-  6) Benchmark C: BF16 GEMM per-GPU sanity (all nodes)
-  7) Optional FP4 checks: DeepGEMM FP8xFP4 smoke + grouped GEMM (all nodes)
-  8) Optional high-impact extras (ml-engineering parity):
+  2) Optional: quick friction battery (install/pull/import/download/IP/speed) on all nodes
+  3) Optional: monitoring expectations snapshot (control-plane/GPU/system signals) on all nodes
+  4) Required: hang-triage readiness bundle (py-spy + strace) on all nodes
+  5) Required: fast torchrun NCCL connectivity probe (all nodes)
+  6) Benchmark A: NCCL all_reduce_perf (single-node + multi-node)
+  7) Required: NCCL env sensitivity sweep (CROSS_NIC / QPS / CTAs)
+  8) Optional: cluster health suite (iperf/IB/NCCL/torchdist, with optional GDR)
+  9) Benchmark B: vLLM online serving sweep (containerized, single-node)
+  10) Optional: vLLM multinode serving benchmark (Ray, 2-node; auto-on for multi-node runs)
+  11) Benchmark C: BF16 GEMM per-GPU sanity (all nodes)
+  12) Optional FP4 checks: DeepGEMM FP8xFP4 smoke + grouped GEMM (all nodes)
+  13) Optional high-impact extras (ml-engineering parity):
      MAMF, all-reduce stability, all-reduce latency comp,
      all_gather_object control-plane comparison, NCCL algo comparison
-  9) Optional: CPU<->GPU C2C memcpy benchmark (local)
-  10) Optional: NUMA memory-bandwidth probe (all nodes)
-  11) Optional: end-to-end transformer train-step benchmark (single-node + multi-node)
-  12) Optional: checkpoint-like I/O benchmark (all nodes)
-  13) Storage: fio (all nodes)
-  14) Optional: nvbandwidth bundle (all nodes; auto-on for multi-node runs)
-  15) Plots (includes NVLink topology) + manifest refresh + artifact validation
+  14) Optional: CPU<->GPU C2C memcpy benchmark (local)
+  15) Optional: NUMA memory-bandwidth probe (all nodes)
+  16) Optional: end-to-end transformer train-step benchmark (single-node + multi-node)
+  17) Optional: checkpoint-like I/O benchmark (all nodes)
+  18) Storage: fio (all nodes)
+  19) Optional: nvbandwidth bundle (all nodes; auto-on for multi-node runs)
+  20) Plots (includes NVLink topology) + manifest refresh + artifact validation
 
 Notes:
   - GPU benchmarks are strict: they FAIL if GPU clock lock cannot be acquired.
@@ -45,6 +50,35 @@ Options:
   --nccl-nvls-enable <0|1|2> Export NCCL_NVLS_ENABLE to NCCL ranks (health suite only; default: unset)
 
   --primary-label <label>  Label for single-node/local steps (default: hostname -s or first --labels entry)
+
+  --connectivity-probe-master-port <port>  Torchrun connectivity probe rendezvous port (default: 29504)
+  --connectivity-probe-barrier-iters <n>   Connectivity probe barrier iterations (default: 5)
+  --connectivity-probe-payload-bytes <n>   Connectivity probe all-reduce payload bytes (default: 8388608)
+  --connectivity-probe-timeout-sec <n>     Connectivity probe distributed timeout in seconds (default: 120)
+
+  --nccl-env-min-bytes <size>   NCCL env sensitivity min bytes (default: 1M)
+  --nccl-env-max-bytes <size>   NCCL env sensitivity max bytes (default: 64M)
+  --nccl-env-warmup <n>         NCCL env sensitivity warmup iterations (default: 5)
+  --nccl-env-iters <n>          NCCL env sensitivity measured iterations (default: 20)
+
+  --run-quick-friction          Run quick friction battery on all nodes (default: on)
+  --skip-quick-friction         Skip quick friction battery
+  --quick-friction-strict       Fail suite if any quick friction host result is non-ok
+  --quick-friction-checks <csv> Quick friction checks (default: uv_torch_install,pip_torch_install,ngc_pull,torch_import,hf_download,ip_owner,speedtest)
+  --quick-friction-timeout-sec <n>  Per-check timeout for quick friction (default: 900)
+  --quick-friction-torch-version <ver>  Torch version for install checks (default: 2.5.1)
+  --quick-friction-torch-index-url <url>  Torch wheel index URL (default: https://download.pytorch.org/whl/cu124)
+  --quick-friction-ngc-image <ref>  Container image for pull timing check (default: nvcr.io/nvidia/pytorch:24.05-py3)
+  --quick-friction-hf-model <id>    HF model for download timing check (default: openai-community/gpt2)
+  --quick-friction-hf-local-dir-base <path>  Base temp dir for HF download check (default: /tmp)
+
+  --run-monitoring-expectations      Run monitoring expectations snapshot on all nodes (default: on)
+  --skip-monitoring-expectations     Skip monitoring expectations snapshot
+  --monitoring-expectations-strict   Fail suite if any monitoring snapshot host result is non-ok
+  --monitoring-checks <csv>          Monitoring checks (default: kubectl_pods,kubectl_top_nodes,kubectl_top_pods,nvidia_dmon,nvidia_nvlink,dcgmi_discovery,dcgmi_dmon,dmesg_tail)
+  --monitoring-sample-count <n>      Sample count for dmon checks (default: 20)
+  --monitoring-dmesg-lines <n>       dmesg tail lines to capture (default: 400)
+  --monitoring-timeout-sec <n>       Per-check timeout for monitoring checks (default: 180)
 
   --model <hf_model_id>    vLLM model id (default: openai/gpt-oss-120b)
   --tp <n>                 vLLM tensor parallel (default: all visible GPUs)
@@ -204,6 +238,33 @@ NCCL_NVLS_ENABLE=""
 
 PRIMARY_LABEL=""
 
+CONNECTIVITY_PROBE_MASTER_PORT="29504"
+CONNECTIVITY_PROBE_BARRIER_ITERS="5"
+CONNECTIVITY_PROBE_PAYLOAD_BYTES="8388608"
+CONNECTIVITY_PROBE_TIMEOUT_SEC="120"
+
+NCCL_ENV_MIN_BYTES="1M"
+NCCL_ENV_MAX_BYTES="64M"
+NCCL_ENV_WARMUP="5"
+NCCL_ENV_ITERS="20"
+
+RUN_QUICK_FRICTION=1
+QUICK_FRICTION_STRICT=0
+QUICK_FRICTION_CHECKS="uv_torch_install,pip_torch_install,ngc_pull,torch_import,hf_download,ip_owner,speedtest"
+QUICK_FRICTION_TIMEOUT_SEC="900"
+QUICK_FRICTION_TORCH_VERSION="2.5.1"
+QUICK_FRICTION_TORCH_INDEX_URL="https://download.pytorch.org/whl/cu124"
+QUICK_FRICTION_NGC_IMAGE="nvcr.io/nvidia/pytorch:24.05-py3"
+QUICK_FRICTION_HF_MODEL="openai-community/gpt2"
+QUICK_FRICTION_HF_LOCAL_DIR_BASE="/tmp"
+
+RUN_MONITORING_EXPECTATIONS=1
+MONITORING_EXPECTATIONS_STRICT=0
+MONITORING_CHECKS="kubectl_pods,kubectl_top_nodes,kubectl_top_pods,nvidia_dmon,nvidia_nvlink,dcgmi_discovery,dcgmi_dmon,dmesg_tail"
+MONITORING_SAMPLE_COUNT="20"
+MONITORING_DMESG_LINES="400"
+MONITORING_TIMEOUT_SEC="180"
+
 MODEL="openai/gpt-oss-120b"
 TP=""
 ISL="1024"
@@ -333,6 +394,33 @@ while [[ $# -gt 0 ]]; do
     --nccl-nvls-enable) NCCL_NVLS_ENABLE="$2"; shift 2 ;;
 
     --primary-label) PRIMARY_LABEL="$2"; shift 2 ;;
+    --connectivity-probe-master-port) CONNECTIVITY_PROBE_MASTER_PORT="$2"; shift 2 ;;
+    --connectivity-probe-barrier-iters) CONNECTIVITY_PROBE_BARRIER_ITERS="$2"; shift 2 ;;
+    --connectivity-probe-payload-bytes) CONNECTIVITY_PROBE_PAYLOAD_BYTES="$2"; shift 2 ;;
+    --connectivity-probe-timeout-sec) CONNECTIVITY_PROBE_TIMEOUT_SEC="$2"; shift 2 ;;
+    --nccl-env-min-bytes) NCCL_ENV_MIN_BYTES="$2"; shift 2 ;;
+    --nccl-env-max-bytes) NCCL_ENV_MAX_BYTES="$2"; shift 2 ;;
+    --nccl-env-warmup) NCCL_ENV_WARMUP="$2"; shift 2 ;;
+    --nccl-env-iters) NCCL_ENV_ITERS="$2"; shift 2 ;;
+
+    --run-quick-friction) RUN_QUICK_FRICTION=1; shift ;;
+    --skip-quick-friction) RUN_QUICK_FRICTION=0; shift ;;
+    --quick-friction-strict) QUICK_FRICTION_STRICT=1; shift ;;
+    --quick-friction-checks) QUICK_FRICTION_CHECKS="$2"; shift 2 ;;
+    --quick-friction-timeout-sec) QUICK_FRICTION_TIMEOUT_SEC="$2"; shift 2 ;;
+    --quick-friction-torch-version) QUICK_FRICTION_TORCH_VERSION="$2"; shift 2 ;;
+    --quick-friction-torch-index-url) QUICK_FRICTION_TORCH_INDEX_URL="$2"; shift 2 ;;
+    --quick-friction-ngc-image) QUICK_FRICTION_NGC_IMAGE="$2"; shift 2 ;;
+    --quick-friction-hf-model) QUICK_FRICTION_HF_MODEL="$2"; shift 2 ;;
+    --quick-friction-hf-local-dir-base) QUICK_FRICTION_HF_LOCAL_DIR_BASE="$2"; shift 2 ;;
+
+    --run-monitoring-expectations) RUN_MONITORING_EXPECTATIONS=1; shift ;;
+    --skip-monitoring-expectations) RUN_MONITORING_EXPECTATIONS=0; shift ;;
+    --monitoring-expectations-strict) MONITORING_EXPECTATIONS_STRICT=1; shift ;;
+    --monitoring-checks) MONITORING_CHECKS="$2"; shift 2 ;;
+    --monitoring-sample-count) MONITORING_SAMPLE_COUNT="$2"; shift 2 ;;
+    --monitoring-dmesg-lines) MONITORING_DMESG_LINES="$2"; shift 2 ;;
+    --monitoring-timeout-sec) MONITORING_TIMEOUT_SEC="$2"; shift 2 ;;
 
     --model) MODEL="$2"; shift 2 ;;
     --tp) TP="$2"; shift 2 ;;
@@ -547,6 +635,47 @@ if ! [[ "$VLLM_MULTINODE_WORKER_STARTUP_WAIT" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
+if ! [[ "$CONNECTIVITY_PROBE_MASTER_PORT" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --connectivity-probe-master-port must be a positive integer (got: ${CONNECTIVITY_PROBE_MASTER_PORT})" >&2
+  exit 2
+fi
+if ! [[ "$CONNECTIVITY_PROBE_BARRIER_ITERS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --connectivity-probe-barrier-iters must be a positive integer (got: ${CONNECTIVITY_PROBE_BARRIER_ITERS})" >&2
+  exit 2
+fi
+if ! [[ "$CONNECTIVITY_PROBE_PAYLOAD_BYTES" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --connectivity-probe-payload-bytes must be a positive integer (got: ${CONNECTIVITY_PROBE_PAYLOAD_BYTES})" >&2
+  exit 2
+fi
+if ! [[ "$CONNECTIVITY_PROBE_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --connectivity-probe-timeout-sec must be a positive integer (got: ${CONNECTIVITY_PROBE_TIMEOUT_SEC})" >&2
+  exit 2
+fi
+if ! [[ "$NCCL_ENV_WARMUP" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --nccl-env-warmup must be >= 0 (got: ${NCCL_ENV_WARMUP})" >&2
+  exit 2
+fi
+if ! [[ "$NCCL_ENV_ITERS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --nccl-env-iters must be a positive integer (got: ${NCCL_ENV_ITERS})" >&2
+  exit 2
+fi
+if ! [[ "$QUICK_FRICTION_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --quick-friction-timeout-sec must be a positive integer (got: ${QUICK_FRICTION_TIMEOUT_SEC})" >&2
+  exit 2
+fi
+if ! [[ "$MONITORING_SAMPLE_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --monitoring-sample-count must be a positive integer (got: ${MONITORING_SAMPLE_COUNT})" >&2
+  exit 2
+fi
+if ! [[ "$MONITORING_DMESG_LINES" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --monitoring-dmesg-lines must be a positive integer (got: ${MONITORING_DMESG_LINES})" >&2
+  exit 2
+fi
+if ! [[ "$MONITORING_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --monitoring-timeout-sec must be a positive integer (got: ${MONITORING_TIMEOUT_SEC})" >&2
+  exit 2
+fi
+
 if [[ "$FP4_RUNTIME" != "host" && "$FP4_RUNTIME" != "container" ]]; then
   echo "ERROR: --fp4-runtime must be host or container (got: ${FP4_RUNTIME})" >&2
   exit 2
@@ -740,6 +869,155 @@ validate_required_artifacts() {
     fi
   done
 
+  if [[ "$RUN_QUICK_FRICTION" -eq 1 ]]; then
+    for idx in "${!HOST_ARR[@]}"; do
+      label="$(label_for_index "$idx")"
+      path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_quick_friction.json"
+      if [[ ! -f "$path" ]]; then
+        echo "ERROR: missing required quick friction artifact: ${path}" >&2
+        missing=1
+        continue
+      fi
+      if ! python3 - "$path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if payload.get("test") != "quick_friction":
+    raise SystemExit("unexpected test type")
+status = payload.get("status")
+if status not in {"ok", "degraded", "error"}:
+    raise SystemExit(f"invalid quick friction status: {status}")
+checks = payload.get("checks") or []
+if not checks:
+    raise SystemExit("quick friction checks are empty")
+PY
+      then
+        echo "ERROR: invalid quick friction artifact: ${path}" >&2
+        missing=1
+      fi
+    done
+  fi
+
+  if [[ "$RUN_MONITORING_EXPECTATIONS" -eq 1 ]]; then
+    for idx in "${!HOST_ARR[@]}"; do
+      label="$(label_for_index "$idx")"
+      path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_monitoring_expectations.json"
+      if [[ ! -f "$path" ]]; then
+        echo "ERROR: missing required monitoring expectations artifact: ${path}" >&2
+        missing=1
+        continue
+      fi
+      if ! python3 - "$path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if payload.get("test") != "monitoring_expectations":
+    raise SystemExit("unexpected test type")
+status = payload.get("status")
+if status not in {"ok", "degraded", "error"}:
+    raise SystemExit(f"invalid monitoring status: {status}")
+checks = payload.get("checks") or []
+if not checks:
+    raise SystemExit("monitoring checks are empty")
+categories = payload.get("categories") or {}
+if not categories:
+    raise SystemExit("monitoring categories are empty")
+PY
+      then
+        echo "ERROR: invalid monitoring expectations artifact: ${path}" >&2
+        missing=1
+      fi
+    done
+  fi
+
+  for idx in "${!HOST_ARR[@]}"; do
+    label="$(label_for_index "$idx")"
+    path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_hang_triage_readiness.json"
+    if [[ ! -f "$path" ]]; then
+      echo "ERROR: missing required hang triage artifact: ${path}" >&2
+      missing=1
+      continue
+    fi
+    if ! python3 - "$path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+status = payload.get("status")
+if status != "ok":
+    raise SystemExit(f"hang triage readiness status is not ok: {status}")
+tools = payload.get("tools") or {}
+if not bool((tools.get("py_spy") or {}).get("available")):
+    raise SystemExit("py-spy is not available")
+if not bool((tools.get("strace") or {}).get("available")):
+    raise SystemExit("strace is not available")
+PY
+    then
+      echo "ERROR: invalid hang triage artifact: ${path}" >&2
+      missing=1
+    fi
+  done
+
+  path="${ROOT_DIR}/results/structured/${RUN_ID}_torchrun_connectivity_probe.json"
+  if [[ ! -f "$path" ]]; then
+    echo "ERROR: missing required connectivity probe artifact: ${path}" >&2
+    missing=1
+  else
+    if ! python3 - "$path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+status = payload.get("status")
+if status != "ok":
+    raise SystemExit(f"connectivity probe status is not ok: {status}")
+ranks = payload.get("ranks") or []
+if not ranks:
+    raise SystemExit("connectivity probe ranks are empty")
+bad = [r for r in ranks if (r or {}).get("status") != "ok"]
+if bad:
+    raise SystemExit(f"connectivity probe has failing ranks: {len(bad)}")
+PY
+    then
+      echo "ERROR: invalid connectivity probe artifact: ${path}" >&2
+      missing=1
+    fi
+  fi
+
+  path="${ROOT_DIR}/results/structured/${RUN_ID}_nccl_env_sensitivity.json"
+  if [[ ! -f "$path" ]]; then
+    echo "ERROR: missing required NCCL env sensitivity artifact: ${path}" >&2
+    missing=1
+  else
+    if ! python3 - "$path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+status = payload.get("status")
+if status != "ok":
+    raise SystemExit(f"nccl env sensitivity status is not ok: {status}")
+if int(payload.get("failure_count", 0)) != 0:
+    raise SystemExit(f"nccl env sensitivity failure_count is non-zero: {payload.get('failure_count')}")
+profiles = payload.get("profiles") or []
+if not profiles:
+    raise SystemExit("nccl env sensitivity profiles are empty")
+if not any((p or {}).get("profile") == "baseline_auto" and (p or {}).get("status") == "ok" for p in profiles):
+    raise SystemExit("nccl env sensitivity missing successful baseline_auto profile")
+PY
+    then
+      echo "ERROR: invalid NCCL env sensitivity artifact: ${path}" >&2
+      missing=1
+    fi
+  fi
+
   if [[ "$RUN_NVBANDWIDTH" -eq 1 ]]; then
     for idx in "${!HOST_ARR[@]}"; do
       label="$(label_for_index "$idx")"
@@ -886,6 +1164,10 @@ if [[ -n "$LABELS" ]]; then
 fi
 echo "SSH_USER: ${SSH_USER}"
 echo "PRIMARY_LABEL: ${PRIMARY_LABEL}"
+echo "connectivity_probe: master_port=${CONNECTIVITY_PROBE_MASTER_PORT} barrier_iters=${CONNECTIVITY_PROBE_BARRIER_ITERS} payload_bytes=${CONNECTIVITY_PROBE_PAYLOAD_BYTES} timeout_sec=${CONNECTIVITY_PROBE_TIMEOUT_SEC}"
+echo "nccl_env_sensitivity: min=${NCCL_ENV_MIN_BYTES} max=${NCCL_ENV_MAX_BYTES} warmup=${NCCL_ENV_WARMUP} iters=${NCCL_ENV_ITERS}"
+echo "quick_friction: enabled=${RUN_QUICK_FRICTION} strict=${QUICK_FRICTION_STRICT} checks='${QUICK_FRICTION_CHECKS}' timeout_sec=${QUICK_FRICTION_TIMEOUT_SEC} torch=${QUICK_FRICTION_TORCH_VERSION} hf_model=${QUICK_FRICTION_HF_MODEL}"
+echo "monitoring_expectations: enabled=${RUN_MONITORING_EXPECTATIONS} strict=${MONITORING_EXPECTATIONS_STRICT} checks='${MONITORING_CHECKS}' sample_count=${MONITORING_SAMPLE_COUNT} dmesg_lines=${MONITORING_DMESG_LINES} timeout_sec=${MONITORING_TIMEOUT_SEC}"
 if [[ "${#HOST_ARR[@]}" -gt 1 ]]; then
   echo "OOB_IF: ${OOB_IF:-<unset>}"
   echo "NCCL_SOCKET_IFNAME: ${SOCKET_IFNAME:-<unset>}"
@@ -976,6 +1258,85 @@ run_step "preflight_services" "${ROOT_DIR}/scripts/preflight_cluster_services.sh
 
 run_step "discovery" "${ROOT_DIR}/scripts/collect_discovery_and_tcp_sysctl.sh" "${common_args[@]}"
 
+if [[ "$RUN_QUICK_FRICTION" -eq 1 ]]; then
+  quick_friction_args=(
+    --run-id "$RUN_ID"
+    --hosts "$HOSTS"
+    --ssh-user "$SSH_USER"
+    --checks "$QUICK_FRICTION_CHECKS"
+    --timeout-sec "$QUICK_FRICTION_TIMEOUT_SEC"
+    --torch-version "$QUICK_FRICTION_TORCH_VERSION"
+    --torch-index-url "$QUICK_FRICTION_TORCH_INDEX_URL"
+    --ngc-image "$QUICK_FRICTION_NGC_IMAGE"
+    --hf-model "$QUICK_FRICTION_HF_MODEL"
+    --hf-local-dir-base "$QUICK_FRICTION_HF_LOCAL_DIR_BASE"
+  )
+  if [[ -n "$LABELS" ]]; then
+    quick_friction_args+=(--labels "$LABELS")
+  fi
+  if [[ -n "$SSH_KEY" ]]; then
+    quick_friction_args+=(--ssh-key "$SSH_KEY")
+  fi
+  if [[ "$QUICK_FRICTION_STRICT" -eq 1 ]]; then
+    quick_friction_args+=(--strict)
+  fi
+  run_step "quick_friction_all_nodes" "${ROOT_DIR}/scripts/run_quick_friction_all_nodes.sh" "${quick_friction_args[@]}"
+fi
+
+if [[ "$RUN_MONITORING_EXPECTATIONS" -eq 1 ]]; then
+  monitoring_args=(
+    --run-id "$RUN_ID"
+    --hosts "$HOSTS"
+    --ssh-user "$SSH_USER"
+    --checks "$MONITORING_CHECKS"
+    --sample-count "$MONITORING_SAMPLE_COUNT"
+    --dmesg-lines "$MONITORING_DMESG_LINES"
+    --timeout-sec "$MONITORING_TIMEOUT_SEC"
+  )
+  if [[ -n "$LABELS" ]]; then
+    monitoring_args+=(--labels "$LABELS")
+  fi
+  if [[ -n "$SSH_KEY" ]]; then
+    monitoring_args+=(--ssh-key "$SSH_KEY")
+  fi
+  if [[ "$MONITORING_EXPECTATIONS_STRICT" -eq 1 ]]; then
+    monitoring_args+=(--strict)
+  fi
+  run_step "monitoring_expectations_all_nodes" "${ROOT_DIR}/scripts/collect_monitoring_expectations_all_nodes.sh" "${monitoring_args[@]}"
+fi
+
+# Required triage readiness bundle (py-spy + strace) for operator-debug path.
+triage_args=(--run-id "$RUN_ID" --hosts "$HOSTS" --ssh-user "$SSH_USER")
+if [[ -n "$LABELS" ]]; then
+  triage_args+=(--labels "$LABELS")
+fi
+if [[ -n "$SSH_KEY" ]]; then
+  triage_args+=(--ssh-key "$SSH_KEY")
+fi
+run_step "hang_triage_bundle" "${ROOT_DIR}/scripts/collect_hang_triage_bundle.sh" "${triage_args[@]}"
+
+# Required fast distributed connectivity gate before network benchmarks.
+connectivity_args=(
+  --run-id "$RUN_ID"
+  --hosts "$HOSTS"
+  --ssh-user "$SSH_USER"
+  --gpus-per-node "$(nvidia-smi -L | wc -l | tr -d ' ')"
+  --master-port "$CONNECTIVITY_PROBE_MASTER_PORT"
+  --barrier-iters "$CONNECTIVITY_PROBE_BARRIER_ITERS"
+  --payload-bytes "$CONNECTIVITY_PROBE_PAYLOAD_BYTES"
+  --timeout-sec "$CONNECTIVITY_PROBE_TIMEOUT_SEC"
+)
+if [[ -n "$SSH_KEY" ]]; then
+  connectivity_args+=(--ssh-key "$SSH_KEY")
+fi
+if [[ -n "$OOB_IF" ]]; then
+  connectivity_args+=(--oob-if "$OOB_IF")
+fi
+if [[ -n "$NCCL_IB_HCA" ]]; then
+  connectivity_args+=(--nccl-ib-hca "$NCCL_IB_HCA")
+fi
+run_step "connectivity_probe" "${ROOT_DIR}/scripts/run_torchrun_connectivity_probe.sh" "${connectivity_args[@]}"
+
 # Benchmark A: NCCL all_reduce_perf
 run_step "nccl_single_node" "${ROOT_DIR}/scripts/run_nccl_all_reduce.sh" \
   --run-id "${RUN_ID}_node1" \
@@ -1020,6 +1381,30 @@ if [[ "${#HOST_ARR[@]}" -gt 1 ]]; then
     run_step "nccl_multi_node" "${ROOT_DIR}/scripts/run_nccl_all_reduce.sh" "${nccl_multi_args[@]}"
   fi
 fi
+
+# Required NCCL env sensitivity sweep (CROSS_NIC / QPS / CTAs).
+nccl_env_args=(
+  --run-id "$RUN_ID"
+  --hosts "$HOSTS"
+  --gpus-per-node "$(nvidia-smi -L | wc -l | tr -d ' ')"
+  --min-bytes "$NCCL_ENV_MIN_BYTES"
+  --max-bytes "$NCCL_ENV_MAX_BYTES"
+  --warmup "$NCCL_ENV_WARMUP"
+  --iters "$NCCL_ENV_ITERS"
+)
+if [[ -n "$SSH_KEY" ]]; then
+  nccl_env_args+=(--ssh-key "$SSH_KEY")
+fi
+if [[ -n "$OOB_IF" ]]; then
+  nccl_env_args+=(--oob-if "$OOB_IF")
+fi
+if [[ -n "$SOCKET_IFNAME" ]]; then
+  nccl_env_args+=(--socket-ifname "$SOCKET_IFNAME")
+fi
+if [[ -n "$NCCL_IB_HCA" ]]; then
+  nccl_env_args+=(--nccl-ib-hca "$NCCL_IB_HCA")
+fi
+run_step "nccl_env_sensitivity" "${ROOT_DIR}/scripts/run_nccl_env_sensitivity.sh" "${nccl_env_args[@]}"
 
 # Optional multi-node diagnostics
 if [[ "${#HOST_ARR[@]}" -gt 1 && "$HEALTH_SUITE_MODE" != "off" ]]; then
@@ -1498,6 +1883,13 @@ if [[ "${#HOST_ARR[@]}" -gt 1 && -f "${ROOT_DIR}/results/structured/${RUN_ID}_2n
     nccl_plot_multi_args+=(--baseline-input "${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json")
   fi
   run_step "plot_nccl_multi_node" python3 "${ROOT_DIR}/analysis/plot_nccl.py" "${nccl_plot_multi_args[@]}"
+fi
+
+if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_nccl_env_sensitivity.json" ]]; then
+  run_step "plot_nccl_env_sensitivity" python3 "${ROOT_DIR}/analysis/plot_nccl_env_sensitivity.py" \
+    --input "${ROOT_DIR}/results/structured/${RUN_ID}_nccl_env_sensitivity.json" \
+    --output "${ROOT_DIR}/docs/figures/${RUN_ID}_nccl_env_sensitivity.png" \
+    --title "NCCL Env Sensitivity ${RUN_ID}"
 fi
 
 if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep.csv" ]]; then

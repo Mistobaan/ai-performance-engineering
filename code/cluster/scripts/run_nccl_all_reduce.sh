@@ -16,6 +16,11 @@ Options:
   --label <label>        Label for raw log (default: allnodes)
   --socket-ifname <if>   Export NCCL_SOCKET_IFNAME to MPI ranks (default: $NCCL_SOCKET_IFNAME)
   --nccl-ib-hca <list>   Export NCCL_IB_HCA allowlist to MPI ranks (default: $NCCL_IB_HCA)
+  --nccl-cross-nic <0|1|2>  Export NCCL_CROSS_NIC to MPI ranks (default: $NCCL_CROSS_NIC)
+  --nccl-ib-qps-per-connection <n>
+                         Export NCCL_IB_QPS_PER_CONNECTION to MPI ranks (default: $NCCL_IB_QPS_PER_CONNECTION)
+  --nccl-min-ctas <n>    Export NCCL_MIN_CTAS to MPI ranks (default: $NCCL_MIN_CTAS)
+  --nccl-max-ctas <n>    Export NCCL_MAX_CTAS to MPI ranks (default: $NCCL_MAX_CTAS)
   --ssh-key <path>       SSH key for mpirun (default: $SSH_KEY)
   --oob-if <iface>       Interface for OpenMPI OOB/TCP (default: $OOB_IF)
   -h, --help             Show this help
@@ -33,6 +38,10 @@ ITERS=20
 LABEL="allnodes"
 SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-}"
 IB_HCA="${NCCL_IB_HCA:-}"
+NCCL_CROSS_NIC_VALUE="${NCCL_CROSS_NIC:-}"
+NCCL_IB_QPS_PER_CONNECTION_VALUE="${NCCL_IB_QPS_PER_CONNECTION:-}"
+NCCL_MIN_CTAS_VALUE="${NCCL_MIN_CTAS:-}"
+NCCL_MAX_CTAS_VALUE="${NCCL_MAX_CTAS:-}"
 SSH_KEY="${SSH_KEY:-}"
 OOB_IF="${OOB_IF:-}"
 
@@ -78,6 +87,22 @@ while [[ $# -gt 0 ]]; do
       IB_HCA="$2"
       shift 2
       ;;
+    --nccl-cross-nic)
+      NCCL_CROSS_NIC_VALUE="$2"
+      shift 2
+      ;;
+    --nccl-ib-qps-per-connection)
+      NCCL_IB_QPS_PER_CONNECTION_VALUE="$2"
+      shift 2
+      ;;
+    --nccl-min-ctas)
+      NCCL_MIN_CTAS_VALUE="$2"
+      shift 2
+      ;;
+    --nccl-max-ctas)
+      NCCL_MAX_CTAS_VALUE="$2"
+      shift 2
+      ;;
     --ssh-key)
       SSH_KEY="$2"
       shift 2
@@ -101,6 +126,23 @@ done
 if [[ -z "$HOSTS" ]]; then
   echo "ERROR: --hosts is required" >&2
   usage >&2
+  exit 2
+fi
+
+if [[ -n "$NCCL_CROSS_NIC_VALUE" && "$NCCL_CROSS_NIC_VALUE" != "0" && "$NCCL_CROSS_NIC_VALUE" != "1" && "$NCCL_CROSS_NIC_VALUE" != "2" ]]; then
+  echo "ERROR: --nccl-cross-nic must be 0, 1, or 2 (got: ${NCCL_CROSS_NIC_VALUE})" >&2
+  exit 2
+fi
+if [[ -n "$NCCL_IB_QPS_PER_CONNECTION_VALUE" && ! "$NCCL_IB_QPS_PER_CONNECTION_VALUE" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --nccl-ib-qps-per-connection must be a positive integer (got: ${NCCL_IB_QPS_PER_CONNECTION_VALUE})" >&2
+  exit 2
+fi
+if [[ -n "$NCCL_MIN_CTAS_VALUE" && ! "$NCCL_MIN_CTAS_VALUE" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --nccl-min-ctas must be a positive integer (got: ${NCCL_MIN_CTAS_VALUE})" >&2
+  exit 2
+fi
+if [[ -n "$NCCL_MAX_CTAS_VALUE" && ! "$NCCL_MAX_CTAS_VALUE" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --nccl-max-ctas must be a positive integer (got: ${NCCL_MAX_CTAS_VALUE})" >&2
   exit 2
 fi
 
@@ -172,6 +214,18 @@ fi
 if [[ -n "$IB_HCA" ]]; then
   MPIRUN_CMD+=(-x "NCCL_IB_HCA=${IB_HCA}")
 fi
+if [[ -n "$NCCL_CROSS_NIC_VALUE" ]]; then
+  MPIRUN_CMD+=(-x "NCCL_CROSS_NIC=${NCCL_CROSS_NIC_VALUE}")
+fi
+if [[ -n "$NCCL_IB_QPS_PER_CONNECTION_VALUE" ]]; then
+  MPIRUN_CMD+=(-x "NCCL_IB_QPS_PER_CONNECTION=${NCCL_IB_QPS_PER_CONNECTION_VALUE}")
+fi
+if [[ -n "$NCCL_MIN_CTAS_VALUE" ]]; then
+  MPIRUN_CMD+=(-x "NCCL_MIN_CTAS=${NCCL_MIN_CTAS_VALUE}")
+fi
+if [[ -n "$NCCL_MAX_CTAS_VALUE" ]]; then
+  MPIRUN_CMD+=(-x "NCCL_MAX_CTAS=${NCCL_MAX_CTAS_VALUE}")
+fi
 
 MPIRUN_CMD+=(
   "$MPI_PY"
@@ -197,6 +251,18 @@ if [[ -n "$SOCKET_IFNAME" ]]; then
 fi
 if [[ -n "$IB_HCA" ]]; then
   echo "NCCL_IB_HCA=$IB_HCA"
+fi
+if [[ -n "$NCCL_CROSS_NIC_VALUE" ]]; then
+  echo "NCCL_CROSS_NIC=${NCCL_CROSS_NIC_VALUE}"
+fi
+if [[ -n "$NCCL_IB_QPS_PER_CONNECTION_VALUE" ]]; then
+  echo "NCCL_IB_QPS_PER_CONNECTION=${NCCL_IB_QPS_PER_CONNECTION_VALUE}"
+fi
+if [[ -n "$NCCL_MIN_CTAS_VALUE" ]]; then
+  echo "NCCL_MIN_CTAS=${NCCL_MIN_CTAS_VALUE}"
+fi
+if [[ -n "$NCCL_MAX_CTAS_VALUE" ]]; then
+  echo "NCCL_MAX_CTAS=${NCCL_MAX_CTAS_VALUE}"
 fi
 
 set +e
