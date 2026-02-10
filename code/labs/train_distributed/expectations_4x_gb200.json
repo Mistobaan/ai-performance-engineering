@@ -1,5 +1,34 @@
 {
   "examples": {
+    "ddp_multigpu": {
+      "example": "ddp_multigpu",
+      "metadata": {
+        "best_optimization": "optimized_ddp_multigpu",
+        "best_optimization_file": "optimized_ddp_multigpu.py",
+        "best_optimization_speedup": 1.5863944039740754,
+        "best_optimization_technique": "optimized_ddp_multigpu",
+        "best_optimization_time_ms": 15805.448214213053,
+        "optimization_goal": "speed"
+      },
+      "metrics": {
+        "baseline_p75_ms": 25073.67459932963,
+        "baseline_time_ms": 25073.67459932963,
+        "best_optimized_p75_ms": 15805.448214213053,
+        "best_optimized_speedup": 1.5863944039740754,
+        "best_optimized_time_ms": 15805.448214213053,
+        "best_speedup": 1.5863944039740754,
+        "is_regression": false
+      },
+      "provenance": {
+        "git_commit": "39378b4c1bd931c46436bbbdbaef24e56505c0f4",
+        "hardware_key": "4x_gb200",
+        "iterations": 3,
+        "profile_name": "none",
+        "timestamp": "2026-02-10T03:24:41.387154",
+        "warmup_iterations": 3
+      },
+      "type": "python"
+    },
     "pipeline_1f1b": {
       "example": "pipeline_1f1b",
       "metadata": {

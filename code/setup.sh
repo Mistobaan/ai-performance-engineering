@@ -3466,6 +3466,13 @@ pip_install --no-cache-dir --force-reinstall --ignore-installed --no-deps \
     fsspec==2024.6.1 || {
     echo "Warning: final dependency pinning failed"
 }
+pip_install --no-cache-dir --upgrade --ignore-installed \
+    --extra-index-url "https://pypi.org/simple" \
+    transformers==4.56.0 \
+    datasets==2.21.0 \
+    sentencepiece==0.2.0 || {
+    echo "Warning: final transformers/datasets/sentencepiece pinning failed"
+}
 
 # ------------------------------------------------------------------------------
 # Transformer Engine (FP8/FP4/TMA) rebuild for Blackwell (sm_100a)

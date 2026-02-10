@@ -105,16 +105,18 @@ def get(key, dm: dist.device_mesh.DeviceMesh | None = None):
 
 def get_dataset():
     """Tokenize a tiny MRPC slice for quick training/debug cycles."""
+    tokenizer = build_tokenizer()
     try:
         from datasets import load_dataset
-    except ImportError:
-        # Optional dependency: keep distributed training labs runnable in minimal
-        # environments by falling back to a tiny synthetic token dataset.
-        #
-        # The training examples overwrite `labels` with next-token prediction
-        # targets, so we only need `input_ids` (and optionally `attention_mask`)
-        # for the collate function.
-        tokenizer = build_tokenizer()
+        load_err = None
+    except ImportError as exc:
+        load_dataset = None
+        load_err = exc
+
+    def _build_synthetic_dataset():
+        # Keep distributed training labs runnable without external dataset pulls.
+        # The training examples overwrite `labels` with next-token targets, so
+        # only token ids + attention mask are required here.
         try:
             vocab_size = int(getattr(tokenizer, "vocab_size", 0) or len(tokenizer))
         except Exception:
@@ -137,8 +139,24 @@ def get_dataset():
             return {"input_ids": ids, "attention_mask": [1] * seq_len}
 
         return {"train": [_sample_tokens() for _ in range(num_train)]}
-    dataset = load_dataset("glue", "mrpc")
-    tokenizer = build_tokenizer()
+
+    if load_dataset is None:
+        print(
+            "[train_distributed] WARNING: datasets package unavailable; "
+            f"falling back to synthetic dataset ({load_err}).",
+            flush=True,
+        )
+        return _build_synthetic_dataset()
+
+    try:
+        dataset = load_dataset("glue", "mrpc")
+    except Exception as exc:
+        print(
+            "[train_distributed] WARNING: failed to load GLUE/MRPC from Hugging Face; "
+            f"falling back to synthetic dataset ({exc}).",
+            flush=True,
+        )
+        return _build_synthetic_dataset()
 
     def tokenize_func(examples):
         return tokenizer(

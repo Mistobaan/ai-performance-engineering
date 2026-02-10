@@ -29,6 +29,12 @@ VENV_PY="${VENV_DIR}/bin/python"
 NCCL_TESTS_DIR="${ROOT_DIR}/tools/nccl-tests"
 TORCH_INDEX_URL="https://pypi.ngc.nvidia.com"
 TORCH_VERSION="2.10.0a0+a36e1d39eb.nv26.01.42222806"
+TRANSFORMERS_VERSION="4.56.0"
+DATASETS_VERSION="2.21.0"
+SENTENCEPIECE_VERSION="0.2.0"
+TOKENIZERS_VERSION="0.22.2"
+HUGGINGFACE_HUB_VERSION="0.34.6"
+FSSPEC_VERSION="2024.6.1"
 SKIP_DISCOVERY=0
 SKIP_APT=0
 SKIP_PYTHON=0
@@ -191,6 +197,12 @@ echo "VENV_DIR=$VENV_DIR"
 echo "NCCL_TESTS_DIR=$NCCL_TESTS_DIR"
 echo "TORCH_INDEX_URL=$TORCH_INDEX_URL"
 echo "TORCH_VERSION=$TORCH_VERSION"
+echo "TRANSFORMERS_VERSION=$TRANSFORMERS_VERSION"
+echo "DATASETS_VERSION=$DATASETS_VERSION"
+echo "SENTENCEPIECE_VERSION=$SENTENCEPIECE_VERSION"
+echo "TOKENIZERS_VERSION=$TOKENIZERS_VERSION"
+echo "HUGGINGFACE_HUB_VERSION=$HUGGINGFACE_HUB_VERSION"
+echo "FSSPEC_VERSION=$FSSPEC_VERSION"
 
 if [[ "$SKIP_DISCOVERY" -eq 0 ]]; then
   echo "== Discovery =="
@@ -263,6 +275,15 @@ if [[ "$SKIP_PYTHON" -eq 0 ]]; then
   VENV_PY="${VENV_DIR}/bin/python"
   "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel
   "$VENV_DIR/bin/pip" install --index-url "$TORCH_INDEX_URL" "torch==${TORCH_VERSION}"
+  echo "== Installing benchmark runtime dependencies =="
+  "$VENV_DIR/bin/pip" install --no-cache-dir --upgrade \
+    --extra-index-url "https://pypi.org/simple" \
+    "transformers==${TRANSFORMERS_VERSION}" \
+    "datasets==${DATASETS_VERSION}" \
+    "sentencepiece==${SENTENCEPIECE_VERSION}" \
+    "tokenizers==${TOKENIZERS_VERSION}" \
+    "huggingface-hub==${HUGGINGFACE_HUB_VERSION}" \
+    "fsspec==${FSSPEC_VERSION}"
 
   if [[ "$INSTALL_VLLM" -eq 1 ]]; then
     echo "== vLLM install =="
@@ -283,10 +304,22 @@ if [[ "$SKIP_PYTHON" -eq 0 ]]; then
   "$VENV_DIR/bin/python" - <<'PY'
 import os
 import torch
+import transformers
+import datasets
+import tokenizers
+import huggingface_hub
+import sentencepiece
+import fsspec
 print("torch", torch.__version__)
 print("torch.cuda.is_available", torch.cuda.is_available())
 print("torch.version.cuda", torch.version.cuda)
 print("torch.version.git", torch.version.git_version)
+print("transformers", transformers.__version__)
+print("datasets", datasets.__version__)
+print("tokenizers", tokenizers.__version__)
+print("huggingface_hub", huggingface_hub.__version__)
+print("sentencepiece", sentencepiece.__version__)
+print("fsspec", fsspec.__version__)
 print("AISP_CUDNN_RUNTIME_POLICY", os.environ.get("AISP_CUDNN_RUNTIME_POLICY", ""))
 if torch.cuda.is_available():
     print("torch.backends.cudnn.version", torch.backends.cudnn.version())
