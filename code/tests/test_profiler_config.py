@@ -122,7 +122,7 @@ class TestProfilerConfig:
         config = ProfilerConfig()
         assert config.metric_set == "minimal"
         assert config.preset == "minimal"
-        assert config.ncu_replay_mode == "application"
+        assert config.ncu_replay_mode == "kernel"
     
     def test_nsys_command_generation(self):
         """nsys command should be properly formatted."""
@@ -303,13 +303,13 @@ class TestBuildProfilerConfigFromBenchmark:
                 self.ncu_metric_set = "deep_dive"
                 self.pm_sampling_interval = 50000
                 self.nsys_nvtx_include = ["kernel1"]
-                self.ncu_replay_mode = "application"
+                self.ncu_replay_mode = "kernel"
         
         result = build_profiler_config_from_benchmark(HarnessConfig())
         
         assert result.preset == "deep_dive"
         assert result.metric_set == "deep_dive"
-        assert result.ncu_replay_mode == "application"
+        assert result.ncu_replay_mode == "kernel"
 
 
 class TestMetricNaming:

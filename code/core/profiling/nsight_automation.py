@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import json
+import signal
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Sequence
 import sys
@@ -212,10 +213,12 @@ class NsightAutomation:
         trace_nvtx: bool = True,
         trace_osrt: bool = True,
         full_timeline: bool = False,
-        trace_forks: bool = True,
+        trace_forks: bool = False,
         preset: str = "light",
         force_lineinfo: bool = True,
         timeout_seconds: Optional[float] = None,
+        wait_mode: str = "primary",
+        finalize_grace_seconds: float = 20.0,
     ) -> Optional[Path]:
         """Run Nsight Systems profiling.
         
@@ -227,6 +230,8 @@ class NsightAutomation:
             trace_osrt: Trace OS runtime
             full_timeline: If True, include driver/cu/pti traces and richer capture flags
             trace_forks: If True, trace child processes before exec
+            wait_mode: NSYS wait mode ('primary' or 'all')
+            finalize_grace_seconds: Grace period after SIGINT on timeout
         
         Presets:
             - light (default): cuda,nvtx,osrt, no sampling/ctx switch.
@@ -288,6 +293,10 @@ class NsightAutomation:
         ])
         if trace_forks:
             nsys_cmd.extend(['--trace-fork-before-exec', 'true'])
+        wait_mode_norm = str(wait_mode or "primary").strip().lower()
+        if wait_mode_norm not in {"primary", "all"}:
+            raise ValueError("wait_mode must be 'primary' or 'all'")
+        nsys_cmd.extend(["--wait", wait_mode_norm])
         
         nsys_cmd.extend(command)
         
@@ -298,18 +307,72 @@ class NsightAutomation:
             "cwd": str(self.run_cwd),
             "timeout_seconds": timeout_seconds,
             "preset": preset_normalized,
+            "wait_mode": wait_mode_norm,
+            "finalize_grace_seconds": finalize_grace_seconds,
         }
         
         try:
-            result = subprocess.run(
+            process = subprocess.Popen(
                 nsys_cmd,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                check=True,
-                timeout=timeout_seconds if timeout_seconds and timeout_seconds > 0 else None,
                 env=self._build_env(force_lineinfo=force_lineinfo),
                 cwd=str(self.run_cwd),
+                start_new_session=True,
             )
+            result_stdout = ""
+            result_stderr = ""
+            try:
+                result_stdout, result_stderr = process.communicate(
+                    timeout=timeout_seconds if timeout_seconds and timeout_seconds > 0 else None,
+                )
+            except subprocess.TimeoutExpired as exc:
+                partial_stdout = str(exc.stdout or "")
+                partial_stderr = str(exc.stderr or "")
+                finalize = self._finalize_timed_out_nsys(
+                    process,
+                    grace_seconds=finalize_grace_seconds,
+                )
+                result_stdout = partial_stdout + str(finalize.get("stdout", ""))
+                result_stderr = partial_stderr + str(finalize.get("stderr", ""))
+                self.last_run.update(
+                    {
+                        "timeout_hit": True,
+                        "stdout": result_stdout,
+                        "stderr": result_stderr,
+                        "graceful_finalize_attempted": True,
+                        "graceful_finalize_completed": bool(finalize.get("completed")),
+                        "finalize_signals": finalize.get("signals", []),
+                        "defunct_launcher_detected": bool(finalize.get("defunct_launcher_detected")),
+                        "returncode": process.returncode,
+                    }
+                )
+                if bool(finalize.get("completed")) and output_path.exists():
+                    logger.warning(
+                        "Nsight Systems timed out but finalized report during grace window."
+                    )
+                    self.last_run["output"] = str(output_path)
+                    self.last_error = None
+                    return output_path
+                self.last_error = f"Nsight Systems timed out after {timeout_seconds}s"
+                if finalize.get("defunct_launcher_detected"):
+                    self.last_error += " (defunct nsys-launcher detected during finalization)"
+                logger.error(self.last_error)
+                return None
+            result = subprocess.CompletedProcess(
+                args=nsys_cmd,
+                returncode=process.returncode,
+                stdout=result_stdout,
+                stderr=result_stderr,
+            )
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    result.returncode,
+                    nsys_cmd,
+                    output=result.stdout,
+                    stderr=result.stderr,
+                )
             logger.info(f"Nsight Systems trace saved to {output_path}")
             self.last_run.update(
                 {
@@ -318,20 +381,10 @@ class NsightAutomation:
                     "returncode": result.returncode,
                     "timeout_hit": False,
                     "output": str(output_path),
+                    "graceful_finalize_attempted": False,
                 }
             )
             return output_path
-        except subprocess.TimeoutExpired as e:
-            self.last_error = f"Nsight Systems timed out after {timeout_seconds}s"
-            self.last_run.update(
-                {
-                    "timeout_hit": True,
-                    "stdout": e.stdout or "",
-                    "stderr": e.stderr or "",
-                }
-            )
-            logger.error(self.last_error)
-            return None
         except subprocess.CalledProcessError as e:
             # Automatic fallback: drop full_timeline categories and retry once
             self.last_error = e.stderr or e.stdout or str(e)
@@ -347,8 +400,99 @@ class NsightAutomation:
                     full_timeline=False,
                     trace_forks=False,
                     preset="light",
+                    wait_mode=wait_mode_norm,
+                    finalize_grace_seconds=finalize_grace_seconds,
                 )
             return None
+
+    def _detect_nsys_defunct_launcher(self, parent_pid: int) -> bool:
+        """Best-effort detection of defunct nsys-launcher child processes."""
+        try:
+            result = subprocess.run(
+                ["ps", "-eo", "pid,ppid,stat,cmd"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode != 0:
+                return False
+            return self._parse_ps_for_defunct_launcher(result.stdout, parent_pid)
+        except Exception:
+            return False
+
+    @staticmethod
+    def _parse_ps_for_defunct_launcher(ps_output: str, parent_pid: int) -> bool:
+        """Parse `ps -eo pid,ppid,stat,cmd` output for defunct nsys-launcher rows."""
+        for line in str(ps_output or "").splitlines():
+            parts = line.strip().split(None, 3)
+            if len(parts) < 4:
+                continue
+            _, ppid, stat, cmd = parts
+            if ppid != str(parent_pid):
+                continue
+            if "nsys-launcher" in cmd and ("<defunct>" in cmd or "Z" in stat):
+                return True
+        return False
+
+    def _finalize_timed_out_nsys(self, process: subprocess.Popen, grace_seconds: float) -> Dict[str, Any]:
+        """Attempt to gracefully finalize NSYS output after timeout."""
+        signals_sent: List[str] = []
+        stdout_accum = ""
+        stderr_accum = ""
+        completed = False
+
+        try:
+            os.killpg(process.pid, signal.SIGINT)
+            signals_sent.append("SIGINT")
+        except Exception:
+            pass
+
+        try:
+            stdout_chunk, stderr_chunk = process.communicate(timeout=max(1.0, grace_seconds))
+            stdout_accum += stdout_chunk or ""
+            stderr_accum += stderr_chunk or ""
+            completed = True
+        except subprocess.TimeoutExpired as exc:
+            stdout_accum += str(exc.stdout or "")
+            stderr_accum += str(exc.stderr or "")
+
+        if not completed:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+                signals_sent.append("SIGTERM")
+            except Exception:
+                pass
+            try:
+                stdout_chunk, stderr_chunk = process.communicate(timeout=5)
+                stdout_accum += stdout_chunk or ""
+                stderr_accum += stderr_chunk or ""
+                completed = True
+            except subprocess.TimeoutExpired as exc:
+                stdout_accum += str(exc.stdout or "")
+                stderr_accum += str(exc.stderr or "")
+
+        if not completed:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+                signals_sent.append("SIGKILL")
+            except Exception:
+                pass
+            try:
+                stdout_chunk, stderr_chunk = process.communicate(timeout=2)
+                stdout_accum += stdout_chunk or ""
+                stderr_accum += stderr_chunk or ""
+            except Exception:
+                pass
+
+        defunct_detected = self._detect_nsys_defunct_launcher(process.pid)
+        return {
+            "completed": completed,
+            "stdout": stdout_accum,
+            "stderr": stderr_accum,
+            "signals": signals_sent,
+            "defunct_launcher_detected": defunct_detected,
+        }
     
     def build_ncu_command(
         self,
@@ -628,8 +772,12 @@ Examples:
     parser.add_argument('--trace-osrt', action='store_true', default=True, help='Trace OS runtime (nsys)')
     parser.add_argument('--full-timeline', action='store_true', default=False, help='Enable richer NSYS tracing (cuda-hw, cublas, cusolver, cusparse, cudnn)')
     parser.add_argument('--trace-forks', action='store_true', default=False, help='Trace child processes before exec (nsys)')
-    parser.add_argument('--preset', type=str, default='full', choices=['light', 'full'],
-                        help='NSYS preset: full (default, adds cuda-hw/cublas/cusolver/cusparse/cudnn and fork tracing) or light (smaller/faster traces)')
+    parser.add_argument('--preset', type=str, default='light', choices=['light', 'full'],
+                        help='NSYS preset: light (default, smaller/faster traces) or full (adds cuda-hw/cublas/cusolver/cusparse/cudnn and fork tracing)')
+    parser.add_argument('--wait-mode', type=str, default='primary', choices=['primary', 'all'],
+                        help="NSYS --wait mode (default: primary)")
+    parser.add_argument('--finalize-grace-seconds', type=float, default=20.0,
+                        help='Grace period after timeout SIGINT to let NSYS finalize report')
     parser.add_argument('--batch-config', type=Path,
                        help='JSON config for batch profiling')
     parser.add_argument('--timeout-seconds', type=float, default=None, help='Max runtime before aborting capture (seconds)')
@@ -677,6 +825,8 @@ Examples:
             preset=args.preset,
             force_lineinfo=args.force_lineinfo,
             timeout_seconds=args.timeout_seconds,
+            wait_mode=args.wait_mode,
+            finalize_grace_seconds=args.finalize_grace_seconds,
         )
     elif args.tool == 'ncu':
         output = automation.profile_ncu(

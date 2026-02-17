@@ -401,7 +401,7 @@ class ProfilerConfig:
     nsys_cudabacktrace: bool = True
     nsys_stats: bool = True
     nsys_backtrace: str = "none"
-    ncu_replay_mode: str = "application"  # "kernel" or "application"
+    ncu_replay_mode: str = "kernel"  # "kernel" or "application"
     honor_replay_mode_in_minimal: bool = False
     pm_sampling_interval: Optional[int] = None
     
@@ -549,7 +549,7 @@ class ProfilerConfig:
         ]
 
         if preset == "minimal":
-            replay_mode = self.ncu_replay_mode if self.honor_replay_mode_in_minimal else "application"
+            replay_mode = self.ncu_replay_mode if self.honor_replay_mode_in_minimal else "kernel"
             cmd.extend([
                 "--replay-mode", replay_mode,
             ])

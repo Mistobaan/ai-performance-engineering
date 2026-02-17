@@ -6,7 +6,6 @@ behavior when FastAPI is installed.
 
 from __future__ import annotations
 
-import asyncio
 import types
 import sys
 import urllib.parse
@@ -15,6 +14,11 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 
 
 def _install_fastapi_stub() -> None:
+    # Avoid importing asyncio at interpreter startup. Some profiling environments
+    # execute sitecustomize with a restricted stdlib path and only need this stub
+    # when tests exercise FastAPI endpoints.
+    import asyncio
+
     class Request:
         def __init__(
             self,

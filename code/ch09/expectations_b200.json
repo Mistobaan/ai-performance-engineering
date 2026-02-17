@@ -54,6 +54,60 @@
       },
       "type": "python"
     },
+    "cublas_gemm_fp4_perchannel_cuda": {
+      "example": "cublas_gemm_fp4_perchannel",
+      "metadata": {
+        "best_memory_savings_pct": 0.0,
+        "best_memory_savings_ratio": 1.0,
+        "best_optimization": "optimized_cublas_gemm_fp4_perchannel",
+        "best_optimization_file": "optimized_cublas_gemm_fp4_perchannel.py",
+        "best_optimization_memory_mb": 147.275390625,
+        "best_optimization_speedup": 1.0791561712846347,
+        "best_optimization_technique": "optimized_cublas_gemm_fp4_perchannel",
+        "best_optimization_time_ms": 0.050816,
+        "optimization_goal": "speed"
+      },
+      "metrics": {
+        "baseline_memory_mb": 147.275390625,
+        "baseline_p75_ms": 0.0548384,
+        "baseline_throughput.bytes_per_s": null,
+        "baseline_throughput.custom_unit_name": null,
+        "baseline_throughput.custom_unit_per_s": null,
+        "baseline_throughput.goodput": null,
+        "baseline_throughput.latency_ms": 0.0548384,
+        "baseline_throughput.requests_per_s": 18235.39709400712,
+        "baseline_throughput.samples_per_s": null,
+        "baseline_throughput.schemaVersion": "1.0",
+        "baseline_throughput.tokens_per_s": null,
+        "baseline_time_ms": 0.0548384,
+        "best_memory_savings_pct": 0.0,
+        "best_memory_savings_ratio": 1.0,
+        "best_optimized_memory_mb": 147.275390625,
+        "best_optimized_p75_ms": 0.050816,
+        "best_optimized_speedup": 1.0791561712846347,
+        "best_optimized_throughput.bytes_per_s": null,
+        "best_optimized_throughput.custom_unit_name": null,
+        "best_optimized_throughput.custom_unit_per_s": null,
+        "best_optimized_throughput.goodput": null,
+        "best_optimized_throughput.latency_ms": 0.050816,
+        "best_optimized_throughput.requests_per_s": 19678.841309823678,
+        "best_optimized_throughput.samples_per_s": null,
+        "best_optimized_throughput.schemaVersion": "1.0",
+        "best_optimized_throughput.tokens_per_s": null,
+        "best_optimized_time_ms": 0.050816,
+        "best_speedup": 1.0791561712846347,
+        "is_regression": false
+      },
+      "provenance": {
+        "git_commit": "350158090be3bb62f1dee04f82e57ff7b00e67f4",
+        "hardware_key": "b200",
+        "iterations": 1,
+        "profile_name": "deep_dive",
+        "timestamp": "2026-02-16T17:56:10.100126",
+        "warmup_iterations": 5
+      },
+      "type": "cuda"
+    },
     "cublaslt_gemm_cuda": {
       "example": "cublaslt_gemm_cuda",
       "metadata": {

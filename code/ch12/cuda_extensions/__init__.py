@@ -56,3 +56,13 @@ def load_cuda_graphs_extension():
         extra_cuda_cflags=_cuda_flags(),
         extra_ldflags=list(NVTX_LDFLAGS),
     )
+
+
+def load_bias_relu_residual_extension():
+    """Load CUDA kernels for bias+ReLU and residual-add fusion benchmark."""
+    return load_cuda_extension_v2(
+        name="bias_relu_residual_kernels",
+        sources=[_EXTENSION_DIR / "bias_relu_residual_kernels.cu"],
+        extra_cuda_cflags=_cuda_flags(),
+        extra_ldflags=list(NVTX_LDFLAGS),
+    )

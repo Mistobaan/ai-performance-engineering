@@ -8,10 +8,12 @@ structures so they can be reused by any interface.
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import hashlib
 import io
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -23,6 +25,22 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 _BASELINE_ROLE_TOKENS = {"baseline", "base", "before", "reference", "ref"}
 _OPTIMIZED_ROLE_TOKENS = {"optimized", "opt", "after", "tuned", "candidate"}
 _ROLE_TOKENS = _BASELINE_ROLE_TOKENS | _OPTIMIZED_ROLE_TOKENS
+_PAIR_MANIFEST_FILENAME = "pair_manifest.json"
+_DEFAULT_KERNEL_ALIAS_GROUPS: Dict[str, set[str]] = {
+    # Alias families for structurally similar kernels that use different codegen
+    # stacks (for example, CUTLASS vs vendor kernels).
+    "sm100_fp4_gemm_family": {
+        "cutlass",
+        "cutlass3x",
+        "nvjet",
+        "gemm",
+        "bstensorop",
+        "ue4m3",
+        "vec16ue4m3",
+        "tnt",
+        "tnn",
+    }
+}
 
 
 def _materialize_profile_if_needed(path: Path, *, root: Optional[Path] = None) -> Path:
@@ -92,7 +110,69 @@ def _stage_profile_pair(
     except Exception:
         optimized_dst = optimized_src
 
+    manifest_payload = {
+        "schema_version": "1.0",
+        "generated_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "label": label,
+        "pair_status": (
+            "complete"
+            if baseline_dst.exists() and optimized_dst.exists()
+            else "partial"
+        ),
+        "staged_pair_dir": str(stage_dir),
+        "artifacts": {
+            "baseline": {
+                "source_path": str(baseline_path),
+                "materialized_source_path": str(baseline_src),
+                "staged_path": str(baseline_dst),
+                "exists": baseline_dst.exists(),
+            },
+            "optimized": {
+                "source_path": str(optimized_path),
+                "materialized_source_path": str(optimized_src),
+                "staged_path": str(optimized_dst),
+                "exists": optimized_dst.exists(),
+            },
+        },
+    }
+    _write_pair_manifest(stage_dir / _PAIR_MANIFEST_FILENAME, manifest_payload)
+
     return baseline_dst, optimized_dst
+
+
+def _write_pair_manifest(path: Path, payload: Dict[str, Any]) -> None:
+    """Best-effort write of a stable pair manifest JSON."""
+    try:
+        path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    except Exception:
+        return
+
+
+def _load_kernel_alias_groups() -> Dict[str, set[str]]:
+    """Return kernel alias groups with optional env override."""
+    env_payload = os.environ.get("AISP_KERNEL_ALIAS_GROUPS_JSON", "").strip()
+    if not env_payload:
+        return _DEFAULT_KERNEL_ALIAS_GROUPS
+    try:
+        parsed = json.loads(env_payload)
+        if not isinstance(parsed, dict):
+            return _DEFAULT_KERNEL_ALIAS_GROUPS
+        normalized: Dict[str, set[str]] = {}
+        for group_name, values in parsed.items():
+            if not isinstance(group_name, str):
+                continue
+            if not isinstance(values, list):
+                continue
+            tokens = {
+                str(value).strip().lower()
+                for value in values
+                if str(value).strip()
+            }
+            if tokens:
+                normalized[group_name.strip().lower()] = tokens
+        return normalized or _DEFAULT_KERNEL_ALIAS_GROUPS
+    except Exception:
+        return _DEFAULT_KERNEL_ALIAS_GROUPS
 
 
 def _extract_ncu_sources(ncu_path: Path, limit: int = 12) -> List[Dict[str, str]]:
@@ -526,12 +606,13 @@ def compare_nsys_files(
     pair_key: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Extract and compare nsys metrics between baseline and optimized."""
+    pair_health = assess_profile_pair_health(profiles_dir, pair_key=pair_key)
     baseline_nsys, optimized_nsys = _collect_profile_role_files(profiles_dir, ".nsys-rep")
 
     if not baseline_nsys or not optimized_nsys:
         pair_dir, error = _select_pair_dir(profiles_dir, pair_key, label="nsys")
         if error:
-            return error
+            return {**error, "pair_health": pair_health}
         if not pair_dir:
             return None
         baseline_nsys, optimized_nsys = _collect_profile_role_files(pair_dir, ".nsys-rep")
@@ -545,7 +626,7 @@ def compare_nsys_files(
         label="nsys",
     )
     if error:
-        return error
+        return {**error, "pair_health": pair_health}
     if not pair:
         return None
 
@@ -568,7 +649,9 @@ def compare_nsys_files(
             "optimized_file": optimized_path.name,
             "baseline_path": str(baseline_path),
             "optimized_path": str(optimized_path),
+            "staged_pair_dir": str(baseline_path.parent),
             "pair_key": pair_key or selected_pair_key,
+            "pair_health": pair_health,
             "metrics": [],
             "baseline_sources": _extract_nsys_sources(baseline_path),
             "optimized_sources": _extract_nsys_sources(optimized_path),
@@ -612,6 +695,7 @@ def compare_ncu_files(
     include_ncu_details: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Extract and compare ncu metrics between baseline and optimized."""
+    pair_health = assess_profile_pair_health(profiles_dir, pair_key=pair_key)
     baseline_ncu, optimized_ncu = _collect_profile_role_files(profiles_dir, ".ncu-rep")
     baseline_csv, optimized_csv = _collect_profile_role_files(
         profiles_dir,
@@ -622,7 +706,7 @@ def compare_ncu_files(
     if (not baseline_ncu or not optimized_ncu) and (not baseline_csv or not optimized_csv):
         pair_dir, error = _select_pair_dir(profiles_dir, pair_key, label="ncu")
         if error:
-            return error
+            return {**error, "pair_health": pair_health}
         if pair_dir:
             baseline_ncu, optimized_ncu = _collect_profile_role_files(pair_dir, ".ncu-rep")
             baseline_csv, optimized_csv = _collect_profile_role_files(
@@ -639,7 +723,7 @@ def compare_ncu_files(
             label="ncu csv",
         )
         if error:
-            return error
+            return {**error, "pair_health": pair_health}
         if not pair:
             return None
 
@@ -672,7 +756,9 @@ def compare_ncu_files(
                 "optimized_file": optimized_csv_path.name,
                 "baseline_path": str(baseline_csv_path),
                 "optimized_path": str(optimized_csv_path),
+                "staged_pair_dir": str(baseline_csv_path.parent),
                 "pair_key": pair_key or selected_pair_key,
+                "pair_health": pair_health,
                 "metrics": [],
             }
             if include_ncu_details and baseline_ncu and optimized_ncu:
@@ -683,7 +769,7 @@ def compare_ncu_files(
                     label="ncu",
                 )
                 if rep_error:
-                    return rep_error
+                    return {**rep_error, "pair_health": pair_health}
                 if rep_pair:
                     baseline_rep, optimized_rep = rep_pair
                     baseline_rep, optimized_rep = _stage_profile_pair(
@@ -825,7 +911,7 @@ def compare_ncu_files(
         label="ncu",
     )
     if error:
-        return error
+        return {**error, "pair_health": pair_health}
     if not pair:
         return None
 
@@ -894,7 +980,9 @@ def compare_ncu_files(
         "optimized_file": optimized_path.name,
         "baseline_path": str(baseline_path),
         "optimized_path": str(optimized_path),
+        "staged_pair_dir": str(baseline_path.parent),
         "pair_key": pair_key or selected_pair_key,
+        "pair_health": pair_health,
         "kernel_pairing": {
             "paired_count": len(paired_kernels),
             "exact_count": exact_count,
@@ -922,15 +1010,17 @@ def compare_ncu_files(
             "Kernel symbols did not align (rank-only/unmatched mapping). "
             "Treat per-kernel deltas as low-confidence; capture with tighter NVTX/kernel filters for decisive tuning."
         )
-        comparison["success"] = False
-        comparison["error"] = (
+        comparison["low_confidence_for_tuning"] = True
+        comparison["success"] = True
+        comparison["advisory_warning"] = (
             "NCU kernel comparison alignment is low-confidence (rank-only/unmatched symbols). "
-            "Re-capture with tighter NVTX includes and kernel filters for decisive kernel deltas."
+            "Per-kernel deltas should be treated as advisory."
         )
         comparison["hint"] = (
             "Use profile_ncu with kernel_filter + nvtx_include and compare a concrete baseline/optimized pair directory."
         )
     else:
+        comparison["low_confidence_for_tuning"] = False
         comparison["success"] = True
 
     baseline_agg = _aggregate_ncu_metrics(baseline_per_kernel)
@@ -1007,11 +1097,16 @@ def _kernel_tokens(name: str) -> set[str]:
         "device",
         "global",
     }
-    return {
+    tokens = {
         token
         for token in _normalize_kernel_symbol(name).split("_")
         if token and token not in stopwords
     }
+    alias_groups = _load_kernel_alias_groups()
+    for group_name, group_tokens in alias_groups.items():
+        if tokens & group_tokens:
+            tokens.add(group_name)
+    return tokens
 
 
 def _kernel_similarity(left: str, right: str) -> float:
@@ -1030,6 +1125,11 @@ def _kernel_similarity(left: str, right: str) -> float:
     intersection = len(left_tokens & right_tokens)
     union = len(left_tokens | right_tokens)
     jaccard = (intersection / union) if union else 0.0
+    alias_group_keys = set(_load_kernel_alias_groups().keys())
+    if left_tokens & right_tokens & alias_group_keys:
+        # Alias families indicate strong semantic relatedness even when
+        # generated symbol names differ substantially (e.g., CUTLASS vs NVJET).
+        jaccard += 0.4
     if left_norm in right_norm or right_norm in left_norm:
         jaccard += 0.15
     return jaccard
@@ -1382,46 +1482,67 @@ def generate_side_by_side_report(
     ncu_comparison: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Generate side-by-side Nsight Systems + Nsight Compute JSON report with narrative."""
+    pair_health = assess_profile_pair_health(profiles_dir, pair_key=pair_key)
     if not profiles_dir.exists():
         return {"success": False, "error": f"profiles_dir not found: {profiles_dir}"}
 
     pair_dir, error = _select_pair_dir(profiles_dir, pair_key, label="side-by-side")
     if error:
-        return {"success": False, **error}
+        return {"success": False, **error, "pair_health": pair_health}
     search_dir = pair_dir or profiles_dir
 
     baseline_nsys, optimized_nsys, selected_key, nsys_error = _select_profile_pair_paths(
         search_dir, pair_key, ".nsys-rep", "nsys"
     )
     if nsys_error:
-        return {"success": False, **nsys_error}
+        return {"success": False, **nsys_error, "pair_health": pair_health}
     if not baseline_nsys or not optimized_nsys:
-        return {"success": False, "error": "No baseline/optimized nsys profiles found"}
+        return {
+            "success": False,
+            "error": "No baseline/optimized nsys profiles found",
+            "pair_health": pair_health,
+        }
 
     baseline_ncu, optimized_ncu, _, ncu_error = _select_profile_pair_paths(
         search_dir, pair_key, ".ncu-rep", "ncu"
     )
     if ncu_error:
-        return {"success": False, **ncu_error}
+        return {"success": False, **ncu_error, "pair_health": pair_health}
     if not baseline_ncu or not optimized_ncu:
-        return {"success": False, "error": "No baseline/optimized ncu profiles found"}
+        return {
+            "success": False,
+            "error": "No baseline/optimized ncu profiles found",
+            "pair_health": pair_health,
+        }
 
     baseline_api = _extract_nsys_cuda_api_stats(baseline_nsys)
     optimized_api = _extract_nsys_cuda_api_stats(optimized_nsys)
     if not baseline_api or not optimized_api:
-        return {"success": False, "error": "Failed to extract nsys cuda_api_sum stats"}
+        return {
+            "success": False,
+            "error": "Failed to extract nsys cuda_api_sum stats",
+            "pair_health": pair_health,
+        }
 
     baseline_kernel_stats = _extract_nsys_kernel_stats(baseline_nsys)
     optimized_kernel_stats = _extract_nsys_kernel_stats(optimized_nsys)
     if not baseline_kernel_stats or not optimized_kernel_stats:
-        return {"success": False, "error": "Failed to extract nsys cuda_gpu_kern_sum stats"}
+        return {
+            "success": False,
+            "error": "Failed to extract nsys cuda_gpu_kern_sum stats",
+            "pair_health": pair_health,
+        }
 
     if ncu_comparison is None:
         ncu_comparison = compare_ncu_files(search_dir, pair_key=pair_key)
     if not ncu_comparison:
-        return {"success": False, "error": "No comparable ncu metrics found"}
+        return {
+            "success": False,
+            "error": "No comparable ncu metrics found",
+            "pair_health": pair_health,
+        }
     if ncu_comparison.get("error"):
-        return {"success": False, **ncu_comparison}
+        return {"success": False, **ncu_comparison, "pair_health": pair_health}
 
     ncu_summary = _summarize_ncu_side_by_side(ncu_comparison)
 
@@ -1598,6 +1719,7 @@ def generate_side_by_side_report(
         "side_by_side": side_by_side,
         "nsys_summary": side_by_side["nsys"],
         "ncu_summary": side_by_side["ncu"],
+        "pair_health": pair_health,
     }
 
 
@@ -1981,6 +2103,91 @@ def _select_pair_dir(
     return pair_dirs[best_key], None
 
 
+def assess_profile_pair_health(
+    profiles_dir: Path,
+    pair_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Assess whether a profile directory has complete baseline/optimized pairs."""
+    pair_dir, pair_error = _select_pair_dir(profiles_dir, pair_key, label="profile health")
+    if pair_error:
+        return {
+            "ok": False,
+            "profiles_dir": str(profiles_dir),
+            "pair_key": pair_key,
+            "pair_dir": None,
+            **pair_error,
+        }
+
+    search_dir = pair_dir or profiles_dir
+    baseline_nsys, optimized_nsys = _collect_profile_role_files(search_dir, ".nsys-rep")
+    baseline_ncu_rep, optimized_ncu_rep = _collect_profile_role_files(search_dir, ".ncu-rep")
+    baseline_ncu_csv, optimized_ncu_csv = _collect_profile_role_files(
+        search_dir,
+        ".csv",
+        name_predicate=lambda p: "ncu" in p.name.lower(),
+    )
+
+    has_nsys_pair = bool(baseline_nsys and optimized_nsys)
+    has_ncu_rep_pair = bool(baseline_ncu_rep and optimized_ncu_rep)
+    has_ncu_csv_pair = bool(baseline_ncu_csv and optimized_ncu_csv)
+    has_any_ncu_pair = has_ncu_rep_pair or has_ncu_csv_pair
+    missing: List[str] = []
+    if not has_nsys_pair:
+        missing.append("nsys_pair")
+    if not has_any_ncu_pair:
+        missing.append("ncu_pair")
+
+    result = {
+        "ok": not missing,
+        "profiles_dir": str(profiles_dir),
+        "pair_key": pair_key,
+        "pair_dir": str(search_dir),
+        "has_nsys_pair": has_nsys_pair,
+        "has_ncu_rep_pair": has_ncu_rep_pair,
+        "has_ncu_csv_pair": has_ncu_csv_pair,
+        "has_any_ncu_pair": has_any_ncu_pair,
+        "missing": missing,
+        "counts": {
+            "baseline_nsys": len(baseline_nsys),
+            "optimized_nsys": len(optimized_nsys),
+            "baseline_ncu_rep": len(baseline_ncu_rep),
+            "optimized_ncu_rep": len(optimized_ncu_rep),
+            "baseline_ncu_csv": len(baseline_ncu_csv),
+            "optimized_ncu_csv": len(optimized_ncu_csv),
+        },
+        "suggested_next_steps": [
+            "Capture baseline and optimized NSYS profiles to unlock timeline/flamegraph comparisons.",
+            "Capture baseline and optimized NCU profiles (or NCU CSV exports) to unlock kernel metric comparisons.",
+        ],
+    }
+    manifest_payload = {
+        "schema_version": "1.0",
+        "generated_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "label": "pair_health",
+        "pair_status": "complete" if result["ok"] else "partial",
+        "pair_dir": str(search_dir),
+        "profiles_dir": str(profiles_dir),
+        "pair_key": pair_key,
+        "availability": {
+            "has_nsys_pair": has_nsys_pair,
+            "has_ncu_rep_pair": has_ncu_rep_pair,
+            "has_ncu_csv_pair": has_ncu_csv_pair,
+        },
+        "missing": missing,
+        "counts": result["counts"],
+        "sample_artifacts": {
+            "baseline_nsys": str(baseline_nsys[0]) if baseline_nsys else None,
+            "optimized_nsys": str(optimized_nsys[0]) if optimized_nsys else None,
+            "baseline_ncu_rep": str(baseline_ncu_rep[0]) if baseline_ncu_rep else None,
+            "optimized_ncu_rep": str(optimized_ncu_rep[0]) if optimized_ncu_rep else None,
+            "baseline_ncu_csv": str(baseline_ncu_csv[0]) if baseline_ncu_csv else None,
+            "optimized_ncu_csv": str(optimized_ncu_csv[0]) if optimized_ncu_csv else None,
+        },
+    }
+    _write_pair_manifest(search_dir / _PAIR_MANIFEST_FILENAME, manifest_payload)
+    return result
+
+
 def _select_flamegraph_pair(
     profiles_dir: Path,
     pair_key: Optional[str] = None,
@@ -2014,9 +2221,10 @@ def generate_flamegraph_comparison(
     
     Returns structured data for the FlameGraphComparison React component.
     """
+    pair_health = assess_profile_pair_health(profiles_dir, pair_key=pair_key)
     pair, error = _select_flamegraph_pair(profiles_dir, pair_key=pair_key)
     if error:
-        return error
+        return {**error, "pair_health": pair_health}
     if pair is None:
         return None
     baseline_path, optimized_path = pair
@@ -2112,9 +2320,10 @@ def generate_flamegraph_comparison(
                 'optimized_wait_events': optimized_wait_events,
             },
             'insight': _generate_optimization_insight(baseline_api, optimized_api),
+            'pair_health': pair_health,
         }
     except Exception as exc:
-        return {'error': str(exc)}
+        return {'error': str(exc), 'pair_health': pair_health}
 
 
 def _generate_optimization_insight(baseline_api: Dict, optimized_api: Dict) -> str:

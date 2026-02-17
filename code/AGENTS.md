@@ -703,3 +703,170 @@ def get_output_tolerance(self) -> tuple:
 
 ## Keys are in .env, .env.local in the project root folder.  
 - Use these keys for external integrations (e.g. OpenAI, Anthropic, etc)
+
+## NVFP4 Group GEMM V2 Learnings (2026-02-16)
+- Timing semantics mismatch is material:
+  - Local v2 harness is often run with `AISP_NVFP4_GROUP_GEMM_INPUTS_PER_ITERATION=15`.
+  - Popcorn benchmark measures one `custom_kernel(data)` call per timed iteration.
+  - Always label metrics with the timing model used.
+- Measured baselines in this session:
+  - Local v2 case1 loop model (`inputs=15`): `10.336 us/group`.
+  - Local v2 single-call model (`inputs=1`): `14.090 us/group`.
+  - Local single-file parity run (steady-state style): about `41.434 us/group`.
+  - Popcorn benchmark for the same artifact showed case1 mean around `1701 us total` (`212.625 us/group`) with large outliers.
+  - Local parity runner updated to emulate Popcorn clone-precheck behavior, which reveals similar first-iteration outlier behavior.
+- Updated measurements (same day, after additional kernel patches):
+  - Local tuned case1 loop model (`inputs=15`, graph+flush+locked clocks): `10.390 us/group`.
+  - Local Popcorn-style parity (`popcorn_parity_case1.py`, single-call timing): `14.085 us/group` mean.
+  - Live Popcorn `mode=benchmark` is highly outlier-sensitive on this workload:
+    - Sample A case1: mean `1172 us total` (`146.5 us/group`), fast `69.3 us total` (`8.66 us/group`).
+    - Sample B case1: mean `1747 us total` (`218.375 us/group`), fast `69.8 us total` (`8.73 us/group`).
+  - Interpretation: use both mean and fast-path totals from Popcorn logs; means are currently dominated by sporadic long-tail outliers.
+- Latest checkpoint (same day, later):
+  - Local tuned case1 loop model (`inputs=15`, graph+flush+locked clocks) now measures `13.141 us/group`
+    with:
+    - `AISP_NVFP4_GROUP_GEMM_V2_UNROLL_N=2`
+    - `AISP_NVFP4_GROUP_GEMM_V2_WS_UNROLL2_MMA=1`
+    - `AISP_NVFP4_GROUP_GEMM_V2_EPILOGUE_LD_X32=1`
+    - `AISP_NVFP4_GROUP_GEMM_V2_MAXRREGCOUNT=68`
+    - `AISP_NVFP4_GROUP_GEMM_V2_CLUSTER_DIM_X=1`
+    - `AISP_NVFP4_GROUP_GEMM_V2_TMA_L2_PROMOTION=3`
+  - Local Popcorn parity runner:
+    - Warmup-enabled (`--warmup 3`) case1 mean: `14.045 us/group`.
+    - True clone-precheck/no-warmup (`--warmup 0`) case1 mean can spike to `~1569.7 us/group`
+      with p50 near `112 us/call`, showing first-call prep outliers dominate mean.
+  - Live Popcorn benchmark artifact:
+    - `artifacts/popcorn_checks/20260216T135839Z/benchmark_parsed.json`
+    - `artifacts/popcorn_checks/20260216T140735Z/benchmark_parsed.json`
+    - case1 mean `1885 us total` (`235.625 us/group`), fast `70.1 us total` (`8.76 us/group`), slow `182 ms`.
+    - This matches the local no-warmup outlier pattern: benchmark means are dominated by first-call/prep tails.
+- New checkpoint (same day, latest):
+  - Local tuned case1 loop model (`inputs=15`, graph+flush+locked clocks):
+    - `13.148 us/group` with explicit cta1 config (`UNROLL_N=2`, `WS_UNROLL2_MMA=1`,
+      `EPILOGUE_LD_X32=1`, `MAXRREGCOUNT=68`, `TMA_L2_PROMOTION=3`, `CLUSTER_DIM_X=1`).
+  - Same config with fused-request launch (`AISP_NVFP4_GROUP_GEMM_V2_FUSE_INPUTS=1`):
+    - `10.385 us/group` (loop model only; not directly Popcorn-comparable).
+  - Local Popcorn-style parity (`popcorn_parity_case1.py`):
+    - Warmed (`--warmup 3`): `14.111 us/group` mean.
+    - No-warmup clone-precheck (`--warmup 0`) still dominated by first-call outlier tails.
+  - Live Popcorn re-checks:
+    - `mode=test`: passed `10/10` on B200 (`artifacts/popcorn_checks/20260216T143352Z/popcorn_test.log`).
+    - `mode=benchmark`: `artifacts/popcorn_checks/20260216T143453Z/benchmark_parsed.json`.
+    - Case1 in that run: mean `1784 us total` (`223.0 us/group`), fast `70.4 us total` (`8.8 us/group`), slow `171 ms`.
+  - cta1 plateau sweep (case1, fused loop model, graph+flush+locked clocks, verify on):
+    - Best observed remains ~`10.377-10.385 us/group` with base config.
+    - `TMA_L2_PROMOTION`: `3` is best (`0/1/2` are slightly slower).
+    - `MAXRREGCOUNT` sweep `{56,60,64,68,72,80}` did not beat current `68`.
+    - `WS_SEGMENT_PARALLEL`, `MMA_LANE0_ALL_WARPS`, `WS_SFB1_SEGMENT_HELPERS`, `WS_SPLIT_U0_SEGS` all regressed or were neutral.
+    - cta_group::1 cluster launch (`CLUSTER_DIM_X=2/4`) and multicast (`ENABLE_TMA_MULTICAST=1`) regressed vs non-cluster cta1.
+- Important tooling/knob finding:
+  - `AISP_NVFP4_GROUP_GEMM_V2_BLOCK_M`, `AISP_NVFP4_GROUP_GEMM_V2_BLOCK_N`, and `AISP_NVFP4_GROUP_GEMM_V2_KPACK_TILE`
+    do not tune the tcgen05 kernel path (they affect the scalar path only). Do not spend tuning cycles on these for tcgen.
+- Compile-time knob sweep snapshot (case1, `inputs=1`, locked clocks):
+  - `baseline`: `14.031 us/group`.
+  - `AISP_NVFP4_GROUP_GEMM_V2_MMA_LANE0_ALL_WARPS=1`: `14.035 us/group` (neutral).
+  - `AISP_NVFP4_GROUP_GEMM_V2_WS_SEGMENT_PARALLEL=1`: `13.954 us/group` (small win).
+  - `AISP_NVFP4_GROUP_GEMM_V2_WARP0_ONLY_MAINLOOP=0`: `15.527 us/group` (regression).
+  - Net: no large win from these toggles alone.
+- Additional compile-time sweep (case1, `inputs=15`, graph+flush+locked clocks, verify on):
+  - `base` (`WS_UNROLL2_MMA=1`, `EPILOGUE_LD_X32=1`, `MAXRREGCOUNT=68`): `13.15 us/group`.
+  - `WS_TMA_PRODUCER=1`: `14.734 us/group` (regression).
+  - `WS_SFB1_SEGMENT_HELPERS=1`: `13.463 us/group` (regression vs base).
+  - `PIPELINE_STAGES=1` + `STAGE1_PREFETCH=1`: `15.124 us/group` (regression).
+  - `USE_UTCCP_64X128B_*` schedule-1 variants (SFA-only, SFB-only, both): all failed verification.
+  - Conclusion: keep current base compile config; 64x128b UTCCP remains correctness-unsafe in this path.
+- Popcorn portability constraints:
+  - Submission must be single-file and avoid repo-relative imports.
+  - Embedded CUDA source + temp-file JIT is acceptable.
+  - Ensure parent directories exist before `torch.utils.cpp_extension.load(..., build_directory=...)`.
+- Standard Popcorn check command:
+  - `scripts/nvfp4_popcorn_check.sh <submission.py> test|benchmark`
+  - Artifacts are written to `artifacts/popcorn_checks/<timestamp>/`.
+- cta_group::2 correctness findings (case1):
+  - `cluster=2, unroll=1`: only `AISP_NVFP4_GROUP_GEMM_V2_CTA2_PARTITION_B=1` verifies.
+  - `cluster=2, unroll=1`: partition `0` and `2` fail.
+  - `cluster=2, unroll=2`: partition `0/1/2` currently fail (NaN/incorrect).
+- cta2/unroll2 bring-up notes:
+  - Removed host/kernel forced mode0 override for unroll2 so partition modes can be tested.
+  - Added mode1 partitioned B load path + per-`u` SFB load path for unroll2.
+  - Adjusted unroll2 cta2 TMEM C rank partition to use DP-axis partitioning to remove NaN-producing overlap; outputs are now finite but still numerically incorrect.
+  - Added explicit unroll2 mode1 partitioned B/SFB TMA load paths with rank-aware SFB row offsets and matching barrier byte accounting.
+  - Current cta2 matrix after latest patches:
+    - `u=1,p=1`: PASS.
+    - `u=1,p=0/2`: FAIL.
+    - `u=2,p=0/1/2`: FAIL (finite, no longer universal NaN).
+  - Notable improvement: `u=2,p=1` no longer exhibits the previous uniform `~1.97x` scaling error after SFB partition plumbing updates, but it remains incorrect.
+  - Additional cta2/unroll2 debug sweeps:
+    - Sweeping `AISP_NVFP4_GROUP_GEMM_V2_CTA2_TMEM_SF_RANK_WORD_OFFSET` across `{32,40,48,56,64,80,96}`
+      and `AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_SLOT_MODE` across `{0,1}` did not produce a pass.
+    - Sweeping `AISP_NVFP4_GROUP_GEMM_V2_CTA2_TSFB_WORD_OFFSET` across `{0,4,8,12,16,20,24,28,32}`
+      with both SFB slot modes did not produce a pass.
+    - `WS_UNROLL2_MMA=0` did not fix cta2/unroll2 correctness.
+  - Hard isolating evidence from latest TMEM/debug probes:
+    - `debug_print_ptrs` + staged-byte dumps confirm `u=0` and `u=1` B/SFB payloads are distinct in SMEM,
+      so the duplication bug is not caused by identical TMA source data.
+    - `debug_tmem_dump=1` (tile0 base) and `debug_tmem_dump=2` (tile1 base) produce identical dumps under
+      both `dp+128` and `idx+1` tile1 mappings, indicating cta2/unroll2 `u=1` C addressing still aliases tile0.
+    - Trial `u=1` mapping `col+64` produced immediate NaNs (invalid for current layout).
+    - Trial `u=1` mapping `col+128` made tile0 match reference exactly but tile1 became NaN, consistent with
+      unavoidable overlap in the current cta2 TMEM col layout.
+    - Practical conclusion: cta2/unroll2 needs a true non-overlapping accumulator+scale TMEM layout
+      (or N256-style cta2 path), not incremental pointer tweaks.
+  - Strong isolating signal from reduced-shape probes:
+    - `cta2 + unroll2 + partition_b=1` passes for `n=128` and fails immediately for `n>=256`.
+    - Therefore the defect is specifically in the second-N-tile (`u=1`) path, not the base `u=0` path.
+  - Accumulator-addressing probe insight:
+    - Forcing `tmem_c_tiles[1] = tmem_c_tiles[0]` produced effectively identical numerical failures to
+      `tmem_c_tiles[1] = tmem_addr_add(..., dp_add=128, col_add=0)`.
+    - In the current 2SM repeated-MMA flow, varying the `u=1` TMEM C pointer does not separate the second tile as expected.
+    - Working hypothesis: cta_group::2 repeated N128 MMAs are aliasing the same accumulator region; fixing likely requires
+      a true N256-style cta2 path (or equivalent non-aliased layout), not pointer-offset sweeps.
+  - cta2 launch-path note:
+    - cta2 kernels currently run via legacy max-tile grid path (`cta_*_map` pointers are null in cta2 launches),
+      so packed-CTA ordering knobs do not affect cta2 behavior today.
+- New kernel/host experiments from this session:
+  - TMEM per-rank SF base now uses `tcgen05::tmem_addr_add(...)` instead of raw integer addition.
+  - Added cta2 mode1-specific SFB N-major packing path in host prepare and matching kernel row-offset mode.
+  - Result so far: cta1/unroll2 and cta2/unroll1 remain correct; cta2/unroll2 still fails verification.
+  - This path is still not correctness-closed and must be fixed before perf tuning.
+- Cluster/multicast rule:
+  - Keep multicast off until cta2/unroll2 correctness is stable.
+  - If multicast is re-enabled, retain only with measured net win and cluster-safe barrier semantics.
+- Iteration loop to maintain momentum:
+  - Inner loop: case1 only, verify on, Popcorn timing model.
+  - Mid loop: periodic Popcorn benchmark checks with archived artifacts.
+  - Outer loop: full 4-case local validation before promoting configs.
+  - Keep knob settings explicit and logged; avoid hidden default drift.
+- Latest update (2026-02-16, evening):
+  - Local tuned cta1 case1 loop model remains stable at `~10.451 us/group` with:
+    - `UNROLL_N=2`, `WS_UNROLL2_MMA=1`, `EPILOGUE_LD_X32=1`, `TMA_L2_PROMOTION=3`, `FUSE_INPUTS=1`.
+  - Live Popcorn re-check against `labs/nvfp4_group_gemm_v2/popcorn_submission_case1_v2.py`:
+    - `mode=test`: pass `10/10` (`artifacts/popcorn_checks/20260216T170200Z/popcorn_test.log`).
+    - `mode=benchmark`: case1 mean `1771 us total` (`221.375 us/group`) with heavy outliers, but fast-path
+      `69.7 us total` (`8.7125 us/group`) (`artifacts/popcorn_checks/20260216T170327Z/benchmark_parsed.json`).
+  - cta2/unroll2 experiments in this pass (all still failing verify):
+    - Removed unroll2-only SFB rank row shift in mode1 TMA issue paths: no correctness fix.
+    - Removed experimental `tmem_c` tile1 idx split: no correctness fix.
+    - Switched unroll2 rank partition from TMEM DP to TMEM idx (for C and SF): no correctness fix.
+    - Tested high-bit (`sf_id`) rank split: illegal instruction (reverted).
+    - Tested `sfb_box_height=64` for cta2 mode1: deadlock/hang (reverted to 128).
+  - Current cta2/unroll2 failure signature:
+    - Finite but structurally wrong outputs with group-wise MAE around `~75` and max abs around `~455`.
+    - Ratio `got/ref` is roughly `~1.9x` on average, indicating a persistent 2-CTA partition/layout mismatch.
+  - Latest update (2026-02-16, late evening, CUTLASS layout probe pass):
+    - Added a tiny probe at `labs/nvfp4_group_gemm_v2/tmem_sf_frg_probe.cu` that prints encoded TMEM deltas for:
+      - `C` fragment `(rank,u)` for 2SM/unroll2,
+      - `SFA` fragment `(rank,seg)`,
+      - `SFB` fragment `(rank,u,seg)`.
+    - Probe confirmed compact CUTLASS SF fragment address deltas in encoded form for VS=16:
+      - `SFA`: rank step `+0x4`, seg encoded in top 2 bits.
+      - `SFB`: rank step `+0x8`, u step `+0x4`, seg encoded in top 2 bits.
+    - Attempted to hard-wire this sf-id-in-address mapping directly into cta2/unroll2 kernel path:
+      - Result: `cudaErrorIllegalInstruction` (reverted).
+    - Stabilized back to the pre-existing safe cta2/unroll2 mapping (no illegal instruction), but correctness is still failing with the same structural mismatch.
+  - Follow-up sweep after probe integration:
+    - Kept cta2/unroll2 accumulator rank split in TMEM idx-space (stable/no-illegal path).
+    - Switched only cta2/unroll2 SFA/SFB rank split from idx-space to column-space and swept rank stride:
+      - tried `8`, `16`, `24`, `32` columns.
+      - all still fail case1 verify (max-abs stays roughly in `~435..466` range depending on run).
+    - Current best interpretation: scale rank addressing alone is not the sole blocker; cta2/unroll2 still has a deeper 2-CTA partition/layout mismatch.

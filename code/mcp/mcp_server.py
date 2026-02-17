@@ -328,7 +328,7 @@ _EXPECTATION_OVERRIDES: Dict[str, str] = {
     "benchmark_report": "Generates a report from existing benchmark JSON; writes PDF/HTML to the chosen output.",
     "benchmark_export": "Exports existing benchmark JSON to csv/markdown/json; writes to the chosen output file.",
     "benchmark_compare_runs": "Diffs two benchmark JSON files; CPU-bound and quick, writes only if an output is specified.",
-    "profile_nsys": "Calls Nsight Systems; requires nsys installed and writes .nsys-rep under artifacts/runs/<run_id>/profiles/tools/<tool>/<label>/ by default. Serialized via the MCP queue runner under artifacts/parallel_runs to prevent overlap. Slow/interactive; run status or triage first. Default preset is full; set preset=light explicitly to shrink traces.",
+    "profile_nsys": "Calls Nsight Systems; requires nsys installed and writes .nsys-rep under artifacts/runs/<run_id>/profiles/tools/<tool>/<label>/ by default. Serialized via the MCP queue runner under artifacts/parallel_runs to prevent overlap. Slow/interactive; run status or triage first. Default preset is light; set preset=full for richer traces.",
     "profile_ncu": "Calls Nsight Compute; requires ncu installed and writes .ncu-rep under artifacts/runs/<run_id>/profiles/tools/<tool>/<label>/ by default. Serialized via the MCP queue runner under artifacts/parallel_runs to prevent overlap. Slow/interactive; run status or triage first. Defaults to memory_bound metric set; opt into heavier modes explicitly.",
     "profile_compare": "Generates flame graph comparison + side-by-side Nsight Systems/Compute JSON report; parses NSYS reports and may traverse multiple files; allow extra runtime.",
     "hw_speed": "Runs GPU/host micro-benchmarks; stresses hardware briefly. Run status first; supports precheck_only/dry_run/timeout_seconds.",
@@ -1055,6 +1055,159 @@ def _default_benchmark_report_path(result: Dict[str, Any], fmt: str) -> Optional
     return None
 
 
+def _parse_event_message(message: Any) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """Parse benchmark event lines encoded as `EVENT <name> <json-payload>`."""
+    if not isinstance(message, str):
+        return None, None
+    if not message.startswith("EVENT "):
+        return None, None
+    event_body = message[len("EVENT "):]
+    if " " not in event_body:
+        return None, None
+    event_name, payload_text = event_body.split(" ", 1)
+    try:
+        payload = json.loads(payload_text)
+    except Exception:
+        return event_name, None
+    return event_name, payload if isinstance(payload, dict) else None
+
+
+def _extract_speedup_attribution(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Derive non-LLM speedup attribution from benchmark EVENT logs."""
+    run_dir = result.get("run_dir")
+    if not run_dir and result.get("results_json"):
+        try:
+            run_dir = str(Path(str(result["results_json"])).parent.parent)
+        except Exception:
+            run_dir = None
+    if not run_dir:
+        return None
+
+    log_path = Path(str(run_dir)) / "logs" / "benchmark.log"
+    if not log_path.exists():
+        return None
+
+    metric_fields = (
+        "kernel_time_ms",
+        "sm_throughput_percent",
+        "dram_throughput_percent",
+        "l2_throughput_percent",
+        "occupancy",
+    )
+    baseline_ncu: Dict[Tuple[str, str], Dict[str, float]] = {}
+    optimized_ncu: Dict[Tuple[str, str, str], Dict[str, float]] = {}
+    optimizations: List[Dict[str, Any]] = []
+
+    for raw_line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            line_obj = json.loads(raw_line)
+        except Exception:
+            continue
+        event_name, payload = _parse_event_message(line_obj.get("message"))
+        if not event_name or not payload:
+            continue
+
+        chapter = str(payload.get("chapter") or "").strip()
+        example = str(payload.get("example") or "").strip()
+        if not chapter or not example:
+            continue
+
+        if event_name == "profiler_end":
+            profiler = str(payload.get("profiler") or "").strip().lower()
+            status = str(payload.get("status") or "").strip().lower()
+            if profiler != "ncu" or status != "succeeded":
+                continue
+            metrics_obj = payload.get("metrics")
+            if not isinstance(metrics_obj, dict):
+                continue
+            metrics: Dict[str, float] = {}
+            for field_name in metric_fields:
+                value = metrics_obj.get(field_name)
+                if isinstance(value, (int, float)):
+                    metrics[field_name] = float(value)
+            if not metrics:
+                continue
+            variant = str(payload.get("variant") or "").strip().lower()
+            if variant == "baseline":
+                baseline_ncu[(chapter, example)] = metrics
+            elif variant == "optimized":
+                technique = str(payload.get("technique") or "").strip()
+                if technique:
+                    optimized_ncu[(chapter, example, technique)] = metrics
+            continue
+
+        if event_name == "optimization_result":
+            optimizations.append(payload)
+
+    if not optimizations:
+        return None
+
+    items: List[Dict[str, Any]] = []
+    for payload in optimizations:
+        chapter = str(payload.get("chapter") or "").strip()
+        example = str(payload.get("example") or "").strip()
+        technique = str(payload.get("technique") or "").strip()
+        if not chapter or not example:
+            continue
+
+        baseline = baseline_ncu.get((chapter, example))
+        optimized = optimized_ncu.get((chapter, example, technique)) if technique else None
+        delta: Dict[str, Dict[str, float]] = {}
+        if baseline and optimized:
+            for field_name in metric_fields:
+                base_val = baseline.get(field_name)
+                opt_val = optimized.get(field_name)
+                if base_val is None or opt_val is None:
+                    continue
+                delta_entry: Dict[str, float] = {
+                    "baseline": base_val,
+                    "optimized": opt_val,
+                    "absolute_delta": opt_val - base_val,
+                }
+                if base_val != 0.0:
+                    delta_entry["percent_delta"] = ((opt_val - base_val) / base_val) * 100.0
+                delta[field_name] = delta_entry
+
+        notes: List[str] = []
+        if baseline and optimized:
+            confidence = "high"
+            if not delta:
+                notes.append("Baseline and optimized NCU runs succeeded, but no overlapping attribution metrics were present.")
+        elif baseline and not optimized:
+            confidence = "partial"
+            notes.append("Baseline NCU metrics are available, but optimized NCU metrics were not captured.")
+        elif optimized and not baseline:
+            confidence = "partial"
+            notes.append("Optimized NCU metrics are available, but baseline NCU metrics were not captured.")
+        else:
+            confidence = "none"
+            notes.append("Neither baseline nor optimized NCU metrics were captured for this optimization.")
+
+        items.append(
+            {
+                "target": f"{chapter}:{example}",
+                "technique": technique or payload.get("optimization_file"),
+                "status": payload.get("status"),
+                "speedup": payload.get("speedup"),
+                "time_ms": payload.get("time_ms"),
+                "ncu": {
+                    "baseline": baseline,
+                    "optimized": optimized,
+                    "delta": delta if delta else None,
+                },
+                "confidence": confidence,
+                "notes": notes,
+            }
+        )
+
+    if not items:
+        return None
+    return {
+        "source": str(log_path),
+        "items": items,
+    }
+
+
 def _maybe_run_post_benchmark_steps(
     result: Dict[str, Any],
     *,
@@ -1096,6 +1249,9 @@ def _maybe_run_post_benchmark_steps(
                 "context_level": context_level,
             }
         )
+    attribution = _extract_speedup_attribution(updated)
+    if attribution:
+        updated["speedup_attribution"] = attribution
     return updated
 
 
@@ -2100,7 +2256,7 @@ def tool_system_network(params: Dict[str, Any]) -> Dict[str, Any]:
     "Tags: benchmarks, run, profiling, performance-test, chapters, labs, validation. "
     "Run benchmarks via the bench CLI with optional profiling and LLM analysis. "
     "MCP serializes bench/profiling runs via a hidden queue under artifacts/parallel_runs to prevent overlap. "
-    "Returns: {stdout, stderr, returncode, duration_seconds, results_json (best-effort), run_dir (best-effort), suggested_next_steps}. "
+    "Returns: {stdout, stderr, returncode, duration_seconds, results_json (best-effort), run_dir (best-effort), speedup_attribution (best-effort), suggested_next_steps}. "
     "⚠️ SLOW: 2-30+ minutes depending on targets. ALWAYS run status first! "
     "USE when: Validating optimizations, generating benchmark data for comparison. "
     "Example: \"Run ch07 benchmarks\" or \"Benchmark attention examples\". "
@@ -2118,7 +2274,7 @@ def tool_system_network(params: Dict[str, Any]) -> Dict[str, Any]:
     "4) profile_compare / compare_nsys / compare_ncu (point at a profiles_dir that contains baseline+optimized .nsys-rep/.ncu-rep). "
     "DEEP DIVE WORKFLOW (one-shot): use benchmark_deep_dive_compare for run+profile+diff in one call. "
     "WORKFLOW: status → list_chapters → run_benchmarks → benchmark_triage. "
-    "By default, MCP runs post-benchmark triage + HTML report generation for richer detail. "
+    "By default, MCP runs post-benchmark triage + HTML report generation for richer detail, and emits non-LLM speedup attribution from profiler metrics when available. "
     "Disable with auto_analyze=false or auto_report=false if you only want raw results. "
     "NOT FOR: Quick GPU health (use hw_speed first).",
     {
@@ -2234,18 +2390,19 @@ def tool_system_network(params: Dict[str, Any]) -> Dict[str, Any]:
                 "type": "string",
                 "description": (
                     "Nsight Compute metric preset: auto, minimal, deep_dive, or roofline. "
-                    "If auto, the profile type governs metric selection."
+                    "Default is minimal for safer profiling."
                 ),
                 "enum": ["auto", "minimal", "deep_dive", "roofline"],
-                "default": "auto",
+                "default": "minimal",
             },
             "ncu_replay_mode": {
                 "type": "string",
                 "description": (
                     "Nsight Compute replay mode: kernel or application. "
-                    "When set, overrides the minimal preset replay mode."
+                    "Default is kernel for safer profiling on dynamic workloads."
                 ),
                 "enum": ["kernel", "application"],
+                "default": "kernel",
             },
             "allow_invalid_environment": {
                 "type": "boolean",
@@ -2348,8 +2505,8 @@ def tool_run_benchmarks(params: Dict[str, Any]) -> Dict[str, Any]:
     timeout_multiplier = params.get("timeout_multiplier")
     nsys_timeout_seconds = params.get("nsys_timeout_seconds")
     ncu_timeout_seconds = params.get("ncu_timeout_seconds")
-    ncu_metric_set = params.get("ncu_metric_set", "auto")
-    ncu_replay_mode = params.get("ncu_replay_mode")
+    ncu_metric_set = params.get("ncu_metric_set", "minimal")
+    ncu_replay_mode = params.get("ncu_replay_mode", "kernel")
     allow_invalid_environment = bool(params.get("allow_invalid_environment", False))
     allow_virtualization = bool(params.get("allow_virtualization", True))
     allow_mixed_provenance = bool(params.get("allow_mixed_provenance", False))
@@ -5872,7 +6029,8 @@ def tool_profile_compare(params: Dict[str, Any]) -> Dict[str, Any]:
     "USE when: Need detailed timeline view, understanding kernel launch patterns, API overhead. "
     "Example: \"Profile python train.py with nsys\" or \"Capture timeline for batch 32 inference\". "
     "⚠️ SLOW: 1-10+ minutes depending on workload. ALWAYS use dry_run=true first to preview command. "
-    "PRESETS: preset='light' for quick/small traces, preset='full' (default) for comprehensive data. "
+    "PRESETS: preset='light' (default) for quick/small traces, preset='full' for comprehensive data. "
+    "Reliability knobs: wait_mode='primary' (default) and finalize_grace_seconds help finalize reports on timeout-prone captures. "
     "STREAM/OVERLAP STUDIES: set full_timeline=true and add NVTX ranges in the code so overlap is visible. "
     "WORKFLOW: status → profile_nsys(dry_run=true) → profile_nsys → nsys_summary → compare_nsys. "
     "COMPARE: compare_nsys auto-pairs baseline/optimized across subdirectories; pass pair if multiple pairs exist. "
@@ -5902,12 +6060,23 @@ def tool_profile_compare(params: Dict[str, Any]) -> Dict[str, Any]:
         "trace_nvtx": {"type": "boolean", "default": True, "description": "Trace NVTX ranges"},
         "trace_osrt": {"type": "boolean", "default": True, "description": "Trace OS runtime"},
         "full_timeline": {"type": "boolean", "default": False, "description": "Trace cuda-hw, cublas, cusolver, cusparse, cudnn (richer timelines)"},
-        "trace_forks": {"type": "boolean", "default": True, "description": "Trace child processes before exec"},
+        "trace_forks": {"type": "boolean", "default": False, "description": "Trace child processes before exec"},
         "preset": {
             "type": "string",
-            "description": "NSYS preset: full (default, adds cuda-hw/cublas/cusolver/cusparse/cudnn + fork tracing) or light (smaller/faster)",
+            "description": "NSYS preset: light (default, smaller/faster) or full (adds cuda-hw/cublas/cusolver/cusparse/cudnn + fork tracing)",
             "enum": ["light", "full"],
-            "default": "full"
+            "default": "light"
+        },
+        "wait_mode": {
+            "type": "string",
+            "description": "NSYS --wait mode (primary or all). primary reduces finalize hangs on short runs.",
+            "enum": ["primary", "all"],
+            "default": "primary"
+        },
+        "finalize_grace_seconds": {
+            "type": "number",
+            "description": "Grace window after timeout SIGINT to allow NSYS to finalize a report.",
+            "default": 20.0
         },
         "force_lineinfo": {
             "type": "boolean",
@@ -5961,8 +6130,12 @@ def tool_profile_nsys(params: Dict[str, Any]) -> Dict[str, Any]:
     trace_nvtx = bool(params.get("trace_nvtx", True))
     trace_osrt = bool(params.get("trace_osrt", True))
     full_timeline = bool(params.get("full_timeline", False))
-    trace_forks = bool(params.get("trace_forks", True))
+    trace_forks = bool(params.get("trace_forks", False))
     preset = normalize_param("preset", params.get("preset"), "light")
+    wait_mode = normalize_param("wait_mode", params.get("wait_mode"), "primary")
+    if wait_mode not in {"primary", "all"}:
+        return make_error("wait_mode must be 'primary' or 'all'", include_context, context_level)
+    finalize_grace_seconds = float(params.get("finalize_grace_seconds", 20.0))
     force_lineinfo = bool(params.get("force_lineinfo", True))
     precheck_only = bool(params.get("precheck_only", False))
     dry_run = bool(params.get("dry_run") or params.get("estimate_only"))
@@ -6002,11 +6175,13 @@ def tool_profile_nsys(params: Dict[str, Any]) -> Dict[str, Any]:
             "dry_run": True,
             **precheck,
             "preset": preset,
+            "wait_mode": wait_mode,
+            "finalize_grace_seconds": finalize_grace_seconds,
             "full_timeline": full_timeline or preset == "full",
             "force_lineinfo": force_lineinfo,
             "timeout_seconds": timeout_seconds if timeout_seconds and timeout_seconds > 0 else None,
             "planned_output": str(output_path),
-            "note": "Set dry_run=false to execute; use async=true to background the run. Default preset is full; set preset=light for smaller/faster traces.",
+            "note": "Set dry_run=false to execute; use async=true to background the run. Default preset is light; set preset=full for richer traces.",
             "run_id": run_id,
             "run_dir": str(run_dir),
             "profiles_dir": str(profile_dir),
@@ -6039,6 +6214,8 @@ def tool_profile_nsys(params: Dict[str, Any]) -> Dict[str, Any]:
                 preset=preset,
                 force_lineinfo=force_lineinfo,
                 timeout_seconds=timeout_seconds if timeout_seconds and timeout_seconds > 0 else None,
+                wait_mode=wait_mode,
+                finalize_grace_seconds=finalize_grace_seconds,
             )
         nsys_metrics: Dict[str, Any] = {}
         nsys_metrics_error = None
@@ -6060,11 +6237,13 @@ def tool_profile_nsys(params: Dict[str, Any]) -> Dict[str, Any]:
             "nsys_available": auto.nsys_available,
             "cwd": str(getattr(auto, "last_run", {}).get("cwd", profile_dir)),
             "preset": preset,
+            "wait_mode": wait_mode,
+            "finalize_grace_seconds": finalize_grace_seconds,
             "full_timeline": full_timeline or preset == "full",
             "force_lineinfo": force_lineinfo,
             "timeout_seconds": timeout_seconds if timeout_seconds and timeout_seconds > 0 else None,
             "timeout_hit": bool(auto.last_run.get("timeout_hit")) if hasattr(auto, "last_run") else False,  # type: ignore[attr-defined]
-            "warning": "NSYS full timeline enabled by default: captures may run slower and produce large traces; set preset=light to keep it small." if preset == "full" or full_timeline else "Set preset=light to reduce trace size/runtime.",
+            "warning": "NSYS full timeline enabled: captures may run slower and produce large traces; set preset=light to keep it small." if preset == "full" or full_timeline else "Using light NSYS preset for safer/faster capture.",
             "error": auto.last_error if path is None else None,
             "run_details": getattr(auto, "last_run", {}),  # type: ignore[attr-defined]
             "nsys_metrics": nsys_metrics,
@@ -7755,7 +7934,7 @@ def tool_compare_nsys(params: Dict[str, Any]) -> Dict[str, Any]:
     "🕐 MEDIUM (~5s). USE when: Deep-diving into kernel-level improvements. "
     "Tip: if you used benchmark_deep_dive_compare, pass benchmarks[].profiles_dir here. "
     "Auto-pairs baseline/optimized across subdirectories; if multiple pairs exist, provide pair to select one. "
-    "Rank-only kernel symbol alignment is flagged as low-confidence for tuning and surfaced as a failed comparison. "
+    "Rank-only kernel symbol alignment is flagged as low-confidence for tuning and surfaced with an advisory warning. "
     "Always returns nsys/ncu comparison metrics when profiles are captured; analyze metric deltas to explain speedups/regressions. "
     "WORKFLOW: profile_ncu → optimize → compare_ncu. NOT FOR: Timeline comparison (use compare_nsys).",
     {"type": "object", "properties": with_context_params({
@@ -7779,10 +7958,10 @@ def tool_compare_ncu(params: Dict[str, Any]) -> Dict[str, Any]:
         elif isinstance(result, dict):
             alignment_valid = bool(result.get("alignment_valid_for_tuning", True))
             if not alignment_valid:
-                result["success"] = False
-                result["error"] = (
+                result.setdefault("success", True)
+                result["advisory_warning"] = (
                     "NCU kernel comparison alignment is low-confidence (rank-only/unmatched symbols). "
-                    "Re-capture with tighter NVTX includes and kernel filters for decisive kernel deltas."
+                    "Per-kernel deltas are advisory; rely on aggregate metrics and re-capture with tighter filters for decisive tuning."
                 )
                 result.setdefault(
                     "hint",

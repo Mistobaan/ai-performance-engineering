@@ -162,7 +162,11 @@ Profiling with Nsight Systems, Nsight Compute, and torch.profiler.
 
 **MCP profiling captures include metrics JSON:** `profile_nsys` returns `nsys_metrics`, `profile_ncu` returns `ncu_metrics`, `profile_torch` returns `torch_metrics` (and `report` alias), and `profile_hta` includes `nsys_metrics`. Use these payloads to analyze regressions and bottleneck shifts.
 
-**Targeted NCU capture (CLI + MCP):** `profile_ncu` supports kernel scoping (`kernel_filter`, optional `kernel_name_base`) plus NVTX gating (`nvtx_include`, `profile_from_start='off'`) to isolate specific kernels and avoid setup-noise captures. Captures now fail loudly when NCU profiles zero kernels or collects zero metrics, and `metric_set='minimal'` auto-resolves to `speed-of-light` or `basic` depending on Nsight Compute version. `compare_ncu` now flags rank-only kernel symbol alignment as low-confidence for tuning.
+**Targeted NCU capture (CLI + MCP):** `profile_ncu` supports kernel scoping (`kernel_filter`, optional `kernel_name_base`) plus NVTX gating (`nvtx_include`, `profile_from_start='off'`) to isolate specific kernels and avoid setup-noise captures. Captures now fail loudly when NCU profiles zero kernels or collects zero metrics, and `metric_set='minimal'` auto-resolves to `speed-of-light` or `basic` depending on Nsight Compute version. `compare_ncu` flags rank-only kernel symbol alignment as low-confidence for tuning (advisory), applies kernel-family alias matching, and returns a concrete `staged_pair_dir` for stable follow-up diffs.
+
+**Pair-health + manifests (CLI + MCP):** profile comparisons now emit `pair_health` metadata (presence/absence of baseline/optimized NSYS/NCU pairs), and comparison staging writes `pair_manifest.json` so downstream automation can consume deterministic pair context without re-discovering files.
+
+**NSYS timeout hardening (CLI + MCP):** `profile_nsys` defaults to the safer `preset='light'`, supports `wait_mode` (`primary`/`all`), and uses a graceful timeout finalization window (`finalize_grace_seconds`) before hard termination. This improves robustness on captures that stall during report finalization.
 
 **Python API:**
 ```python
@@ -311,6 +315,8 @@ engine.benchmark.speed_test()                   # Quick GEMM/attention test
 - CUDA benchmarks execute via Python wrappers (`CudaBinaryBenchmark`); direct `.cu` runs are not supported.
 - Ad-hoc script runs should use `benchmark_main` (supports `--iterations`, `--warmup`, and defaults to `--force-sync`; disable with `--no-force-sync` or `AISP_FORCE_SYNC=0`).
 - Use `--force-sync` (CLI) / `force_sync=true` (MCP) to insert a device-wide synchronize after each `benchmark_fn()` when you need an extra safety net outside standard harness timing.
+- Safer profiling defaults are `--ncu-metric-set minimal` and `--ncu-replay-mode kernel` (same defaults in MCP `run_benchmarks`).
+- MCP `run_benchmarks` emits `speedup_attribution` from captured profiler metrics when available, without requiring an LLM backend.
 - Use `--only-cuda` / `only_cuda=true` to run only CUDA binary wrappers, or `--only-python` / `only_python=true` to skip them.
 
 **Note:** `aisp benchmark ...` commands are diagnostic microbenchmarks (`hw_*` tools) and do not use the harness.

@@ -185,6 +185,26 @@ def load_v2_custom_cuda_nvfp4_group_gemm(*, verbose: bool = False) -> object:
         extra_cuda_cflags.append(
             f"-DNVFP4_GROUP_GEMM_V2_WARP0_ONLY_MAINLOOP={int(warp0_only_mainloop)}"
         )
+    use_cutlass_tmem_sf_frg = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_USE_CUTLASS_TMEM_SF_FRG")
+    if use_cutlass_tmem_sf_frg is not None and use_cutlass_tmem_sf_frg.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_USE_CUTLASS_TMEM_SF_FRG={int(use_cutlass_tmem_sf_frg)}"
+        )
+    cta2_sf_dp_bank = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SF_DP_BANK")
+    if cta2_sf_dp_bank is not None and cta2_sf_dp_bank.strip() != "":
+        extra_cuda_cflags.append(f"-DNVFP4_GROUP_GEMM_V2_CTA2_SF_DP_BANK={int(cta2_sf_dp_bank)}")
+    cta2_sfa_sf_id = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID")
+    if cta2_sfa_sf_id is not None and cta2_sfa_sf_id.strip() != "":
+        val = int(cta2_sfa_sf_id)
+        if val < 0 or val > 3:
+            raise ValueError(f"AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID must be 0..3, got {val}")
+        extra_cuda_cflags.append(f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID={val}")
+    cta2_sfb_sf_id = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID")
+    if cta2_sfb_sf_id is not None and cta2_sfb_sf_id.strip() != "":
+        val = int(cta2_sfb_sf_id)
+        if val < 0 or val > 3:
+            raise ValueError(f"AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID must be 0..3, got {val}")
+        extra_cuda_cflags.append(f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID={val}")
     mma_lane0_all_warps = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_MMA_LANE0_ALL_WARPS")
     if mma_lane0_all_warps is not None and mma_lane0_all_warps.strip() != "":
         extra_cuda_cflags.append(
@@ -489,6 +509,7 @@ def prepare_v2_custom_cuda_tcgen05(data_list: Sequence[input_t]) -> Optional[Seq
         unroll_n = _env_int("AISP_NVFP4_GROUP_GEMM_V2_UNROLL_N", 1)
         if unroll_n not in (1, 2):
             raise ValueError(f"AISP_NVFP4_GROUP_GEMM_V2_UNROLL_N must be 1 or 2, got {unroll_n}")
+        cta2_partition_b = _env_int("AISP_NVFP4_GROUP_GEMM_V2_CTA2_PARTITION_B", 1)
         # UnrollN=2 relies on a different (K-major) packed SFB layout and 256-row TMA loads.
         # This is now supported for both cta_group::1 and experimental cta_group::2 launches.
         # Extra B padding is not required for our current cta_group::2 bring-up modes.
@@ -576,15 +597,17 @@ def prepare_v2_custom_cuda_tcgen05(data_list: Sequence[input_t]) -> Optional[Seq
                 padded[:n_tiles_actual].copy_(sfb_inv_u8)
                 sfb_inv_u8 = padded
 
+            # For UnrollN=2 we keep K-major SFB packing so adjacent N tiles are contiguous
+            # for each K tile in both cta_group::1 and cta_group::2 paths.
+            use_sfb_k_major = unroll_n == 2
+
             sfa_packed, sfb_packed = _pack_scale_tiles_for_tcgen05(
                 sfa_inv_u8,
                 sfb_inv_u8,
                 m=m,
                 n=n,
                 k_scales=k_scale,
-                # For UnrollN=2 we pack SFB as [k_tiles, n_tiles, 128, 16] so a single 256-row
-                # tensormap load pulls in (tile_n, tile_n+1) contiguously for a fixed k_tile.
-                sfb_k_major=(unroll_n == 2),
+                sfb_k_major=use_sfb_k_major,
             )
 
             a_padded_tensors.append(a_pad)
@@ -652,18 +675,15 @@ def prepare_v2_custom_cuda_tcgen05(data_list: Sequence[input_t]) -> Optional[Seq
         # For cta_group::2, the B tensormap box height must match how the kernel partitions B.
         # Mode 1 (global N shift) loads only N/2 rows per CTA; mode 2 loads the full N rows and
         # shifts the SMEM descriptor base by N/2.
-        cta2_partition_b = _env_int("AISP_NVFP4_GROUP_GEMM_V2_CTA2_PARTITION_B", 1)
-        if use_cta2 and unroll_n == 2:
-            # Bring-up: keep B duplicated across the 2 CTAs for UnrollN=2.
-            # The kernel forces this mode internally; match the tensormap box height here.
-            cta2_partition_b = 0
         if not use_cta2:
             # UnrollN=2 optimization: use a 256-row B tensormap box so the kernel can load both
             # adjacent N128 tiles in a single TMA transaction per K tile.
             b_box_height = 256 if unroll_n == 2 else 128
         elif cta2_partition_b == 1:
-            # Mode 1 (global N shift) loads only N/2 rows per CTA.
-            b_box_height = 128 if unroll_n == 2 else 64
+            # Mode 1 (global N shift) is partitioned across CTA ranks.
+            # UnrollN=1 loads one N/2 tile per CTA (64 rows).
+            # UnrollN=2 loads two N/2 tiles per CTA via per-u loads in the kernel.
+            b_box_height = 64
         elif unroll_n == 2:
             # UnrollN=2 loads two adjacent N tiles in one 256-row transaction when mode!=1.
             b_box_height = 256
@@ -679,9 +699,13 @@ def prepare_v2_custom_cuda_tcgen05(data_list: Sequence[input_t]) -> Optional[Seq
         )
         # Scale-factor tensor maps:
         # - SFA is always 128 rows per tile (one M tile).
-        # - SFB uses a 256-row box for UnrollN=2 so the kernel can issue one TMA load per K tile
-        #   for both N tiles (requires the K-major packing above).
-        sfb_box_height = 256 if unroll_n == 2 else 128
+        # - SFB:
+        #   - cta_group::1 + UnrollN=2 uses a 256-row box (single load for two N tiles).
+        #   - cta_group::2 mode1 keeps a 128-row SFB box per tile (known-correct for UnrollN=1 bring-up).
+        if use_cta2 and cta2_partition_b == 1:
+            sfb_box_height = 128
+        else:
+            sfb_box_height = 256 if unroll_n == 2 else 128
         sfa_descs, sfb_descs = ext.nvfp4_group_gemm_v2_build_scale_tma_descs_cuda(
             torch.tensor(sfa_ptrs_cpu, dtype=torch.int64, device="cpu").contiguous(),
             torch.tensor(sfb_ptrs_cpu, dtype=torch.int64, device="cpu").contiguous(),

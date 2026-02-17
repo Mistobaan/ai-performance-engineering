@@ -97,6 +97,9 @@ def test_profile_insights_ncu_comparison_and_recommendations(tmp_path: Path):
     comparison = profile_insights.compare_ncu_files(tmp_path)
     assert comparison is not None
     assert comparison.get("metrics"), "CSV-based NCU comparison should return metrics"
+    staged_pair_dir = comparison.get("staged_pair_dir")
+    assert staged_pair_dir, "NCU comparison should surface a concrete staged pair directory"
+    assert Path(staged_pair_dir).exists(), "Staged pair directory should exist on disk"
 
     recs = profile_insights.generate_recommendations_from_profiles(
         {
@@ -331,6 +334,76 @@ def test_profile_artifact_materialization_avoids_name_collisions(tmp_path: Path)
     assert materialized_a != materialized_b
     assert materialized_a.read_text(encoding="utf-8") == "A"
     assert materialized_b.read_text(encoding="utf-8") == "B"
+
+
+def test_stage_profile_pair_writes_manifest(tmp_path: Path):
+    baseline = tmp_path / "baseline_sample.ncu-rep"
+    optimized = tmp_path / "optimized_sample.ncu-rep"
+    baseline.write_text("baseline", encoding="utf-8")
+    optimized.write_text("optimized", encoding="utf-8")
+
+    staged_baseline, staged_optimized = profile_insights._stage_profile_pair(
+        baseline,
+        optimized,
+        root=tmp_path,
+        label="ncu",
+    )
+    assert staged_baseline.exists()
+    assert staged_optimized.exists()
+    manifest_path = staged_baseline.parent / "pair_manifest.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest.get("pair_status") == "complete"
+    assert manifest.get("artifacts", {}).get("baseline", {}).get("exists") is True
+    assert manifest.get("artifacts", {}).get("optimized", {}).get("exists") is True
+
+
+def test_assess_profile_pair_health_reports_missing_nsys(tmp_path: Path):
+    (tmp_path / "baseline_only.ncu-rep").write_text("baseline", encoding="utf-8")
+    (tmp_path / "optimized_only.ncu-rep").write_text("optimized", encoding="utf-8")
+
+    health = profile_insights.assess_profile_pair_health(tmp_path)
+    assert health["ok"] is False
+    assert "nsys_pair" in health["missing"]
+    assert health["has_any_ncu_pair"] is True
+
+
+def test_compare_ncu_emits_pair_health_and_root_manifest(tmp_path: Path):
+    baseline_csv = tmp_path / "demo_baseline_ncu.csv"
+    optimized_csv = tmp_path / "demo_optimized_ncu.csv"
+    baseline_csv.write_text("Metric Name,Metric Value\nsm__throughput,33\n", encoding="utf-8")
+    optimized_csv.write_text("Metric Name,Metric Value\nsm__throughput,44\n", encoding="utf-8")
+
+    comparison = profile_insights.compare_ncu_files(tmp_path)
+    assert comparison is not None
+    assert "pair_health" in comparison
+    assert comparison["pair_health"]["ok"] is False
+    manifest_path = tmp_path / "pair_manifest.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest.get("label") == "pair_health"
+    assert manifest.get("availability", {}).get("has_ncu_csv_pair") is True
+
+
+def test_kernel_alias_similarity_cutlass_vs_nvjet():
+    baseline_kernel = (
+        "cutlass3x_sm100_bstensorop_s256x192x64gemm_block_scaled_ue4m3xf4_"
+        "ue4m3xf4_f32_f16_f16_256x192x256_0_tnn_align32_o_vs16_2sm_bias_f16_relu"
+    )
+    optimized_kernel = "nvjet_sm100_oohsh_128x256_256x5_2x2_2cta_h_bz_Avec16UE4M3_Bvec16UE4M3_TNT"
+    assert profile_insights._kernel_similarity(baseline_kernel, optimized_kernel) >= 0.35
+
+
+def test_parse_ps_for_defunct_launcher():
+    from core.profiling.nsight_automation import NsightAutomation
+
+    ps_output = (
+        "1001 42 S /opt/nvidia/nsight-systems/target-linux-x64/nsys profile --output demo\n"
+        "1002 42 Z [nsys-launcher] <defunct>\n"
+        "1003 77 S python worker.py\n"
+    )
+    assert NsightAutomation._parse_ps_for_defunct_launcher(ps_output, parent_pid=42)
+    assert not NsightAutomation._parse_ps_for_defunct_launcher(ps_output, parent_pid=77)
 
 
 def test_collect_profile_role_files_materializes_role_symlinks_with_same_target(tmp_path: Path):
