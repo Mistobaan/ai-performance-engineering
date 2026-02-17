@@ -193,18 +193,11 @@ def load_v2_custom_cuda_nvfp4_group_gemm(*, verbose: bool = False) -> object:
     cta2_sf_dp_bank = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SF_DP_BANK")
     if cta2_sf_dp_bank is not None and cta2_sf_dp_bank.strip() != "":
         extra_cuda_cflags.append(f"-DNVFP4_GROUP_GEMM_V2_CTA2_SF_DP_BANK={int(cta2_sf_dp_bank)}")
-    cta2_sfa_sf_id = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID")
-    if cta2_sfa_sf_id is not None and cta2_sfa_sf_id.strip() != "":
-        val = int(cta2_sfa_sf_id)
-        if val < 0 or val > 3:
-            raise ValueError(f"AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID must be 0..3, got {val}")
-        extra_cuda_cflags.append(f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID={val}")
-    cta2_sfb_sf_id = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID")
-    if cta2_sfb_sf_id is not None and cta2_sfb_sf_id.strip() != "":
-        val = int(cta2_sfb_sf_id)
-        if val < 0 or val > 3:
-            raise ValueError(f"AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID must be 0..3, got {val}")
-        extra_cuda_cflags.append(f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID={val}")
+    cta2_sfb_alloc_mode = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE")
+    if cta2_sfb_alloc_mode is not None and cta2_sfb_alloc_mode.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE={int(cta2_sfb_alloc_mode)}"
+        )
     mma_lane0_all_warps = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_MMA_LANE0_ALL_WARPS")
     if mma_lane0_all_warps is not None and mma_lane0_all_warps.strip() != "":
         extra_cuda_cflags.append(
@@ -680,9 +673,9 @@ def prepare_v2_custom_cuda_tcgen05(data_list: Sequence[input_t]) -> Optional[Seq
             # adjacent N128 tiles in a single TMA transaction per K tile.
             b_box_height = 256 if unroll_n == 2 else 128
         elif cta2_partition_b == 1:
-            # Mode 1 (global N shift) is partitioned across CTA ranks.
-            # UnrollN=1 loads one N/2 tile per CTA (64 rows).
-            # UnrollN=2 loads two N/2 tiles per CTA via per-u loads in the kernel.
+            # Mode 1 (global N shift) is partitioned across CTA ranks for the UnrollN=1 bring-up.
+            # UnrollN=2: correctness-first bring-up uses the same partitioned-B semantics as UnrollN=1:
+            # each CTA rank loads only N/2 rows (64) per N128 tile, but we still issue per-u loads.
             b_box_height = 64
         elif unroll_n == 2:
             # UnrollN=2 loads two adjacent N tiles in one 256-row transaction when mode!=1.

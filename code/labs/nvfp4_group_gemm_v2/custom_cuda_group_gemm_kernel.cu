@@ -155,6 +155,17 @@
 #define NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID 0
 #endif
 
+#ifndef NVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE
+// Experimental: CUTLASS `tmem_sf_frg` scale-factor allocation mode for SFB when
+// `cta_group::2 + UnrollN=2 + USE_CUTLASS_TMEM_SF_FRG` is enabled.
+//
+// 0: ScaleFactorDuplicated4by1 (CUTLASS default for SFB in many kernels; colspan=64 for N_SM=2, UnrollN=2)
+// 1: ScaleFactorDuplicated2by2 (colspan=32 for N_SM=2, UnrollN=2)
+//
+// See `labs/nvfp4_group_gemm_v2/tmem_sf_frg_probe.cu` for the measured TMEM word-column deltas.
+#define NVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE 0
+#endif
+
 #ifndef NVFP4_GROUP_GEMM_V2_MMA_LANE0_ALL_WARPS
 // Experimental: issue UMMA from lane0 of every warp (instead of thread0 only) in the full-CTA mainloop.
 // CUTLASS uses per-warp `elect_one_sync()` for tcgen05.mma; this knob lets us validate whether tcgen05.mma
@@ -1407,6 +1418,8 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
     int cta2_tmem_sf_rank_word_offset,
     int cta2_tsfa_word_offset,
     int cta2_tsfb_word_offset,
+    int cta2_sfa_sf_id,
+    int cta2_sfb_sf_id,
     int debug_tmem_dump,
     int debug_tmem_only_rank,
     int debug_tmem_idx_add,
@@ -1437,6 +1450,8 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
   // This avoids allocator interleaving behavior for smaller slices and keeps the layout consistent
   // across bring-up and tuned variants.
   constexpr int TMEM_COLUMNS = NVFP4_GROUP_GEMM_V2_TMEM_COLUMNS;
+  static_assert(TMEM_COLUMNS >= 32 && TMEM_COLUMNS <= 512 && ((TMEM_COLUMNS & (TMEM_COLUMNS - 1)) == 0),
+                "NVFP4_GROUP_GEMM_V2_TMEM_COLUMNS must be a power of 2 in [32, 512] (tcgen05.alloc requirement).");
   constexpr int SF_BYTES_PER_ROW = 16;  // (mm4, kk4) packed as 4x4 bytes
   constexpr int SFA_ROWS = 128;         // 4 chunks * 32 rows
   constexpr int SFB_ROWS = 128;         // 4 chunks * 32 rows
@@ -1449,10 +1464,11 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
   // the TMEM `col` field for each seg.
   //
   // Our local probe (`labs/nvfp4_group_gemm_v2/tmem_sf_frg_probe.cu`) reports the encoded element
-  // offsets for the N_SM=2 case:
-  //   - SFA: off(rank, seg)      = rank*16 + seg
-  //   - SFB: off(rank, u, seg)   = rank*32 + u*16 + seg
-  // and the final TMEM address for ue4m3 is: addr = base + rotr(off, 2).
+  // offsets and corresponding TMEM word-column deltas for the N_SM=2 case:
+  //   - SFA: off(rank, seg) = rank*64 + seg*16  -> col(rank, seg) = rank*16 + seg*4
+  //   - SFB (4x1 alloc): off(rank, u, seg) = rank*128 + seg*32 + u*16 -> col = rank*32 + seg*8 + u*4
+  //   - SFB (2x2 alloc): off(rank, u, seg) = rank*64 + seg*16 + u*8   -> col = rank*16 + seg*4 + u*2
+  // The final TMEM address for ue4m3 is: addr = base + rotr(off, 2).
   //
   // We implement that mapping for the experimental cta_group::2 + UnrollN=2 path to match CUTLASS.
   constexpr uint32_t SF_COLS_PER_KBLOCK_PER_MN = 4u;
@@ -1894,19 +1910,51 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
 
 	  const uint32_t tmem_sf_base =
 	      (CtaGroup == 2)
-	          ? tcgen05::tmem_addr_add(
-	                tmem_addr_base,
-	                // For cta_group::2 + UnrollN=2, the accumulator fragment consumes the full 512x128
-	                // TMEM address space. Scale factors must therefore live in the UMMA "scale bank".
-	                // CUTLASS uses the high DP bit (bit7 of dp_) to select this bank.
-	                /*dp_add=*/(UnrollN == 2 && (NVFP4_GROUP_GEMM_V2_CTA2_SF_DP_BANK != 0)) ? 128u : 0u,
-	                /*col_add=*/(UnrollN == 2)
-	                    ? static_cast<uint32_t>(cta2_tmem_sf_word_offset)
-	                    : (256u + static_cast<uint32_t>(cta2_tmem_sf_word_offset)))
-	          : tcgen05::tmem_addr_add(
-	                tmem_addr_base,
-	                /*dp_add=*/0u,
-	                /*col_add=*/(UnrollN == 2) ? 256u : static_cast<uint32_t>(cta2_tmem_sf_word_offset));
+	          ? [&]() -> uint32_t {
+		              if constexpr (UnrollN == 2) {
+		                // cta_group::2 + UnrollN=2:
+		                // CUTLASS computes `tCtSFA = accumulators + find_tmem_tensor_col_offset(accumulators)`.
+		                // For our probe shape, `find_tmem_tensor_col_offset(accumulators) == 512`, which sets
+		                // inactive TMEM COL bits [9+] (col>=512). Some bring-up configurations trap on UTCCP
+		                // stores with col>=512, so keep an alternate bank selector available:
+		                // - DP-bank selector (dp_add=128) uses the inactive DP bit7 (dp>=128).
+		                // - COL-slice selector (col_add=512) uses the inactive COL bit9 (col>=512).
+		                //
+		                // We gate this behind `NVFP4_GROUP_GEMM_V2_CTA2_SF_DP_BANK` so we can A/B test
+		                // which bank selection matches hardware behavior for UTCCP+UMMA.
+#if NVFP4_GROUP_GEMM_V2_CTA2_SF_DP_BANK
+		                // NOTE: dp bit7 (dp>=128) is not a valid TMEM addressing mode for UTCCP scale copies
+		                // on SM100 (observed: scale bytes remain uninitialized when using dp_add=128).
+		                // Instead, keep dp in-range and rely on inactive idx bits (below) for bank selection.
+		                uint32_t base = tcgen05::tmem_addr_add(
+		                    tmem_addr_base,
+		                    /*dp_add=*/0u,
+		                    /*col_add=*/static_cast<uint32_t>(cta2_tmem_sf_word_offset));
+#else
+		                uint32_t base = tcgen05::tmem_addr_add(
+		                    tmem_addr_base,
+		                    /*dp_add=*/0u,
+		                    /*col_add=*/512u + static_cast<uint32_t>(cta2_tmem_sf_word_offset));
+#endif
+                    // Experimental: allow selecting a disjoint TMEM bank for scale-factor storage
+                    // by setting the inactive idx bits (top 8). This is driven by the existing
+                    // debug env `AISP_NVFP4_GROUP_GEMM_V2_DEBUG_TMEM_IDX_ADD` so we can sweep
+                    // without recompiling; values >=64 would set UMMA scale-id bits and are invalid.
+                    const uint32_t idx_add_u =
+                        (debug_tmem_idx_add > 0 && debug_tmem_idx_add < 64) ? static_cast<uint32_t>(debug_tmem_idx_add) : 0u;
+                    base = base + (idx_add_u << 24);
+                    return base;
+		              } else {
+		                return tcgen05::tmem_addr_add(
+		                    tmem_addr_base,
+		                    /*dp_add=*/0u,
+		                    /*col_add=*/256u + static_cast<uint32_t>(cta2_tmem_sf_word_offset));
+		              }
+		            }()
+		          : tcgen05::tmem_addr_add(
+		                tmem_addr_base,
+		                /*dp_add=*/0u,
+		                /*col_add=*/(UnrollN == 2) ? 256u : static_cast<uint32_t>(cta2_tmem_sf_word_offset));
   const uint32_t tmem_sf_rank_base =
       (CtaGroup == 2)
           ? [&]() -> uint32_t {
@@ -1942,19 +1990,15 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
   const uint32_t tmem_sfb_base_raw =
       tcgen05::tmem_addr_add(tmem_sfa_base_raw, /*dp_add=*/0u, /*col_add=*/sfa_cols_span);
 
-  // For block-scaled UMMA, the TMEM scale pointer's top-2 bits encode the scale-id (byte address)
-  // consumed by UMMA (a_sf_id_/b_sf_id_). CUTLASS derives these via subword-aware pointer arithmetic.
-  // Here we expose explicit knobs so we can sweep/validate the correct semantics for cta_group::2.
-  const uint32_t tmem_sfa_base =
-      ((CtaGroup == 2) && (UnrollN == 2))
-          ? tcgen05::tmem_set_top2_bits(tmem_sfa_base_raw,
-                                        static_cast<uint32_t>(NVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID))
-          : tmem_sfa_base_raw;
-  const uint32_t tmem_sfb_base =
-      ((CtaGroup == 2) && (UnrollN == 2))
-          ? tcgen05::tmem_set_top2_bits(tmem_sfb_base_raw,
-                                        static_cast<uint32_t>(NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID))
-          : tmem_sfb_base_raw;
+  // IMPORTANT (block-scaled UMMA, cta_group::2 + UnrollN=2):
+  //
+  // CUTLASS encodes the UMMA "scale-id" (a_sf_id_/b_sf_id_) via the *top-2 bits* of the TMEM
+  // pointer passed to `make_runtime_instr_desc_block_scaled()` / `tcgen05.mma`. However, UTCCP
+  // stores can trap if those top-2 bits are non-zero. So keep the UTCCP destination pointers
+  // (tmem_sfa_ptrs/tmem_sfb_ptrs) with top-2 bits cleared, and apply the scale-id bits only on
+  // the pointers used by UMMA.
+  const uint32_t tmem_sfa_base = tmem_sfa_base_raw;
+  const uint32_t tmem_sfb_base = tmem_sfb_base_raw;
 #pragma unroll
   for (int seg = 0; seg < 4; ++seg) {
     if constexpr (kUseCutlassTmemSfFrg) {
@@ -1977,11 +2021,23 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
     for (int seg = 0; seg < 4; ++seg) {
       if constexpr (kUseCutlassTmemSfFrg) {
         // Measured from CUTLASS probe (N_SM=2, UnrollN=2, num_MMA_K=4, (vs,nsf)=(0,0)):
-        //   addr(rank, u, seg) = base + rank*32 + u*4 + seg*8  (TMEM word columns).
-        const uint32_t col_add =
+        //   - 4x1 alloc: col = rank*32 + seg*8 + u*4
+        //   - 2x2 alloc: col = rank*16 + seg*4 + u*2
+        uint32_t col_add = 0u;
+#if NVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE == 0
+        col_add =
             static_cast<uint32_t>(cluster_rank) * (SF_COLS_PER_TILE_PER_MN * SFB_NUM_MN) +
             static_cast<uint32_t>(seg) * (SF_COLS_PER_KBLOCK_PER_MN * SFB_NUM_MN) +
             static_cast<uint32_t>(u) * SF_COLS_PER_KBLOCK_PER_MN;
+#elif NVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE == 1
+        col_add =
+            static_cast<uint32_t>(cluster_rank) * SF_COLS_PER_TILE_PER_MN +
+            static_cast<uint32_t>(seg) * SF_COLS_PER_KBLOCK_PER_MN +
+            static_cast<uint32_t>(u) * (SF_COLS_PER_KBLOCK_PER_MN / 2u);
+#else
+        static_assert(NVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE == 0 || NVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE == 1,
+                      "NVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE must be 0 (4x1) or 1 (2x2).");
+#endif
         tmem_sfb_ptrs[u * 4 + seg] = tcgen05::tmem_addr_add(tmem_sfb_base, /*dp_add=*/0u, /*col_add=*/col_add);
       } else {
         // SFB TMEM layout for UnrollN>1 (cta_group::1 correctness-first mapping):
@@ -2001,16 +2057,25 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
 	  if constexpr (CtaGroup == 2) {
 	    if (debug_print_ptrs != 0 && group_idx == 0 && tile_m == 0 && tile_n == 0 && threadIdx.x == 0) {
 	      const uint32_t tmem_c1 = (UnrollN == 2) ? tmem_c_tiles[1] : 0u;
-	      const uint32_t tsfa0 = static_cast<uint32_t>(tmem_sfa_ptrs[0] + static_cast<uint32_t>(cta2_tsfa_word_offset));
-	      const uint32_t tsfb0 = static_cast<uint32_t>(tmem_sfb_ptrs[0] + static_cast<uint32_t>(cta2_tsfb_word_offset));
-      const uint32_t tsfb1 =
-          (UnrollN == 2)
-              ? static_cast<uint32_t>(tmem_sfb_ptrs[4] + static_cast<uint32_t>(cta2_tsfb_word_offset))
-              : 0u;
-	      const uint32_t sfa_id = (tsfa0 & 0xC0000000u) >> 30;
-	      const uint32_t sfb_id = (tsfb0 & 0xC0000000u) >> 30;
-	      printf("cta2 rank=%d tmem_base=0x%08x tmem_c0=0x%08x tmem_c1=0x%08x tsfa0=0x%08x(tsfa_id=%u) tsfb0=0x%08x tsfb1=0x%08x(tsfb_id=%u)\\n",
-	             cluster_rank, tmem_base_c, tmem_c_rank, tmem_c1, tsfa0, sfa_id, tsfb0, tsfb1, sfb_id);
+	      const uint32_t tsfa0_cp =
+	          static_cast<uint32_t>(tmem_sfa_ptrs[0] + static_cast<uint32_t>(cta2_tsfa_word_offset));
+	      const uint32_t tsfb0_cp =
+	          static_cast<uint32_t>(tmem_sfb_ptrs[0] + static_cast<uint32_t>(cta2_tsfb_word_offset));
+	      const uint32_t tsfb1 =
+	          (UnrollN == 2)
+	              ? static_cast<uint32_t>(tmem_sfb_ptrs[4] + static_cast<uint32_t>(cta2_tsfb_word_offset))
+	              : 0u;
+	      uint32_t tsfa0_mma = tsfa0_cp;
+	      uint32_t tsfb0_mma = tsfb0_cp;
+	      if constexpr (UnrollN == 2) {
+	        tsfa0_mma = tcgen05::tmem_set_top2_bits(tsfa0_mma, static_cast<uint32_t>(cta2_sfa_sf_id));
+	        tsfb0_mma = tcgen05::tmem_set_top2_bits(tsfb0_mma, static_cast<uint32_t>(cta2_sfb_sf_id));
+	      }
+	      const uint32_t sfa_id = (tsfa0_mma & 0xC0000000u) >> 30;
+	      const uint32_t sfb_id = (tsfb0_mma & 0xC0000000u) >> 30;
+	      printf("cta2 rank=%d tmem_base=0x%08x tmem_c0=0x%08x tmem_c1=0x%08x tsfa0_cp=0x%08x tsfa0_mma=0x%08x(tsfa_id=%u) tsfb0_cp=0x%08x tsfb0_mma=0x%08x tsfb1_cp=0x%08x(tsfb_id=%u)\\n",
+	             cluster_rank, tmem_base_c, tmem_c_rank, tmem_c1, tsfa0_cp, tsfa0_mma, sfa_id, tsfb0_cp, tsfb0_mma,
+	             tsfb1, sfb_id);
 	    }
 	  } else {
     if (debug_print_ptrs != 0 && group_idx == 0 && tile_m == 0 && tile_n == 0 && threadIdx.x == 0) {
@@ -2065,23 +2130,33 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
   if ((threadIdx.x & 31) == 0) {
 #pragma unroll
     for (int seg = 0; seg < 4; ++seg) {
-      const uint32_t tmem_sfa = (CtaGroup == 2)
-                                    ? tcgen05::tmem_addr_add(
-                                          tmem_sfa_ptrs[seg],
-                                          /*dp_add=*/0u,
-                                          /*col_add=*/static_cast<uint32_t>(cta2_tsfa_word_offset))
-                                    : tmem_sfa_ptrs[seg];
-      tmem_sfa_seg[seg] = tmem_sfa;
+      const uint32_t tmem_sfa_cp = (CtaGroup == 2)
+                                       ? tcgen05::tmem_addr_add(
+                                             tmem_sfa_ptrs[seg],
+                                             /*dp_add=*/0u,
+                                             /*col_add=*/static_cast<uint32_t>(cta2_tsfa_word_offset))
+                                       : tmem_sfa_ptrs[seg];
+      // Apply UMMA scale-id bits only on the pointers used by UMMA (UTCCP dst pointers must stay clean).
+      const uint32_t tmem_sfa_mma =
+          ((CtaGroup == 2) && (UnrollN == 2))
+              ? tcgen05::tmem_set_top2_bits(tmem_sfa_cp, static_cast<uint32_t>(cta2_sfa_sf_id))
+              : tmem_sfa_cp;
+      tmem_sfa_seg[seg] = tmem_sfa_mma;
 #pragma unroll
       for (int u = 0; u < UnrollN; ++u) {
-        const uint32_t tmem_sfb = (CtaGroup == 2)
-                                      ? tcgen05::tmem_addr_add(
-                                            tmem_sfb_ptrs[u * 4 + seg],
-                                            /*dp_add=*/0u,
-                                            /*col_add=*/static_cast<uint32_t>(cta2_tsfb_word_offset))
-                                      : tmem_sfb_ptrs[u * 4 + seg];
-        tmem_sfb_seg[u][seg] = tmem_sfb;
-        const uint64_t idesc_runtime = umma::make_runtime_instr_desc_block_scaled(idesc, tmem_sfa, tmem_sfb);
+        const uint32_t tmem_sfb_cp = (CtaGroup == 2)
+                                         ? tcgen05::tmem_addr_add(
+                                               tmem_sfb_ptrs[u * 4 + seg],
+                                               /*dp_add=*/0u,
+                                               /*col_add=*/static_cast<uint32_t>(cta2_tsfb_word_offset))
+                                         : tmem_sfb_ptrs[u * 4 + seg];
+        const uint32_t tmem_sfb_mma =
+            ((CtaGroup == 2) && (UnrollN == 2))
+                ? tcgen05::tmem_set_top2_bits(tmem_sfb_cp, static_cast<uint32_t>(cta2_sfb_sf_id))
+                : tmem_sfb_cp;
+        tmem_sfb_seg[u][seg] = tmem_sfb_mma;
+        const uint64_t idesc_runtime =
+            umma::make_runtime_instr_desc_block_scaled(idesc, tmem_sfa_mma, tmem_sfb_mma);
         idesc_hi_seg[u][seg] = static_cast<uint32_t>(idesc_runtime >> 32);
       }
     }
@@ -2202,15 +2277,15 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
 	          }
 	        }
 	        const int unroll_n_tx = unroll_n_valid;
-		        size_t kBytesB =
-		            static_cast<size_t>(unroll_n_tx) * static_cast<size_t>(TILE_N) * static_cast<size_t>(K_TILE_BYTES);
-		        if constexpr (CtaGroup == 2) {
-		          if (cta2_partition_b_mode == 1) {
-		            // Partitioned mode: each CTA rank fetches only N/2 rows for every active unrolled tile.
-		            kBytesB =
-		                static_cast<size_t>(unroll_n_tx) * static_cast<size_t>(TILE_N / 2) * static_cast<size_t>(K_TILE_BYTES);
-		          }
-		        }
+			        size_t kBytesB =
+			            static_cast<size_t>(unroll_n_tx) * static_cast<size_t>(TILE_N) * static_cast<size_t>(K_TILE_BYTES);
+			        if constexpr (CtaGroup == 2) {
+			          if (cta2_partition_b_mode == 1) {
+			            // Partitioned mode: each CTA rank fetches only N/2 rows for every active unrolled tile.
+			            kBytesB =
+			                static_cast<size_t>(unroll_n_tx) * static_cast<size_t>(TILE_N / 2) * static_cast<size_t>(K_TILE_BYTES);
+			          }
+			        }
 	        if constexpr (UnrollN == 2) {
 	          if constexpr (CtaGroup == 2) {
 	            if (cta2_partition_b_mode != 1) {
@@ -2250,14 +2325,14 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
 	        }
 	      }
 	      const int unroll_n_tx = unroll_n_valid;
-		      size_t kBytesB =
-		          static_cast<size_t>(unroll_n_tx) * static_cast<size_t>(TILE_N) * static_cast<size_t>(K_TILE_BYTES);
-		      if constexpr (CtaGroup == 2) {
-		        if (cta2_partition_b_mode == 1) {
-		          kBytesB =
-		              static_cast<size_t>(unroll_n_tx) * static_cast<size_t>(TILE_N / 2) * static_cast<size_t>(K_TILE_BYTES);
-		        }
-		      }
+			      size_t kBytesB =
+			          static_cast<size_t>(unroll_n_tx) * static_cast<size_t>(TILE_N) * static_cast<size_t>(K_TILE_BYTES);
+			      if constexpr (CtaGroup == 2) {
+			        if (cta2_partition_b_mode == 1) {
+			          kBytesB =
+			              static_cast<size_t>(unroll_n_tx) * static_cast<size_t>(TILE_N / 2) * static_cast<size_t>(K_TILE_BYTES);
+			        }
+			      }
 	      if constexpr (UnrollN == 2) {
 	        if constexpr (CtaGroup == 2) {
 	          if (cta2_partition_b_mode != 1) {
@@ -2285,8 +2360,8 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
       // global N coordinate and shift the shared-memory descriptor base per rank.
       //
       // Debug knob: allow disabling this shift to validate whether B is truly partitioned along N/2.
-		      const bool partition_b_global_shift = (CtaGroup == 2) && (cta2_partition_b_mode == 1);
-		      const int b_n_offset_base = partition_b_global_shift ? (n_offset + cluster_rank_b * (TILE_N / 2)) : n_offset;
+			      const bool partition_b_global_shift = (CtaGroup == 2) && (cta2_partition_b_mode == 1);
+			      const int b_n_offset_base = partition_b_global_shift ? (n_offset + cluster_rank_b * (TILE_N / 2)) : n_offset;
 		      // Keep SFB row addressing tile-relative for cta2 mode1. The N/2 partition is already
 		      // expressed via B's global-N shift and UMMA's 2-CTA operand semantics.
 		      int sfb_row_offset_base = sfb_row_offset;
@@ -2393,8 +2468,8 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
         // For cta_group::2, CUTLASS partitions B across the two CTAs along N. In mode 1 we shift
         // the global N coordinate by N/2 so each CTA loads only one half. In other modes we keep the
         // global N coordinate and shift the shared-memory descriptor base per rank.
-	        const bool partition_b_global_shift = (CtaGroup == 2) && (cta2_partition_b_mode == 1);
-	        const int b_n_offset_base = partition_b_global_shift ? (n_offset + cluster_rank_b * (TILE_N / 2)) : n_offset;
+		        const bool partition_b_global_shift = (CtaGroup == 2) && (cta2_partition_b_mode == 1);
+		        const int b_n_offset_base = partition_b_global_shift ? (n_offset + cluster_rank_b * (TILE_N / 2)) : n_offset;
 	        // Keep SFB row addressing tile-relative for cta2 mode1. The N/2 partition is already
 	        // expressed via B's global-N shift and UMMA's 2-CTA operand semantics.
 	        int sfb_row_offset_base = sfb_row_offset;
@@ -2449,8 +2524,8 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
 	  auto issue_tma_tile_ops_only = [&](int stage, int k_byte, int sfa_row_offset, int sfb_row_offset) -> void {
 	    block_barrier* bar = bars[stage];
 
-	    const bool partition_b_global_shift = (CtaGroup == 2) && (cta2_partition_b_mode == 1);
-	    const int b_n_offset_base = partition_b_global_shift ? (n_offset + cluster_rank_b * (TILE_N / 2)) : n_offset;
+		    const bool partition_b_global_shift = (CtaGroup == 2) && (cta2_partition_b_mode == 1);
+		    const int b_n_offset_base = partition_b_global_shift ? (n_offset + cluster_rank_b * (TILE_N / 2)) : n_offset;
 	    // Keep SFB row addressing tile-relative for cta2 mode1. The N/2 partition is already
 	    // expressed via B's global-N shift and UMMA's 2-CTA operand semantics.
 	    int sfb_row_offset_base = sfb_row_offset;
@@ -3660,48 +3735,113 @@ __global__ void nvfp4_group_gemm_v2_tcgen05_kernel(
     // Only dump from the first tile/group to avoid races/overwrites.
     if (group_idx == 0 && tile_m == 0 && tile_n == 0 &&
         (debug_tmem_only_rank < 0 || cluster_rank == debug_tmem_only_rank)) {
-      // TMEM loads operate on 32 DP lanes at a single column. Keep `col` uniform within the warp
-      // and use the lane id to select DP lanes to avoid misaligned/invalid addressing.
-      // Dump a single 128-DP window (one CTA's accumulator height). Use `debug_tmem_dump`
-      // to select which base address we probe for alternate layouts.
-      constexpr int DUMP_DP = 128;
-      // Keep the dump window conservative: dumping beyond the first 128 columns can trip invalid
-      // TMEM addressing in some experimental layouts. Expand only once the mapping is validated.
-      constexpr int DUMP_COL = 128;
-      // Allow probing multiple TMEM subpartitions by adjusting the high idx bits.
-      // TMEM pointers are encoded as {col:16, dp:8, idx:8}.
-      const uint32_t idx_add_u = (debug_tmem_idx_add > 0) ? static_cast<uint32_t>(debug_tmem_idx_add) : 0u;
-      uint32_t tmem_dump_base = static_cast<uint32_t>(tmem_c_rank + (idx_add_u << 24));
-      if constexpr (UnrollN == 2) {
-        // Debug base selection:
-        //  1: tile0 base (tmem_c_rank)
-        //  2: tile1 base (col+128)
-        //  3: candidate alternate tile1 base (dp+128)
-        if (debug_tmem_dump == 2) {
-          tmem_dump_base = static_cast<uint32_t>(tmem_c_tiles[1] + (idx_add_u << 24));
-        } else if (debug_tmem_dump == 3) {
-          const uint32_t tmem_dp128 = tcgen05::tmem_addr_add(tmem_c_rank, /*dp_add=*/128u, /*col_add=*/0u);
-          tmem_dump_base = static_cast<uint32_t>(tmem_dp128 + (idx_add_u << 24));
-        }
-      }
-      const int warp = static_cast<int>(threadIdx.x) >> 5;
-      const int lane = static_cast<int>(threadIdx.x) & 31;
-      const int warps_per_cta = static_cast<int>(blockDim.x) >> 5;
-      for (int dp_base = warp * 32; dp_base < DUMP_DP; dp_base += warps_per_cta * 32) {
-        const int dp = dp_base + lane;
-        if (dp >= DUMP_DP) {
-          continue;
-        }
-        for (int col = 0; col < DUMP_COL; ++col) {
-          const uint32_t addr =
-              tcgen05::tmem_addr_add(tmem_dump_base, static_cast<uint32_t>(dp), static_cast<uint32_t>(col));
-          const uint32_t bits = tcgen05::tmem_ld_32dp32b_x1(addr);
-          const float f = __uint_as_float(bits);
-          const half h = __float2half_rn(f);
+      // Special debug modes (>=10): dump TMEM scale tiles (raw bytes) into the output.
+      // This helps validate whether UTCCP wrote the expected FP8 (UE4M3) scale bytes into TMEM.
+      //
+      // Dump format: output is FP16, but values are integer-coded byte values (0..255).
+      // Layout: rows correspond to DP lanes 0..31, columns correspond to 4 segments x 16 bytes/row:
+      //   col = seg*16 + byte_idx (byte_idx in 0..15). Each segment contributes 32 rows.
+      //
+      // debug_tmem_dump meanings:
+      //   10: dump SFA (all 4 segs)
+      //   11: dump SFB u=0 (all 4 segs)
+      //   12: dump SFB u=1 (all 4 segs)  (requires UnrollN=2)
+      //   20: dump SFA, but force base dp=0 (helps detect whether dp bit7 is ignored by UTCCP)
+      //   21: dump SFB u=0, but force base dp=0
+      //   22: dump SFB u=1, but force base dp=0  (requires UnrollN=2)
+      if (debug_tmem_dump >= 10) {
+        const int lane = static_cast<int>(threadIdx.x) & 31;
+        if ((threadIdx.x >> 5) == 0) {
+          constexpr int DUMP_DP = 32;   // one warp covers dp 0..31
+          constexpr int WORDS_PER_ROW = 4;  // 16 bytes/row = 4x 32-bit words
+          const int dp = lane;
           const int gm = m_offset + dp;
-          const int gn = n_offset + col;
-          if (gm < m_size && gn < n_size) {
-            c_out[static_cast<size_t>(gm) * static_cast<size_t>(n_size) + static_cast<size_t>(gn)] = h;
+          if (dp < DUMP_DP && gm < m_size) {
+          const bool clear_dp_base = (debug_tmem_dump >= 20);
+          const bool dump_sfa = (debug_tmem_dump == 10) || (debug_tmem_dump == 20);
+          const int dump_u = (debug_tmem_dump == 12 || debug_tmem_dump == 22) ? 1 : 0;
+          if (!dump_sfa && dump_u >= UnrollN) {
+              // UnrollN=1 cannot dump u=1.
+            } else {
+              for (int seg = 0; seg < 4; ++seg) {
+                uint32_t base = dump_sfa ? tmem_sfa_ptrs[seg] : tmem_sfb_ptrs[dump_u * 4 + seg];
+                if (clear_dp_base) {
+                  // Clear dp bits [23:16] in the base pointer (keep col+idx intact).
+                  // TMEM addressing on SM100 uses only 7 dp bits; dp bit7 can be repurposed.
+                  base &= 0xFF00FFFFu;
+                }
+                // For block-scaled UMMA, CUTLASS encodes the "scale-id" via the top-2 TMEM bits.
+                // UTCCP destinations keep these bits cleared to avoid traps, but for debug loads it
+                // can be useful to probe alternate sf_id banks by setting the top2 bits here.
+                if constexpr (CtaGroup == 2 && UnrollN == 2) {
+                  const uint32_t sf_id = dump_sfa ? static_cast<uint32_t>(cta2_sfa_sf_id)
+                                                  : static_cast<uint32_t>(cta2_sfb_sf_id);
+                  base = tcgen05::tmem_set_top2_bits(base, sf_id);
+                }
+                for (int w = 0; w < WORDS_PER_ROW; ++w) {
+                  const uint32_t addr =
+                      tcgen05::tmem_addr_add(base, static_cast<uint32_t>(dp), static_cast<uint32_t>(w));
+                  const uint32_t bits = tcgen05::tmem_ld_32dp32b_x1(addr);
+                  // Unpack 4 bytes from the 32-bit word.
+                  for (int b = 0; b < 4; ++b) {
+                    const uint32_t byte_val = (bits >> (8 * b)) & 0xFFu;
+                    const int out_col = seg * 16 + w * 4 + b;
+                    const int gn = n_offset + out_col;
+                    if (gn < n_size) {
+                      c_out[static_cast<size_t>(gm) * static_cast<size_t>(n_size) + static_cast<size_t>(gn)] =
+                          __float2half_rn(static_cast<float>(byte_val));
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Default debug modes (1..3): dump accumulator slice as FP16 into the output tile.
+        // TMEM loads operate on 32 DP lanes at a single column. Keep `col` uniform within the warp
+        // and use the lane id to select DP lanes to avoid misaligned/invalid addressing.
+        // Dump a single 128-DP window (one CTA's accumulator height). Use `debug_tmem_dump`
+        // to select which base address we probe for alternate layouts.
+        constexpr int DUMP_DP = 128;
+        // Keep the dump window conservative: dumping beyond the first 128 columns can trip invalid
+        // TMEM addressing in some experimental layouts. Expand only once the mapping is validated.
+        constexpr int DUMP_COL = 128;
+        // Allow probing multiple TMEM subpartitions by adjusting the high idx bits.
+        // TMEM pointers are encoded as {col:16, dp:8, idx:8}.
+        const uint32_t idx_add_u = (debug_tmem_idx_add > 0) ? static_cast<uint32_t>(debug_tmem_idx_add) : 0u;
+        uint32_t tmem_dump_base = static_cast<uint32_t>(tmem_c_rank + (idx_add_u << 24));
+        if constexpr (UnrollN == 2) {
+          // Debug base selection:
+          //  1: tile0 base (tmem_c_rank)
+          //  2: tile1 base (col+128)
+          //  3: candidate alternate tile1 base (dp+128)
+          if (debug_tmem_dump == 2) {
+            tmem_dump_base = static_cast<uint32_t>(tmem_c_tiles[1] + (idx_add_u << 24));
+          } else if (debug_tmem_dump == 3) {
+            const uint32_t tmem_dp128 = tcgen05::tmem_addr_add(tmem_c_rank, /*dp_add=*/128u, /*col_add=*/0u);
+            tmem_dump_base = static_cast<uint32_t>(tmem_dp128 + (idx_add_u << 24));
+          }
+        }
+        const int warp = static_cast<int>(threadIdx.x) >> 5;
+        const int lane = static_cast<int>(threadIdx.x) & 31;
+        const int warps_per_cta = static_cast<int>(blockDim.x) >> 5;
+        for (int dp_base = warp * 32; dp_base < DUMP_DP; dp_base += warps_per_cta * 32) {
+          const int dp = dp_base + lane;
+          if (dp >= DUMP_DP) {
+            continue;
+          }
+          for (int col = 0; col < DUMP_COL; ++col) {
+            const uint32_t addr =
+                tcgen05::tmem_addr_add(tmem_dump_base, static_cast<uint32_t>(dp), static_cast<uint32_t>(col));
+            const uint32_t bits = tcgen05::tmem_ld_32dp32b_x1(addr);
+            const float f = __uint_as_float(bits);
+            const half h = __float2half_rn(f);
+            const int gm = m_offset + dp;
+            const int gn = n_offset + col;
+            if (gm < m_size && gn < n_size) {
+              c_out[static_cast<size_t>(gm) * static_cast<size_t>(n_size) + static_cast<size_t>(gn)] = h;
+            }
           }
         }
       }
@@ -4194,6 +4334,16 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
       // Bring-up knob for adjusting the SFB TMEM pointer passed to UMMA (in 32-bit word columns).
       // With the current per-rank TMEM windowing, the correct default is 0.
       parse_env_int("AISP_NVFP4_GROUP_GEMM_V2_CTA2_TSFB_WORD_OFFSET", 0);
+  const int cta2_sfa_sf_id =
+      parse_env_int("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID", NVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID);
+  const int cta2_sfb_sf_id =
+      parse_env_int("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID", NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID);
+  TORCH_CHECK(cta2_sfa_sf_id >= 0 && cta2_sfa_sf_id <= 3,
+              "AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID must be 0..3, got ",
+              cta2_sfa_sf_id);
+  TORCH_CHECK(cta2_sfb_sf_id >= 0 && cta2_sfb_sf_id <= 3,
+              "AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID must be 0..3, got ",
+              cta2_sfb_sf_id);
   const int debug_tmem_dump =
       parse_env_int("AISP_NVFP4_GROUP_GEMM_V2_DEBUG_TMEM_DUMP", 0);
   const int debug_tmem_only_rank =
@@ -4355,12 +4505,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
               cta2_sfb_slot_mode,
               cta2_tmem_c_word_offset,
               cta2_tmem_sf_word_offset,
-              cta2_tmem_sf_rank_word_offset,
-              cta2_tsfa_word_offset,
-              cta2_tsfb_word_offset,
-              debug_tmem_dump,
-              debug_tmem_only_rank,
-              debug_tmem_idx_add,
+	              cta2_tmem_sf_rank_word_offset,
+	              cta2_tsfa_word_offset,
+	              cta2_tsfb_word_offset,
+	              cta2_sfa_sf_id,
+	              cta2_sfb_sf_id,
+	              debug_tmem_dump,
+	              debug_tmem_only_rank,
+	              debug_tmem_idx_add,
               cta2_partition_b,
               debug_print_ptrs,
               cta2_idesc_m_dim_override,
@@ -4409,12 +4561,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
               cta2_sfb_slot_mode,
               cta2_tmem_c_word_offset,
               cta2_tmem_sf_word_offset,
-              cta2_tmem_sf_rank_word_offset,
-              cta2_tsfa_word_offset,
-              cta2_tsfb_word_offset,
-              debug_tmem_dump,
-              debug_tmem_only_rank,
-              debug_tmem_idx_add,
+	              cta2_tmem_sf_rank_word_offset,
+	              cta2_tsfa_word_offset,
+	              cta2_tsfb_word_offset,
+	              cta2_sfa_sf_id,
+	              cta2_sfb_sf_id,
+	              debug_tmem_dump,
+	              debug_tmem_only_rank,
+	              debug_tmem_idx_add,
               cta2_partition_b,
               debug_print_ptrs,
               cta2_idesc_m_dim_override,
@@ -4468,12 +4622,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
               cta2_sfb_slot_mode,
               cta2_tmem_c_word_offset,
               cta2_tmem_sf_word_offset,
-              cta2_tmem_sf_rank_word_offset,
-              cta2_tsfa_word_offset,
-              cta2_tsfb_word_offset,
-              debug_tmem_dump,
-              debug_tmem_only_rank,
-              debug_tmem_idx_add,
+	              cta2_tmem_sf_rank_word_offset,
+	              cta2_tsfa_word_offset,
+	              cta2_tsfb_word_offset,
+	              cta2_sfa_sf_id,
+	              cta2_sfb_sf_id,
+	              debug_tmem_dump,
+	              debug_tmem_only_rank,
+	              debug_tmem_idx_add,
               cta2_partition_b,
               debug_print_ptrs,
               cta2_idesc_m_dim_override,
@@ -4522,12 +4678,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
               cta2_sfb_slot_mode,
               cta2_tmem_c_word_offset,
               cta2_tmem_sf_word_offset,
-              cta2_tmem_sf_rank_word_offset,
-              cta2_tsfa_word_offset,
-              cta2_tsfb_word_offset,
-              debug_tmem_dump,
-              debug_tmem_only_rank,
-              debug_tmem_idx_add,
+	              cta2_tmem_sf_rank_word_offset,
+	              cta2_tsfa_word_offset,
+	              cta2_tsfb_word_offset,
+	              cta2_sfa_sf_id,
+	              cta2_sfb_sf_id,
+	              debug_tmem_dump,
+	              debug_tmem_only_rank,
+	              debug_tmem_idx_add,
               cta2_partition_b,
               debug_print_ptrs,
               cta2_idesc_m_dim_override,
@@ -4614,12 +4772,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
             cta2_sfb_slot_mode,
             cta2_tmem_c_word_offset,
             cta2_tmem_sf_word_offset_eff,
-            cta2_tmem_sf_rank_word_offset_eff,
-            cta2_tsfa_word_offset,
-            cta2_tsfb_word_offset,
-            debug_tmem_dump,
-            debug_tmem_only_rank,
-            debug_tmem_idx_add,
+	            cta2_tmem_sf_rank_word_offset_eff,
+	            cta2_tsfa_word_offset,
+	            cta2_tsfb_word_offset,
+	            cta2_sfa_sf_id,
+	            cta2_sfb_sf_id,
+	            debug_tmem_dump,
+	            debug_tmem_only_rank,
+	            debug_tmem_idx_add,
             cta2_partition_b,
             debug_print_ptrs,
             cta2_idesc_m_dim_override,
@@ -4671,12 +4831,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
             cta2_sfb_slot_mode,
             cta2_tmem_c_word_offset,
             cta2_tmem_sf_word_offset_eff,
-            cta2_tmem_sf_rank_word_offset_eff,
-            cta2_tsfa_word_offset,
-            cta2_tsfb_word_offset,
-            debug_tmem_dump,
-            debug_tmem_only_rank,
-            debug_tmem_idx_add,
+	            cta2_tmem_sf_rank_word_offset_eff,
+	            cta2_tsfa_word_offset,
+	            cta2_tsfb_word_offset,
+	            cta2_sfa_sf_id,
+	            cta2_sfb_sf_id,
+	            debug_tmem_dump,
+	            debug_tmem_only_rank,
+	            debug_tmem_idx_add,
             cta2_partition_b,
             debug_print_ptrs,
             cta2_idesc_m_dim_override,
@@ -4729,12 +4891,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
               cta2_sfb_slot_mode,
               cta2_tmem_c_word_offset,
               cta2_tmem_sf_word_offset,
-              cta2_tmem_sf_rank_word_offset,
-              cta2_tsfa_word_offset,
-              cta2_tsfb_word_offset,
-              debug_tmem_dump,
-              debug_tmem_only_rank,
-              debug_tmem_idx_add,
+	              cta2_tmem_sf_rank_word_offset,
+	              cta2_tsfa_word_offset,
+	              cta2_tsfb_word_offset,
+	              cta2_sfa_sf_id,
+	              cta2_sfb_sf_id,
+	              debug_tmem_dump,
+	              debug_tmem_only_rank,
+	              debug_tmem_idx_add,
               cta2_partition_b,
               debug_print_ptrs,
               cta2_idesc_m_dim_override,
@@ -4783,12 +4947,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
               cta2_sfb_slot_mode,
               cta2_tmem_c_word_offset,
               cta2_tmem_sf_word_offset,
-              cta2_tmem_sf_rank_word_offset,
-              cta2_tsfa_word_offset,
-              cta2_tsfb_word_offset,
-              debug_tmem_dump,
-              debug_tmem_only_rank,
-              debug_tmem_idx_add,
+	              cta2_tmem_sf_rank_word_offset,
+	              cta2_tsfa_word_offset,
+	              cta2_tsfb_word_offset,
+	              cta2_sfa_sf_id,
+	              cta2_sfb_sf_id,
+	              debug_tmem_dump,
+	              debug_tmem_only_rank,
+	              debug_tmem_idx_add,
               cta2_partition_b,
               debug_print_ptrs,
               cta2_idesc_m_dim_override,
@@ -4842,12 +5008,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
               cta2_sfb_slot_mode,
               cta2_tmem_c_word_offset,
               cta2_tmem_sf_word_offset,
-              cta2_tmem_sf_rank_word_offset,
-              cta2_tsfa_word_offset,
-              cta2_tsfb_word_offset,
-              debug_tmem_dump,
-              debug_tmem_only_rank,
-              debug_tmem_idx_add,
+	              cta2_tmem_sf_rank_word_offset,
+	              cta2_tsfa_word_offset,
+	              cta2_tsfb_word_offset,
+	              cta2_sfa_sf_id,
+	              cta2_sfb_sf_id,
+	              debug_tmem_dump,
+	              debug_tmem_only_rank,
+	              debug_tmem_idx_add,
               cta2_partition_b,
               debug_print_ptrs,
               cta2_idesc_m_dim_override,
@@ -4896,12 +5064,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
               cta2_sfb_slot_mode,
               cta2_tmem_c_word_offset,
               cta2_tmem_sf_word_offset,
-              cta2_tmem_sf_rank_word_offset,
-              cta2_tsfa_word_offset,
-              cta2_tsfb_word_offset,
-              debug_tmem_dump,
-              debug_tmem_only_rank,
-              debug_tmem_idx_add,
+	              cta2_tmem_sf_rank_word_offset,
+	              cta2_tsfa_word_offset,
+	              cta2_tsfb_word_offset,
+	              cta2_sfa_sf_id,
+	              cta2_sfb_sf_id,
+	              debug_tmem_dump,
+	              debug_tmem_only_rank,
+	              debug_tmem_idx_add,
               cta2_partition_b,
               debug_print_ptrs,
               cta2_idesc_m_dim_override,
@@ -4963,12 +5133,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
         cta2_sfb_slot_mode,
         cta2_tmem_c_word_offset,
         cta2_tmem_sf_word_offset,
-        cta2_tmem_sf_rank_word_offset,
-        cta2_tsfa_word_offset,
-        cta2_tsfb_word_offset,
-        debug_tmem_dump,
-        debug_tmem_only_rank,
-        debug_tmem_idx_add,
+	        cta2_tmem_sf_rank_word_offset,
+	        cta2_tsfa_word_offset,
+	        cta2_tsfb_word_offset,
+	        cta2_sfa_sf_id,
+	        cta2_sfb_sf_id,
+	        debug_tmem_dump,
+	        debug_tmem_only_rank,
+	        debug_tmem_idx_add,
         cta2_partition_b,
         debug_print_ptrs,
         cta2_idesc_m_dim_override,
@@ -5018,12 +5190,14 @@ void nvfp4_group_gemm_v2_forward_grouped_tcgen05_cuda(
       cta2_sfb_slot_mode,
       cta2_tmem_c_word_offset,
       cta2_tmem_sf_word_offset,
-      cta2_tmem_sf_rank_word_offset,
-      cta2_tsfa_word_offset,
-      cta2_tsfb_word_offset,
-      debug_tmem_dump,
-      debug_tmem_only_rank,
-      debug_tmem_idx_add,
+	      cta2_tmem_sf_rank_word_offset,
+	      cta2_tsfa_word_offset,
+	      cta2_tsfb_word_offset,
+	      cta2_sfa_sf_id,
+	      cta2_sfb_sf_id,
+	      debug_tmem_dump,
+	      debug_tmem_only_rank,
+	      debug_tmem_idx_add,
       cta2_partition_b,
       debug_print_ptrs,
       cta2_idesc_m_dim_override,
