@@ -51,6 +51,7 @@ const categoryIcons: Record<string, React.ReactNode> = {
   analysis: <Activity className="w-4 h-4" />,
   optimization: <Zap className="w-4 h-4" />,
   distributed: <Server className="w-4 h-4" />,
+  cluster: <Server className="w-4 h-4" />,
   inference: <Brain className="w-4 h-4" />,
   ai: <Bot className="w-4 h-4" />,
   profiling: <Activity className="w-4 h-4" />,
@@ -66,6 +67,7 @@ const categoryColors: Record<string, string> = {
   analysis: 'text-accent-warning',
   optimization: 'text-accent-primary',
   distributed: 'text-accent-danger',
+  cluster: 'text-accent-info',
   inference: 'text-accent-secondary',
   ai: 'text-accent-tertiary',
   profiling: 'text-accent-warning',
@@ -88,10 +90,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function extractGpuInfo(payload: unknown): GpuInfo | null {
   if (!payload) return null;
   if (isRecord(payload) && isRecord(payload.gpu)) {
-    return payload.gpu as GpuInfo;
+    return payload.gpu as unknown as GpuInfo;
   }
   if (isRecord(payload) && 'memory_total' in payload && 'utilization' in payload) {
-    return payload as GpuInfo;
+    return payload as unknown as GpuInfo;
   }
   return null;
 }
@@ -139,11 +141,15 @@ function renderRecommendations(recommendations: unknown) {
         if (isRecord(rec)) {
           const priority = String(rec.priority || rec.severity || '').toLowerCase();
           const badgeClass = priorityStyles[priority] || 'bg-white/10 text-white/60 border-white/10';
+          const titleRaw = rec.title ?? rec.name ?? `Recommendation ${index + 1}`;
+          const title = typeof titleRaw === 'string' ? titleRaw : String(titleRaw);
+          const descriptionRaw = rec.description;
+          const description = descriptionRaw === undefined || descriptionRaw === null ? '' : String(descriptionRaw);
           return (
             <div key={`rec-${index}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-sm font-medium text-white">
-                  {rec.title || rec.name || `Recommendation ${index + 1}`}
+                  {title}
                 </div>
                 {priority && (
                   <span className={`text-[10px] uppercase px-2 py-0.5 rounded-full border ${badgeClass}`}>
@@ -151,7 +157,7 @@ function renderRecommendations(recommendations: unknown) {
                   </span>
                 )}
               </div>
-              {rec.description && <div className="text-xs text-white/60 mt-1">{String(rec.description)}</div>}
+              {description && <div className="text-xs text-white/60 mt-1">{description}</div>}
             </div>
           );
         }
@@ -544,7 +550,9 @@ export function AIAssistantTab() {
                               <span className="text-accent-danger">*</span>
                             )}
                             {prop.description && (
-                              <HelpCircle className="w-3 h-3 text-white/30" title={prop.description} />
+                              <span title={prop.description}>
+                                <HelpCircle className="w-3 h-3 text-white/30" />
+                              </span>
                             )}
                           </label>
                           {prop.type === 'boolean' ? (

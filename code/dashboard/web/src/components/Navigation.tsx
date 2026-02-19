@@ -18,6 +18,8 @@ export const DASHBOARD_TABS: DashboardTab[] = [
   { id: 'memory', label: 'Memory', href: '/memory', shortcut: '4' },
   { id: 'multi-gpu', label: 'Multi-GPU', href: '/multi-gpu', shortcut: '5' },
   { id: 'history', label: 'History', href: '/history', shortcut: '6' },
+  { id: 'system', label: 'System', href: '/system', shortcut: '7' },
+  { id: 'cluster', label: 'Cluster', href: '/cluster', shortcut: '8' },
 ];
 
 export function Navigation() {

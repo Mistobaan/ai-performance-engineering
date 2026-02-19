@@ -117,6 +117,54 @@ export async function getDependencies() {
   return fetchAPI('/system/dependencies');
 }
 
+export async function runClockLockCheck(params?: Record<string, unknown>) {
+  const query = buildQuery(params);
+  return fetchAPI(`/system/clock-lock-check${query}`, undefined, { allowErrorResult: true });
+}
+
+// ============================================================================
+// PROFILING
+// ============================================================================
+
+export async function getProfilePairs() {
+  return fetchAPI('/profile/list');
+}
+
+export async function getCompileAnalysis() {
+  return fetchAPI('/profile/compile');
+}
+
+export async function getNcuSummary(params: Record<string, unknown>) {
+  const query = buildQuery(params);
+  return fetchAPI(`/profile/ncu-summary${query}`, undefined, { allowErrorResult: true });
+}
+
+// ============================================================================
+// CLUSTER
+// ============================================================================
+
+export async function runClusterEvalSuite(params: Record<string, unknown>) {
+  return fetchAPI(
+    '/cluster/eval-suite',
+    {
+      method: 'POST',
+      body: JSON.stringify(params),
+    },
+    { allowErrorResult: true }
+  );
+}
+
+export async function validateFieldReport(params: Record<string, unknown>) {
+  return fetchAPI(
+    '/cluster/validate-field-report',
+    {
+      method: 'POST',
+      body: JSON.stringify(params),
+    },
+    { allowErrorResult: true }
+  );
+}
+
 // ============================================================================
 // AI / TOOLING
 // ============================================================================

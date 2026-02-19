@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { DashboardShell } from '@/components/DashboardShell';
 import { StatsCard } from '@/components/StatsCard';
@@ -39,7 +39,7 @@ function statusBadge(status: string) {
   return 'bg-white/10 text-white/50';
 }
 
-export default function ComparePage() {
+function ComparePageInner() {
   const searchParams = useSearchParams();
   const [history, setHistory] = useState<BenchmarkHistory | null>(null);
   const [compare, setCompare] = useState<BenchmarkCompareResult | null>(null);
@@ -81,8 +81,8 @@ export default function ComparePage() {
   useEffect(() => {
     if (!history || initRef.current) return;
     const runs = history.runs || [];
-    const queryBaseline = decodeParam(searchParams.get('baseline'));
-    const queryCandidate = decodeParam(searchParams.get('candidate'));
+    const queryBaseline = decodeParam(searchParams?.get('baseline') ?? null);
+    const queryCandidate = decodeParam(searchParams?.get('candidate') ?? null);
 
     const defaultCandidate = queryCandidate || runs[0]?.source || '';
     const defaultBaseline = queryBaseline || runs[1]?.source || runs[0]?.source || '';
@@ -355,7 +355,7 @@ export default function ComparePage() {
                           <div>
                             <div className="text-white">{item.chapter}:{item.name}</div>
                             <div className="text-xs text-white/40">
-                              {item.baseline_speedup.toFixed(2)}x -> {item.candidate_speedup.toFixed(2)}x
+                              {item.baseline_speedup.toFixed(2)}x {'->'} {item.candidate_speedup.toFixed(2)}x
                             </div>
                           </div>
                           <span className="text-accent-danger font-semibold">{formatDelta(item.delta)}</span>
@@ -382,7 +382,7 @@ export default function ComparePage() {
                           <div>
                             <div className="text-white">{item.chapter}:{item.name}</div>
                             <div className="text-xs text-white/40">
-                              {item.baseline_speedup.toFixed(2)}x -> {item.candidate_speedup.toFixed(2)}x
+                              {item.baseline_speedup.toFixed(2)}x {'->'} {item.candidate_speedup.toFixed(2)}x
                             </div>
                           </div>
                           <span className="text-accent-success font-semibold">{formatDelta(item.delta)}</span>
@@ -481,7 +481,7 @@ export default function ComparePage() {
                             </td>
                             <td className="px-5 py-4 text-center">
                               <span className={cn('px-2 py-1 rounded-full text-xs font-medium', statusBadge(row.candidate_status))}>
-                                {row.baseline_status} -> {row.candidate_status}
+                                {row.baseline_status} {'->'} {row.candidate_status}
                               </span>
                             </td>
                             <td className="px-5 py-4 text-right font-mono text-xs">
@@ -556,5 +556,21 @@ export default function ComparePage() {
         </>
       )}
     </DashboardShell>
+  );
+}
+
+function CompareLoading() {
+  return (
+    <div className="card">
+      <div className="card-body text-white/60">Loading compare page...</div>
+    </div>
+  );
+}
+
+export default function ComparePage() {
+  return (
+    <Suspense fallback={<CompareLoading />}>
+      <ComparePageInner />
+    </Suspense>
   );
 }

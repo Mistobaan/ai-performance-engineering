@@ -938,6 +938,24 @@ def get_output_tolerance(self) -> tuple:
 - cta_group::2 correctness findings (case1):
   - `cluster=2, unroll=1`: only `AISP_NVFP4_GROUP_GEMM_V2_CTA2_PARTITION_B=1` verifies.
   - `cluster=2, unroll=1`: partition `0` and `2` fail.
+
+### Update (2026-02-18): UTCCP64 + TMEM Scale Layout (SM100a) Findings
+- Device-side UTCCP probe is now the source of truth for cta2 scale placement:
+  - File: `labs/nvfp4_group_gemm_v2/tmem_sf_frg_probe.cu`
+  - Key improvement: probing was stabilized by making `tcgen05.alloc/dealloc` warp-synchronous and synchronizing the 2-CTA cluster around alloc/UTCCP/dealloc. This avoids deadlocks and misaligned-address faults.
+- Critical layout discovery (cta_group::2, UTCCP64 `.warpx2::{01_23|02_13}`):
+  - The packed 128x16 scale tile layout is `[seg(0..3) * 32 + mm32, mm4*4 + kk4] -> [128,16]` (CUTLASS “blockscaled” layout).
+  - UTCCP64 does not behave like a contiguous “64 rows = 2 segments” copy for this layout.
+  - Empirically:
+    - `start+0` copies K64 segments `{0,2}` (rows `0..31` and `64..95`)
+    - `start+32` copies K64 segments `{1,3}` (rows `32..63` and `96..127`)
+  - Consequence: to populate all 4 segments in TMEM for block-scaled UMMA, the UTCCP64 path must use descriptor start offsets `{0,32}` (in u128 row units), not `{0,64}`.
+- Mapping implication (cta_group::2):
+  - The two UTCCP64 destination bases must be the segment-0 and segment-1 TMEM bases (physical `col` groups `0..3` and `4..7`), because each UTCCP64 op implicitly populates its paired segments at `+8` columns (`seg2/seg3` live at `+8` within the same op).
+- Current state after applying the above:
+  - Default cta1 (`cluster_dim_x=1`, `unroll=1`, no UTCCP64 override) still verifies case1 locally.
+  - cta2 correctness is still failing case1 verification, meaning the remaining issue is now likely *segment pointer mapping consumed by UMMA* (per-seg TSFA/TSFB addresses) and/or a rank/partition interaction, not just the UTCCP descriptor step.
+  - Next debugging step should use `debug_tmem_dump>=10` (scale TMEM dumps) in `labs/nvfp4_group_gemm_v2/custom_cuda_group_gemm_kernel.cu` to confirm which segments/bytes are actually resident in TMEM at the exact TSFA/TSFB pointers passed to UMMA.
   - `cluster=2, unroll=2`: partition `0/1/2` currently fail (NaN/incorrect).
 - cta2/unroll2 bring-up notes:
   - Removed host/kernel forced mode0 override for unroll2 so partition modes can be tested.

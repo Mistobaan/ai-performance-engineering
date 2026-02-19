@@ -193,15 +193,66 @@ def load_v2_custom_cuda_nvfp4_group_gemm(*, verbose: bool = False) -> object:
     cta2_sf_dp_bank = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SF_DP_BANK")
     if cta2_sf_dp_bank is not None and cta2_sf_dp_bank.strip() != "":
         extra_cuda_cflags.append(f"-DNVFP4_GROUP_GEMM_V2_CTA2_SF_DP_BANK={int(cta2_sf_dp_bank)}")
+    cta2_sfa_pair_segs = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFA_PAIR_SEGS")
+    if cta2_sfa_pair_segs is not None and cta2_sfa_pair_segs.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFA_PAIR_SEGS={int(cta2_sfa_pair_segs)}"
+        )
+    cta2_sfa_sf_id = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID")
+    if cta2_sfa_sf_id is not None and cta2_sfa_sf_id.strip() != "":
+        extra_cuda_cflags.append(f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFA_SF_ID={int(cta2_sfa_sf_id)}")
+    cta2_sfb_sf_id = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID")
+    if cta2_sfb_sf_id is not None and cta2_sfb_sf_id.strip() != "":
+        extra_cuda_cflags.append(f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFB_SF_ID={int(cta2_sfb_sf_id)}")
+    cta2_accum_dp_bank = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_ACCUM_DP_BANK")
+    if cta2_accum_dp_bank is not None and cta2_accum_dp_bank.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_ACCUM_DP_BANK={int(cta2_accum_dp_bank)}"
+        )
     cta2_sfb_alloc_mode = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE")
     if cta2_sfb_alloc_mode is not None and cta2_sfb_alloc_mode.strip() != "":
         extra_cuda_cflags.append(
             f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFB_ALLOC_MODE={int(cta2_sfb_alloc_mode)}"
         )
+    cta2_sfb_pair_segs = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_PAIR_SEGS")
+    if cta2_sfb_pair_segs is not None and cta2_sfb_pair_segs.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFB_PAIR_SEGS={int(cta2_sfb_pair_segs)}"
+        )
+    cta2_sfb_populate_u1 = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SFB_POPULATE_U1")
+    if cta2_sfb_populate_u1 is not None and cta2_sfb_populate_u1.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_SFB_POPULATE_U1={int(cta2_sfb_populate_u1)}"
+        )
+    cta2_skip_utccp_sfa = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SKIP_UTCCP_SFA")
+    if cta2_skip_utccp_sfa is not None and cta2_skip_utccp_sfa.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_SKIP_UTCCP_SFA={int(cta2_skip_utccp_sfa)}"
+        )
+    cta2_skip_utccp_sfb = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_SKIP_UTCCP_SFB")
+    if cta2_skip_utccp_sfb is not None and cta2_skip_utccp_sfb.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_SKIP_UTCCP_SFB={int(cta2_skip_utccp_sfb)}"
+        )
+    cta2_utccp_rank0_only = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_UTCCP_RANK0_ONLY")
+    if cta2_utccp_rank0_only is not None and cta2_utccp_rank0_only.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_UTCCP_RANK0_ONLY={int(cta2_utccp_rank0_only)}"
+        )
     mma_lane0_all_warps = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_MMA_LANE0_ALL_WARPS")
     if mma_lane0_all_warps is not None and mma_lane0_all_warps.strip() != "":
         extra_cuda_cflags.append(
             f"-DNVFP4_GROUP_GEMM_V2_MMA_LANE0_ALL_WARPS={int(mma_lane0_all_warps)}"
+        )
+    cta2_mma_segment_parallel = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_MMA_SEGMENT_PARALLEL")
+    if cta2_mma_segment_parallel is not None and cta2_mma_segment_parallel.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_MMA_SEGMENT_PARALLEL={int(cta2_mma_segment_parallel)}"
+        )
+    cta2_mma_all_threads = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_CTA2_MMA_ALL_THREADS")
+    if cta2_mma_all_threads is not None and cta2_mma_all_threads.strip() != "":
+        extra_cuda_cflags.append(
+            f"-DNVFP4_GROUP_GEMM_V2_CTA2_MMA_ALL_THREADS={int(cta2_mma_all_threads)}"
         )
     debug_stage = os.getenv("AISP_NVFP4_GROUP_GEMM_V2_DEBUG_STAGE")
     if debug_stage is not None and debug_stage.strip() != "":
@@ -682,29 +733,36 @@ def prepare_v2_custom_cuda_tcgen05(data_list: Sequence[input_t]) -> Optional[Seq
             b_box_height = 256
         else:
             b_box_height = 128
+        # cta_group::2 uses a 64-row A tile per CTA (cluster tile M=128). cta_group::1 uses 128.
+        a_box_height = 64 if use_cta2 else 128
         a_descs, b_descs = ext.nvfp4_group_gemm_v2_build_ab_tma_descs_cuda(
             torch.tensor(a_ptrs_cpu, dtype=torch.int64, device="cpu").contiguous(),
             torch.tensor(b_ptrs_cpu, dtype=torch.int64, device="cpu").contiguous(),
             torch.tensor(m_sizes_tma, dtype=torch.int32, device="cpu").contiguous(),
             torch.tensor(n_sizes_tma_ab, dtype=torch.int32, device="cpu").contiguous(),
             torch.tensor(k_halves, dtype=torch.int32, device="cpu").contiguous(),
+            int(a_box_height),
             int(b_box_height),
         )
         # Scale-factor tensor maps:
-        # - SFA is always 128 rows per tile (one M tile).
-        # - SFB:
-        #   - cta_group::1 + UnrollN=2 uses a 256-row box (single load for two N tiles).
-        #   - cta_group::2 mode1 keeps a 128-row SFB box per tile (known-correct for UnrollN=1 bring-up).
-        if use_cta2 and cta2_partition_b == 1:
-            sfb_box_height = 128
-        else:
+        # The CUTLASS blockscaled packing we transliterated produces 128-row tiles for both SFA and
+        # SFB (rows encode (seg, mm32); columns encode (mm4, kk4)). Keep a 128-row box for scales
+        # in both cta_group::1 and cta_group::2; UMMA_2SM rank selection is expressed via the TMEM
+        # scale-fragment mapping (tmem_sf_frg), not by changing the scale TMA box height.
+        #
+        # cta_group::1 + UnrollN=2 can use a 256-row SFB box to load two adjacent N tiles at once.
+        sfa_box_height = 128
+        if not use_cta2:
             sfb_box_height = 256 if unroll_n == 2 else 128
+        else:
+            sfb_box_height = 128
         sfa_descs, sfb_descs = ext.nvfp4_group_gemm_v2_build_scale_tma_descs_cuda(
             torch.tensor(sfa_ptrs_cpu, dtype=torch.int64, device="cpu").contiguous(),
             torch.tensor(sfb_ptrs_cpu, dtype=torch.int64, device="cpu").contiguous(),
             torch.tensor(m_sizes_tma, dtype=torch.int32, device="cpu").contiguous(),
             torch.tensor(n_sizes_tma_sf, dtype=torch.int32, device="cpu").contiguous(),
             torch.tensor(k_halves, dtype=torch.int32, device="cpu").contiguous(),
+            int(sfa_box_height),
             int(sfb_box_height),
         )
 

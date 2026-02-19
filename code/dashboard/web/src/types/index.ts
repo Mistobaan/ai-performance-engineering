@@ -131,6 +131,138 @@ export interface ProfilerData {
   flame_data?: unknown;
 }
 
+export interface ProfilePair {
+  chapter: string;
+  name: string;
+  path: string;
+  run_id: string;
+  type?: string;
+  has_nsys: boolean;
+  has_ncu: boolean;
+  baseline_nsys: string[];
+  optimized_nsys: string[];
+  baseline_ncu: string[];
+  optimized_ncu: string[];
+}
+
+export interface ProfilePairsResult {
+  pairs: ProfilePair[];
+  count: number;
+}
+
+export interface CompileAnalysisBenchmark {
+  name: string;
+  chapter: string;
+  speedup: number;
+  baseline_time_ms: number;
+  optimized_time_ms: number;
+}
+
+export interface CompileAnalysis {
+  speedup: number;
+  compile_time_ms: number;
+  graph_breaks: number;
+  fusion_ratio: number;
+  recommendations: string[];
+  compile_benchmarks: CompileAnalysisBenchmark[];
+  has_real_data: boolean;
+  mode_comparison?: Record<string, unknown>;
+  graph_breaks_list?: unknown[];
+}
+
+export interface NcuKernelRow {
+  id: number;
+  kernel_name: string;
+  block_size: string;
+  grid_size: string;
+  stream: string;
+  device: string;
+  cc: string;
+  time_avg_ms?: number | null;
+  time_sum_ms?: number | null;
+  time_pct?: number | null;
+  occupancy_limit_reason?: string | null;
+  metrics: Record<string, number>;
+}
+
+export interface NcuSummaryResult {
+  success: boolean;
+  report_path?: string;
+  top_k?: number;
+  sort_by?: string;
+  kernel_count?: number;
+  total_time_sum_ms?: number | null;
+  kernels?: NcuKernelRow[];
+  metrics_requested?: string[];
+  command?: string[] | null;
+  stderr?: string | null;
+  returncode?: number | null;
+  error?: string;
+}
+
+export interface ClockLockSnapshot {
+  app_sm_mhz?: number | null;
+  app_mem_mhz?: number | null;
+  cur_sm_mhz?: number | null;
+  cur_mem_mhz?: number | null;
+  error?: string;
+}
+
+export interface ClockLockResultRow {
+  device: number;
+  physical_index: number;
+  locked: boolean;
+  error?: string;
+  physical_index_error?: string;
+  theoretical_tflops_fp16?: number;
+  theoretical_gbps?: number;
+  before?: ClockLockSnapshot;
+  during?: ClockLockSnapshot;
+  after?: ClockLockSnapshot;
+}
+
+export interface ClockLockCheckResult {
+  success: boolean;
+  gpu_count?: number;
+  results?: ClockLockResultRow[];
+  error?: string;
+}
+
+export interface CommandRunResult {
+  command: string[];
+  returncode: number | null;
+  stdout: string;
+  stderr: string;
+  duration_ms?: number;
+  error?: string;
+}
+
+export interface ClusterEvalSuiteResult {
+  success: boolean;
+  mode?: string;
+  run_id?: string;
+  primary_label?: string;
+  meta_path?: string;
+  manifest_path?: string | null;
+  collect?: CommandRunResult;
+  manifest?: CommandRunResult;
+  command?: string[];
+  returncode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  duration_ms?: number;
+  error?: string;
+}
+
+export interface FieldReportValidationResult {
+  success: boolean;
+  returncode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  duration_ms?: number;
+  error?: string;
+}
+
 export interface BenchmarkRunSummary {
   date: string;
   timestamp: string;

@@ -87,6 +87,28 @@ _ROUTES: List[ApiRoute] = [
     ),
     ApiRoute(
         "GET",
+        "/api/system/clock-lock-check",
+        "system.clock_lock_check",
+        handlers.system_clock_lock_check,
+        engine_op="system.clock_lock_check",
+        mcp_tool="clock_lock_check",
+    ),
+    ApiRoute(
+        "POST",
+        "/api/cluster/eval-suite",
+        "cluster.eval_suite",
+        handlers.cluster_eval_suite,
+        mcp_tool="cluster_eval_suite",
+    ),
+    ApiRoute(
+        "POST",
+        "/api/cluster/validate-field-report",
+        "cluster.validate_field_report",
+        handlers.cluster_validate_field_report,
+        mcp_tool="cluster_validate_field_report",
+    ),
+    ApiRoute(
+        "GET",
         "/api/benchmark/data",
         "benchmark.data",
         handlers.benchmark_data,
@@ -171,6 +193,7 @@ _ROUTES: List[ApiRoute] = [
         "profile.compile_analysis",
         handlers.profile_compile,
         engine_op="profile.compile_analysis",
+        mcp_tool="profile_compile_analysis",
     ),
     ApiRoute(
         "GET",
@@ -186,6 +209,15 @@ _ROUTES: List[ApiRoute] = [
         "profile.list_profiles",
         handlers.profile_list,
         engine_op="profile.list_profiles",
+        mcp_tool="profile_list_profiles",
+    ),
+    ApiRoute(
+        "GET",
+        "/api/profile/ncu-summary",
+        "profile.ncu_summary",
+        handlers.profile_ncu_summary,
+        engine_op="profile.ncu_summary",
+        mcp_tool="ncu_summary",
     ),
     ApiRoute(
         "GET",

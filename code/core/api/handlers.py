@@ -61,6 +61,25 @@ def system_capabilities(_: Dict[str, Any]) -> Dict[str, Any]:
     return get_engine().system.capabilities()
 
 
+def system_clock_lock_check(params: Dict[str, Any]) -> Dict[str, Any]:
+    sm_clock_mhz = _parse_optional_int_param(params, "sm_clock_mhz", minimum=1)
+    mem_clock_mhz = _parse_optional_int_param(params, "mem_clock_mhz", minimum=1)
+    devices_raw = _parse_list_param(params, "devices")
+    devices: Optional[List[int]] = None
+    if devices_raw is not None:
+        devices = []
+        for item in devices_raw:
+            try:
+                devices.append(int(item))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("devices must be a comma-separated list of integers") from exc
+    return get_engine().system.clock_lock_check(
+        sm_clock_mhz=sm_clock_mhz,
+        mem_clock_mhz=mem_clock_mhz,
+        devices=devices,
+    )
+
+
 def _parse_int_param(
     params: Dict[str, Any],
     name: str,
@@ -72,6 +91,27 @@ def _parse_int_param(
     raw = params.get(name)
     if raw is None or (isinstance(raw, str) and not raw.strip()):
         return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if minimum is not None and value < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    if maximum is not None and value > maximum:
+        raise ValueError(f"{name} must be <= {maximum}")
+    return value
+
+
+def _parse_optional_int_param(
+    params: Dict[str, Any],
+    name: str,
+    *,
+    minimum: Optional[int] = None,
+    maximum: Optional[int] = None,
+) -> Optional[int]:
+    raw = params.get(name)
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
     try:
         value = int(raw)
     except (TypeError, ValueError) as exc:
@@ -540,6 +580,19 @@ def profile_list(_: Dict[str, Any]) -> Dict[str, Any]:
     return get_engine().profile.list_profiles()
 
 
+def profile_ncu_summary(params: Dict[str, Any]) -> Dict[str, Any]:
+    report_path = str(_require_param(params, "report_path"))
+    top_k = _parse_int_param(params, "top_k", 10, minimum=1, maximum=200)
+    timeout_seconds = _parse_int_param(params, "timeout_seconds", 60, minimum=1, maximum=3600)
+    metrics = _parse_list_param(params, "metrics")
+    return get_engine().profile.ncu_summary(
+        report_path=report_path,
+        top_k=top_k,
+        metrics=metrics,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def profile_compare(params: Dict[str, Any]) -> Dict[str, Any]:
     chapter = str(_require_param(params, "chapter"))
     return get_engine().profile.compare(chapter)
@@ -572,6 +625,7 @@ def ai_tools(_: Dict[str, Any]) -> Dict[str, Any]:
         "analysis": [],
         "optimization": [],
         "distributed": [],
+        "cluster": [],
         "inference": [],
         "ai": [],
         "profiling": [],
@@ -586,6 +640,7 @@ def ai_tools(_: Dict[str, Any]) -> Dict[str, Any]:
             "system_dependencies",
             "system_context",
             "system_capabilities",
+            "clock_lock_check",
             "system_parameters",
             "system_container",
             "system_cpu_memory",
@@ -610,6 +665,7 @@ def ai_tools(_: Dict[str, Any]) -> Dict[str, Any]:
         ],
         "optimization": ["optimize", "recommend", "optimize_roi", "optimize_techniques"],
         "distributed": ["distributed_plan", "distributed_nccl", "cluster_slurm", "launch_plan"],
+        "cluster": ["cluster_eval_suite", "cluster_validate_field_report"],
         "inference": [
             "inference_vllm",
             "inference_quantization",
@@ -629,6 +685,9 @@ def ai_tools(_: Dict[str, Any]) -> Dict[str, Any]:
             "nsys_summary",
             "compare_nsys",
             "compare_ncu",
+            "profile_list_profiles",
+            "profile_compile_analysis",
+            "ncu_summary",
         ],
         "benchmarks": [
             "run_benchmarks",
@@ -692,6 +751,60 @@ def ai_execute(params: Dict[str, Any]) -> Dict[str, Any]:
         if result.get("success") is False or result.get("error"):
             success = False
     return {"success": success, "tool": tool_name, "result": result}
+
+
+def cluster_eval_suite(params: Dict[str, Any]) -> Dict[str, Any]:
+    from core.cluster import run_cluster_eval_suite
+
+    mode = str(params.get("mode", "smoke"))
+    run_id = _parse_str_param(params, "run_id")
+    hosts = _parse_list_param(params, "hosts")
+    labels = _parse_list_param(params, "labels")
+    ssh_user = _parse_str_param(params, "ssh_user")
+    ssh_key = _parse_str_param(params, "ssh_key")
+    oob_if = _parse_str_param(params, "oob_if")
+    socket_ifname = _parse_str_param(params, "socket_ifname")
+    nccl_ib_hca = _parse_str_param(params, "nccl_ib_hca")
+    primary_label = _parse_str_param(params, "primary_label")
+    extra_args = _parse_list_param(params, "extra_args")
+    timeout_seconds = _parse_optional_int_param(params, "timeout_seconds", minimum=1)
+
+    return run_cluster_eval_suite(
+        mode=mode,
+        run_id=run_id,
+        hosts=hosts,
+        labels=labels,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        oob_if=oob_if,
+        socket_ifname=socket_ifname,
+        nccl_ib_hca=nccl_ib_hca,
+        primary_label=primary_label,
+        extra_args=extra_args,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def cluster_validate_field_report(params: Dict[str, Any]) -> Dict[str, Any]:
+    from core.cluster import validate_field_report_requirements
+
+    report = _parse_str_param(params, "report")
+    notes = _parse_str_param(params, "notes")
+    template = _parse_str_param(params, "template")
+    runbook = _parse_str_param(params, "runbook")
+    canonical_run_id = _parse_str_param(params, "canonical_run_id")
+    allow_run_id = _parse_list_param(params, "allow_run_id")
+    timeout_seconds = _parse_int_param(params, "timeout_seconds", 120, minimum=1, maximum=3600)
+
+    return validate_field_report_requirements(
+        report=report,
+        notes=notes,
+        template=template,
+        runbook=runbook,
+        canonical_run_id=canonical_run_id,
+        allow_run_id=allow_run_id,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def job_status(params: Dict[str, Any]) -> Dict[str, Any]:

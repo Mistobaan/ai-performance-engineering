@@ -137,7 +137,10 @@ export default function Dashboard() {
   const topSpeedups = overview?.top_speedups || [];
   const chapterStats = overview?.chapter_stats || [];
 
-  const chapters = useMemo(() => chapterStats.map((entry) => entry.chapter).sort(), [chapterStats]);
+  const chapters = useMemo(
+    () => (overview?.chapter_stats || []).map((entry) => entry.chapter).sort(),
+    [overview?.chapter_stats]
+  );
 
   const previousRun = history?.runs?.[1];
   const currentSuccessRate = summary.total ? (summary.succeeded / summary.total) * 100 : 0;
