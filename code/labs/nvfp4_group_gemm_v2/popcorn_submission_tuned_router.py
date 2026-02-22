@@ -78,17 +78,17 @@ def _set_case_env(case_idx: int) -> None:
     if case_idx == 2:
         os.environ["AISP_NVFP4_GROUP_GEMM_CLUSTER_M"] = "1"
         os.environ["AISP_NVFP4_GROUP_GEMM_CLUSTER_N"] = "1"
-        os.environ["AISP_NVFP4_GROUP_GEMM_RASTER_ORDER"] = "0"
-        os.environ["AISP_NVFP4_GROUP_GEMM_USE_PDL"] = "0"
-        os.environ["AISP_NVFP4_GROUP_GEMM_MAX_SWIZZLE"] = "1"
+        os.environ["AISP_NVFP4_GROUP_GEMM_RASTER_ORDER"] = "2"
+        os.environ["AISP_NVFP4_GROUP_GEMM_USE_PDL"] = "1"
+        os.environ["AISP_NVFP4_GROUP_GEMM_MAX_SWIZZLE"] = "0"
         return
 
     if case_idx == 3:
         os.environ["AISP_NVFP4_GROUP_GEMM_CLUSTER_M"] = "1"
         os.environ["AISP_NVFP4_GROUP_GEMM_CLUSTER_N"] = "1"
-        os.environ["AISP_NVFP4_GROUP_GEMM_RASTER_ORDER"] = "2"
+        os.environ["AISP_NVFP4_GROUP_GEMM_RASTER_ORDER"] = "0"
         os.environ["AISP_NVFP4_GROUP_GEMM_USE_PDL"] = "1"
-        os.environ["AISP_NVFP4_GROUP_GEMM_MAX_SWIZZLE"] = "16"
+        os.environ["AISP_NVFP4_GROUP_GEMM_MAX_SWIZZLE"] = "4"
         return
 
 
@@ -114,6 +114,12 @@ def _variant_fns(ext: Any, variant: str) -> tuple[Any, Any]:
     if variant == "2sm_s5":
         return ext.build_metadata_2sm_s5, ext.create_plan_2sm_s5
     return ext.build_metadata_2sm, ext.create_plan_2sm
+
+
+def _group_order_for_case(case_idx: int, group_count: int) -> list[int]:
+    if group_count <= 1:
+        return list(range(group_count))
+    return list(range(group_count))
 
 
 def _ctx_key(problem_sizes: list[tuple[int, int, int, int]], variant: str) -> tuple[str, int, int, int, int, bool, tuple[tuple[int, int, int, int], ...]]:
@@ -172,14 +178,18 @@ def _get_case_ctx(problem_sizes: list[tuple[int, int, int, int]], variant: str) 
 def _prepare_data(data: tuple[Any, ...], case_idx: int) -> tuple[Any, ...]:
     abc_tensors, sfasfb_tensors, sfasfb_reordered_tensors, problem_sizes = data
     variant = _variant_for_case(int(case_idx))
-    ext, case_ctx, create_plan = _get_case_ctx(problem_sizes, variant)
+    order = _group_order_for_case(int(case_idx), len(problem_sizes))
+    ordered_problem_sizes = [problem_sizes[i] for i in order]
+    ext, case_ctx, create_plan = _get_case_ctx(ordered_problem_sizes, variant)
 
     a_ptrs: list[int] = []
     b_ptrs: list[int] = []
     c_ptrs: list[int] = []
     sfa_ptrs: list[int] = []
     sfb_ptrs: list[int] = []
-    for (a, b, c), (sfa_reordered, sfb_reordered) in zip(abc_tensors, sfasfb_reordered_tensors):
+    for i in order:
+        a, b, c = abc_tensors[i]
+        sfa_reordered, sfb_reordered = sfasfb_reordered_tensors[i]
         a_ptrs.append(int(a.data_ptr()))
         b_ptrs.append(int(b.data_ptr()))
         c_ptrs.append(int(c.data_ptr()))
