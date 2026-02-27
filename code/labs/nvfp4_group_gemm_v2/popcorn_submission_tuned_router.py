@@ -56,6 +56,12 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _parse_bool_raw(raw: str | None, default: bool) -> bool:
+    if raw is None or raw == "":
+        return bool(default)
+    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 _CASE_DEFAULT_TUNABLES: dict[int, dict[str, int]] = {
     0: {"cluster_m": 2, "cluster_n": 1, "raster_order": 2, "use_pdl": 1, "max_swizzle": 8},
     1: {"cluster_m": 2, "cluster_n": 1, "raster_order": 2, "use_pdl": 0, "max_swizzle": 8},
@@ -132,6 +138,12 @@ def _group_order_for_case(case_idx: int, group_count: int) -> list[int]:
 def _use_split_plans(case_idx: int, group_count: int) -> bool:
     if int(case_idx) not in {2, 3} or int(group_count) != 2:
         return False
+    case_raw = os.environ.get(f"AISP_NVFP4_GROUP_GEMM_CASE{int(case_idx)}_SPLIT")
+    if case_raw is not None and case_raw != "":
+        return _parse_bool_raw(case_raw, False)
+    per_case_raw = os.environ.get(f"AISP_NVFP4_GROUP_GEMM_SPLIT_CASE{int(case_idx)}")
+    if per_case_raw is not None and per_case_raw != "":
+        return _parse_bool_raw(per_case_raw, False)
     return _env_bool("AISP_NVFP4_GROUP_GEMM_SPLIT_CASE23", False)
 
 
@@ -468,8 +480,11 @@ def _case_config_env_fingerprint() -> tuple[str | None, ...]:
         "AISP_NVFP4_GROUP_GEMM_RASTER_ORDER",
         "AISP_NVFP4_GROUP_GEMM_USE_PDL",
         "AISP_NVFP4_GROUP_GEMM_MAX_SWIZZLE",
+        "AISP_NVFP4_GROUP_GEMM_SPLIT_CASE23",
+        "AISP_NVFP4_GROUP_GEMM_SPLIT_CASE2",
+        "AISP_NVFP4_GROUP_GEMM_SPLIT_CASE3",
     )
-    case_keys = ("VARIANT", "CLUSTER_M", "CLUSTER_N", "RASTER_ORDER", "USE_PDL", "MAX_SWIZZLE")
+    case_keys = ("VARIANT", "CLUSTER_M", "CLUSTER_N", "RASTER_ORDER", "USE_PDL", "MAX_SWIZZLE", "SPLIT")
     for k in global_keys:
         vals.append(os.environ.get(k))
     for case_idx in range(4):

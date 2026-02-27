@@ -203,9 +203,109 @@
 - Do not trust one measurement surface alone; reconcile microbench, fresh-input verify, and (when needed) Popcorn test mode behavior.
 - Prefer single-source runtime plans with stable caching; avoid re-planning per call unless shape/tunable/variant changes.
 - Optimize host-side submission overhead (pointer table updates, copies, graph replay path) only if correctness and final geomean remain green.
+- For router-path tuning, single-run lows can be very misleading (e.g. `~9.70 us` one-off): require interleaved ABAB before promotion.
+- Router tuning scripts that mutate env vars in-process MUST call `refresh_case_configs_from_env(clear_caches=True)` before benchmarking; `_CASE_CONFIGS` is built at import time.
+- Current router default winner on strict verify + ABAB (clock-locked) is:
+  - `case0`: `variant=2sm`, `cluster=2x1`, `raster_order=2`, `use_pdl=1`, `max_swizzle=8`
+  - `case1`: `variant=2sm`, `cluster=2x1`, `raster_order=2`, `use_pdl=0`, `max_swizzle=8`
+  - `case2`: `variant=1sm_n128_case23_s4`, `cluster=1x2`, `raster_order=0`, `use_pdl=0`, `max_swizzle=16`
+  - `case3`: `variant=1sm_n128_case23_s5`, `cluster=1x2`, `raster_order=0`, `use_pdl=0`, `max_swizzle=8`
+  - Latest strict all-case snapshot after promotion: `~10.5388 us/group` (`/tmp/nvfp4_postpromote_static_20260225_1959.json`).
+  - Promotion evidence: 8-pair ABAB on the promoted pair (`case2=s4 sw16`, `case3=s5 sw8`) gave `delta_mean_B_minus_A~-0.0778 us`, `stdev~0.0754`.
+  - Recent strict snapshots remain noisy in a tight band (`~10.53-10.75 us/group` observed), so keep ABAB as the promotion gate and do not trust single-run lows.
+- Cross-product recombination of top per-case configs can beat greedy coordinate descent; run a small cross-product rerank after per-case sweeps.
+- Popcorn test-mode checks can fail due service maintenance (`503 Offline for Maintenance`); treat this as external outage, not kernel/submission rejection.
+- `1sm_n128_s1` is a known pathological option for case2/case3 (`~71 us` case2 and `~31-52 us` case3 in verify-green runs); prune it from practical search spaces.
+- Case2 `variant=1sm_n128_case23` with `cluster=1x2,raster_order=2,use_pdl=0,max_swizzle=8` is unstable across repeated all-case checks; keep a non-case23 N128 lane as default unless new ABAB/stability evidence is clear.
+- Case2 `variant=1sm_n128_case23_s4` (`cluster=1x2,raster_order=2,use_pdl=0,max_swizzle=8`) can win on static-input ABAB, but regressed on fresh-input A/B in repeated checks; keep exploratory/off for defaults.
+- Case2 `variant=1sm_n128_case23_s4` with `max_swizzle=0` also showed static-input ABAB gains but regressed on fresh-input A/B; do not promote without fresh-input confirmation.
+- Case0/case1 `2sm_s4, cluster=2x1, raster_order=2, use_pdl=0, max_swizzle=8` can appear strong in coordinate-descent searches, but direct ABAB rechecks were weak/noisy (`case0-only ~-0.0187 us`, `case1-only ~+0.0487 us`, combined `~+0.0357 us`); keep `case0/1=2sm` defaults for now.
+- Historical note: `1sm_n128_s5` had directional ABAB wins in older routing experiments, but this path is superseded by `1sm_n128_case23_s5` defaults.
+- Case2 exhaustive `1sm_n128_case2` lane (new CUDA path with dedicated carveout policy) is not currently promotable:
+  - Best single-run geomean candidate (`cluster=1x2, raster_order=0, use_pdl=1, max_swizzle=0`) reached `~10.814 us` in one sweep.
+  - 6-pair ABAB vs current default was negative/noisy (`delta_mean_B_minus_A~+0.021 us`, stdev `~0.078`), so keep it exploratory/off.
+- Case2/case3 reserve-byte tuning must be compile-time deterministic:
+  - `labs/nvfp4_group_gemm/cutlass_extension.py` now forwards `AISP_NVFP4_GROUP_GEMM_1SM_N128_CASE2_RESERVE_BYTES` and `...CASE3_RESERVE_BYTES` into NVCC flags and extension naming.
+  - Without these compile-time defines in the build contract, reserve sweeps are noise-prone and not attributable.
+- Deterministic case2 reserve sweep (`variant=1sm_n128_case2`, `cluster=1x2`, `raster_order=0`, `max_swizzle=0`) remained non-promotable:
+  - Best single-run candidate was `reserve=8192,use_pdl=1` at `~10.513 us/group`.
+  - 6-pair ABAB vs default regressed on average (`delta_mean_B_minus_A~+0.0347 us`), so do not promote.
+- Case2 reserve-byte retune on dedicated `1sm_n128_case2` remains non-promotable on current router defaults:
+  - Best single-run candidate was `reserve=8192` with `cluster=1x2,raster_order=1,use_pdl=1,max_swizzle=0` at `~10.508 us/group`.
+  - 6-pair ABAB vs default regressed on average (`delta_mean_B_minus_A~+1.116 us`, with a large outlier spike), so keep this path exploratory/off.
+- Case2 stage-lane cross-check on current router baseline keeps `1sm_n128_s5` as the least-bad N128 stage lane:
+  - `s1`/`s2`/`s3` are strongly slower (`~74 us`, `~23 us`, `~17.5 us` for case2 in representative strict runs).
+  - `s4`/`s6`/`s7` remain slower than `s5` on all-case geomean under strict verify.
+- Historical note: case3 `1sm_n128_s4` wins were against older `case23_s4` routing and are superseded by the current `case23_s5` defaults.
+- Case3 dedicated lane (`variant=1sm_n128_case3`) verifies strict all-case but is currently non-promotable:
+  - Best rescored single-run config (`cluster=1x2,raster_order=0,use_pdl=0,max_swizzle=0`) reached `~10.473 us/group`.
+  - 8-pair ABAB vs default was effectively neutral/slightly negative (`delta_mean_B_minus_A~+0.0027 us`, stdev `~0.0798`).
+- Deterministic case3 reserve sweep on `1sm_n128_case3` is also non-promotable:
+  - Best single-run reserve was `2048` with `~10.466 us/group`.
+  - 6-pair ABAB vs default regressed on average (`delta_mean_B_minus_A~+0.0472 us`), so keep case3 default on `1sm_n128_s4`.
+- New kernel lane `1sm_n128_case23_s5` (block-scaled reduced-SMEM s5) is verify-green and currently promotable:
+  - ABAB (`repeats=64`, 12 pairs) vs prior defaults: `delta_mean_B_minus_A~-0.0301 us`, `median~-0.0235 us`, `stdev~0.054`.
+  - Confirmation ABAB (`repeats=80`, 8 pairs): `delta_mean_B_minus_A~-0.0204 us`, `median~-0.0251 us`, low spread (`stdev~0.0366`).
+  - Router defaults now use `case2=case3=1sm_n128_case23_s5` with `cluster=1x2, raster_order=0, max_swizzle=0`.
+  - Fresh 3x stability check (`repeats=80`): new defaults `geo_mean~10.5610` vs old defaults `geo_mean~10.5738` (directional win, small margin).
+- `1sm_n128_case23_s5` reserve-byte tuning is now compile-time deterministic and non-promotable so far:
+  - `cutlass_extension.py` forwards `AISP_NVFP4_GROUP_GEMM_1SM_N128_CASE23_S5_RESERVE_BYTES` into NVCC flags + extension naming; this is required for attributable reserve sweeps.
+  - Strict sweep (`4096/8192/12288/16384/20480`) on current defaults did not beat the default reserve; all candidates were slower in single-run checks.
+  - 6-pair ABAB for best candidate (`8192`) vs default regressed on average (`delta_mean_B_minus_A~+0.0869 us`, high variance), so keep default reserve.
+- Case3 dedicated retune on top of current defaults remains non-promotable:
+  - Best screened candidate (`variant=1sm_n128, cluster=1x2, raster_order=2, use_pdl=1, max_swizzle=0`) looked directional in short rescoring.
+  - 12-pair ABAB vs default was effectively neutral/slightly regressive (`delta_mean_B_minus_A~+0.00075 us`, stdev `~0.076`), so do not promote.
+- Joint case2/case3 combo search (focused 30-combo matrix over top tunables) also remains non-promotable:
+  - Top directional combos reached `~10.55 us/group` in single-run checks.
+  - ABAB on top-ranked combos was flat/noisy (`~0` to positive mean deltas); keep defaults unchanged.
+- New kernel lane `1sm_n128_case23_s1` (StageCount=1) is verify-green but non-promotable:
+  - Severe regressions in strict runs (`case2~74 us`, `case3~32 us` on representative probes), so keep off.
+- New kernel lane `1sm_n128_case23_s6` (reduced-SMEM s6) is non-promotable:
+  - Initial ABAB (`repeats=64`, 12 pairs) on mixed route (`case2=s6`, `case3=s5`) looked positive.
+  - Confirmation ABAB (`repeats=80`, 8 pairs) regressed (`delta_mean_B_minus_A~+0.0208 us`), so keep s6 off.
+- Case1 promotion note: `use_pdl=0` on `variant=2sm, cluster=2x1, raster_order=2, max_swizzle=8` gave repeated small wins in long sequential checks; keep ABAB gating when re-validating on fresh thermal state.
+- Case0 note: switching `use_pdl` from `1 -> 0` on current `2sm` routing is not robustly positive (6-pair ABAB `delta_mean_B_minus_A~+0.008 us`), so keep case0 `use_pdl=1`.
+- Case2 `variant=1sm_n192` (including fixed-stage experiments and tunable sweeps) is currently non-viable (`~17.7-19.5 us/group` for case2) and should remain off.
+- New CUDA case2 fixed-stage variants (`1sm_n128_case2_s3`, `1sm_n128_case2_s4`) compile and verify, but are currently non-promotable:
+  - `case2_s3` is consistently slower (`~+0.17 to +0.34 us` in representative strict checks).
+  - `case2_s4` can show directional single-run wins, but repeated burn-in ABAB remains flat/slightly regressive (e.g. `delta_mean_B_minus_A~+0.005 to +0.006 us` with visible spikes).
+- New CUDA case2 NVF4 fixed-stage variants (`1sm_n128_case2_nvf4_s3`, `1sm_n128_case2_nvf4_s4`) compile and verify, but are currently non-promotable:
+  - `case2_nvf4_s3` is a clear regression (`~10.90 us` geomean in representative strict checks).
+  - `case2_nvf4_s4` is neutral/noisy in burn-in ABAB (`delta_B_minus_A` around `-0.011 us` at `repeats=36` and `-0.0018 us` at `repeats=64`, with split wins and high stdev), so keep off by default.
+- Case2 NVF4 tunable sweeps (cluster/raster/pdl/swizzle) produced directional single-run lows but no robust promotion:
+  - Best quick point observed: `variant=1sm_n128_case2_nvf4, cluster=1x2, raster_order=2, use_pdl=1, max_swizzle=16` (`~10.548 us` quick geomean).
+  - Burn-in ABAB on that point regressed overall (`delta_B_minus_A~+0.0456 us`, 12 pairs), including large spike risk.
+  - Secondary quick point `cluster=1x1, raster_order=0, use_pdl=1, max_swizzle=0` also regressed in burn-in ABAB (`delta_B_minus_A~+0.0595 us`, 8 pairs).
+- Popcorn test-mode checks can be blocked by service availability; a 2026-02-26 check returned `503 Offline for Maintenance`, which provides no timing or structure-validation signal for candidate quality.
+- Case2 kernel-family screens on the current default route continue to show only N=128 families as viable:
+  - `n64/n64_nvf4/n192/n256/2sm_case2` lanes are materially slower (or fail `can_implement`) for the all-case geomean objective.
+  - Keep case2 tuning focused on N=128 lanes unless new correctness-preserving schedule families are added.
+- ABAB methodology update for router/kernel pivots:
+  - Use explicit A/B burn-in before counting pairs to avoid first-iteration startup artifacts.
+  - Treat spike-prone candidates as non-promotable even when trimmed means look slightly positive.
+- Pointer-update path finding (host/runtime overhead):
+  - `AISP_NVFP4_GROUP_GEMM_NATIVE_PTR_UPDATE=1` is now promoted as default in `popcorn_submission_tuned_router.py` (override with `=0` for A/B).
+  - Fresh-input ABAB remains strongly positive after promotion (`delta_old_minus_new~+13.16 us`, `6/6` wins for new default at `repeats=16`).
+  - Static-input ABAB is also net-positive in the latest pass (`delta_old_minus_new~+0.0558 us`, `4/6` wins for new default), with higher variance on old path.
+  - Additional host-overhead fix landed in `GemmPlanT::update_ptrs_from_tensors`: preallocate and reuse pinned host pointer scratch per plan (no per-call `torch::empty`); this further reduces fresh retarget overhead without changing math paths.
+  - New packed pointer-table fast path landed in `GemmPlanT::update_ptrs_from_tensors`: when pointer tensors are row-views over one `[6, G]` table, use one `cudaMemcpyAsync` for all rows; fallback remains row-wise copies for non-packed layouts.
+  - Post-packed-copy ABAB confirms promotion on current tuned route:
+    - Static ABAB (`4` pairs): `delta_old_minus_new~+0.0769 us` (`3/4` wins for native path).
+    - Fresh ABAB (`4` pairs): `delta_old_minus_new~+27.13 us` (`4/4` wins for native path).
+  - Case2 variant retest after host-path improvements is still non-promotable: `1sm_n128_case23` looked best in short screen, but 6-pair ABAB vs current `1sm_n128_case23_s4` regressed (`delta_B_minus_A~+0.0384 us`), so keep case2 default as `s4`.
+  - Case3 retune on top of the packed-copy path promoted `1sm_n128_case23_s4` over `s5`:
+    - Static ABAB (`6` pairs): `delta_B_minus_A~ -0.0221 us` (`4/6` wins for `s4`).
+    - Fresh ABAB is noisier but mean-favorable in extended check (`6` pairs: `delta_B_minus_A~ -0.4946 us`).
 - Current verified per-case CTA order routing for v2 path: `case0=tn_major`, `case1=tm_major`, `case2=tm_major`, `case3=tn_major`.
 - `AISP_NVFP4_GROUP_GEMM_V2_ASSUME_NO_N_TAIL=1` is verify-green and ABAB-positive for case0/case1/case2 on the tuned UnrollN=2 build; keep it disabled for case3 where it regresses.
 - `AISP_NVFP4_GROUP_GEMM_V2_FUSE_INPUTS_COMPRESS_LIST=1` must retain all fused-slot contexts (including padded tensors) to avoid graph-mode illegal-address failures; keep this behind explicit opt-in unless repeated ABAB shows net geomean gain.
+- Case2 kernel specialization (`AISP_NVFP4_GROUP_GEMM_V2_ENABLE_CASE2_INLINE_TM_MAJOR_MAP=1`) is not a promotable default on current tuned builds:
+  - 4-pair all-case ABAB showed a regression (`delta_B_minus_A=+0.050609 us/call`, map-on slower on average).
+  - Keep it experimental/off unless a new ABAB with stricter noise controls shows a clear win.
+- Case2 cta_group::2 probe status (strict verify):
+  - `UNROLL_N=1, CTA2_PARTITION_B=1` verifies but is far slower (`~66 us/call` for case2).
+  - `UNROLL_N=1, CTA2_PARTITION_B=0` fails verify.
+  - `UNROLL_N=2` cta2 paths remain correctness-unsafe (`CTA2_PARTITION_B=0` fails verify; `CTA2_PARTITION_B=1` can hang).
 
 ## Expectations Files (CRITICAL)
 - Expectation baselines live next to each chapter as `expectations_{hardware_key}.json`.
@@ -955,6 +1055,10 @@ def get_output_tolerance(self) -> tuple:
   - `AISP_NVFP4_GROUP_GEMM_V2_WS_SEGMENT_PARALLEL=1`: `13.954 us/group` (small win).
   - `AISP_NVFP4_GROUP_GEMM_V2_WARP0_ONLY_MAINLOOP=0`: `15.527 us/group` (regression).
   - Net: no large win from these toggles alone.
+- Newer all-case/fresh-input finding (2026-02-24, strict verify + ABAB):
+  - `AISP_NVFP4_GROUP_GEMM_V2_WARP0_ONLY_MAINLOOP=0` is a large net win for the current tcgen05 path
+    (`delta_B_minus_A ≈ -7.52 us/call` geomean across cases 0..3; low variance).
+  - Treat the older case1-only regression note above as historically scoped, not globally applicable.
 - Additional compile-time sweep (case1, `inputs=15`, graph+flush+locked clocks, verify on):
   - `base` (`WS_UNROLL2_MMA=1`, `EPILOGUE_LD_X32=1`, `MAXRREGCOUNT=68`): `13.15 us/group`.
   - `WS_TMA_PRODUCER=1`: `14.734 us/group` (regression).
