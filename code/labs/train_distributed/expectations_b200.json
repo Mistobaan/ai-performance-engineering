@@ -1,0 +1,180 @@
+{
+  "examples": {
+    "ddp_compression": {
+      "example": "ddp_compression",
+      "metadata": {
+        "best_optimization": "powersgd",
+        "best_optimization_file": "optimized_ddp_compression_powersgd.py",
+        "best_optimization_speedup": 2.3733615146959886,
+        "best_optimization_technique": "powersgd",
+        "best_optimization_time_ms": 490.0322413444519,
+        "optimization_goal": "speed"
+      },
+      "metrics": {
+        "baseline_p75_ms": 1163.0236625671387,
+        "baseline_time_ms": 1163.0236625671387,
+        "best_optimized_p75_ms": 490.0322413444519,
+        "best_optimized_speedup": 2.3733615146959886,
+        "best_optimized_time_ms": 490.0322413444519,
+        "best_speedup": 2.3733615146959886,
+        "is_regression": false
+      },
+      "provenance": {
+        "git_commit": "d6e32769490215d76082ab3082f04d94f3556ef7",
+        "hardware_key": "b200",
+        "iterations": 20,
+        "profile_name": "none",
+        "timestamp": "2026-03-01T16:29:38.346091",
+        "warmup_iterations": 5
+      },
+      "type": "python"
+    },
+    "pipeline_1f1b": {
+      "example": "pipeline_1f1b",
+      "metadata": {
+        "best_optimization": "optimized_pipeline_1f1b",
+        "best_optimization_file": "optimized_pipeline_1f1b.py",
+        "best_optimization_speedup": 1.009855589477718,
+        "best_optimization_technique": "optimized_pipeline_1f1b",
+        "best_optimization_time_ms": 8904.516220092773,
+        "optimization_goal": "speed"
+      },
+      "metrics": {
+        "baseline_p75_ms": 8992.275476455688,
+        "baseline_time_ms": 8992.275476455688,
+        "best_optimized_p75_ms": 8904.516220092773,
+        "best_optimized_speedup": 1.009855589477718,
+        "best_optimized_time_ms": 8904.516220092773,
+        "best_speedup": 1.009855589477718,
+        "is_regression": false
+      },
+      "provenance": {
+        "git_commit": "d6e32769490215d76082ab3082f04d94f3556ef7",
+        "hardware_key": "b200",
+        "iterations": 1,
+        "profile_name": "none",
+        "timestamp": "2026-03-01T15:22:05.724510",
+        "warmup_iterations": 5
+      },
+      "type": "python"
+    },
+    "pipeline_dualpipe": {
+      "example": "pipeline_dualpipe",
+      "metadata": {
+        "best_optimization": "optimized_pipeline_dualpipe",
+        "best_optimization_file": "optimized_pipeline_dualpipe.py",
+        "best_optimization_speedup": 1.0111571058216302,
+        "best_optimization_technique": "optimized_pipeline_dualpipe",
+        "best_optimization_time_ms": 8912.351131439209,
+        "optimization_goal": "speed"
+      },
+      "metrics": {
+        "baseline_p75_ms": 9011.787176132202,
+        "baseline_time_ms": 9011.787176132202,
+        "best_optimized_p75_ms": 8912.351131439209,
+        "best_optimized_speedup": 1.0111571058216302,
+        "best_optimized_time_ms": 8912.351131439209,
+        "best_speedup": 1.0111571058216302,
+        "is_regression": false
+      },
+      "provenance": {
+        "git_commit": "d6e32769490215d76082ab3082f04d94f3556ef7",
+        "hardware_key": "b200",
+        "iterations": 1,
+        "profile_name": "none",
+        "timestamp": "2026-03-01T15:22:25.722026",
+        "warmup_iterations": 5
+      },
+      "type": "python"
+    },
+    "pipeline_dualpipev": {
+      "example": "pipeline_dualpipev",
+      "metadata": {
+        "best_optimization": "optimized_pipeline_dualpipev",
+        "best_optimization_file": "optimized_pipeline_dualpipev.py",
+        "best_optimization_speedup": 1.011484809441784,
+        "best_optimization_technique": "optimized_pipeline_dualpipev",
+        "best_optimization_time_ms": 8893.91827583313,
+        "optimization_goal": "speed"
+      },
+      "metrics": {
+        "baseline_p75_ms": 8996.063232421875,
+        "baseline_time_ms": 8996.063232421875,
+        "best_optimized_p75_ms": 8893.91827583313,
+        "best_optimized_speedup": 1.011484809441784,
+        "best_optimized_time_ms": 8893.91827583313,
+        "best_speedup": 1.011484809441784,
+        "is_regression": false
+      },
+      "provenance": {
+        "git_commit": "d6e32769490215d76082ab3082f04d94f3556ef7",
+        "hardware_key": "b200",
+        "iterations": 1,
+        "profile_name": "none",
+        "timestamp": "2026-03-01T15:22:45.735892",
+        "warmup_iterations": 5
+      },
+      "type": "python"
+    },
+    "pipeline_gpipe": {
+      "example": "pipeline_gpipe",
+      "metadata": {
+        "best_optimization": "optimized_pipeline_gpipe",
+        "best_optimization_file": "optimized_pipeline_gpipe.py",
+        "best_optimization_speedup": 0.9847644965761057,
+        "best_optimization_technique": "optimized_pipeline_gpipe",
+        "best_optimization_time_ms": 9003.364562988281,
+        "optimization_goal": "speed"
+      },
+      "metrics": {
+        "baseline_p75_ms": 8866.193771362305,
+        "baseline_time_ms": 8866.193771362305,
+        "best_optimized_p75_ms": 9003.364562988281,
+        "best_optimized_speedup": 0.9847644965761057,
+        "best_optimized_time_ms": 9003.364562988281,
+        "best_speedup": 0.9847644965761057,
+        "is_regression": true
+      },
+      "provenance": {
+        "git_commit": "d6e32769490215d76082ab3082f04d94f3556ef7",
+        "hardware_key": "b200",
+        "iterations": 1,
+        "profile_name": "none",
+        "timestamp": "2026-03-01T15:23:05.684942",
+        "warmup_iterations": 5
+      },
+      "type": "python"
+    },
+    "symmem_training": {
+      "example": "symmem_training",
+      "metadata": {
+        "best_optimization": "optimized_symmem_training",
+        "best_optimization_file": "optimized_symmem_training.py",
+        "best_optimization_speedup": 1.058569074620214,
+        "best_optimization_technique": "optimized_symmem_training",
+        "best_optimization_time_ms": 17307.915449142456,
+        "optimization_goal": "speed"
+      },
+      "metrics": {
+        "baseline_p75_ms": 18321.624040603638,
+        "baseline_time_ms": 18321.624040603638,
+        "best_optimized_p75_ms": 17307.915449142456,
+        "best_optimized_speedup": 1.058569074620214,
+        "best_optimized_time_ms": 17307.915449142456,
+        "best_speedup": 1.058569074620214,
+        "is_regression": false
+      },
+      "provenance": {
+        "git_commit": "d6e32769490215d76082ab3082f04d94f3556ef7",
+        "hardware_key": "b200",
+        "iterations": 1,
+        "profile_name": "none",
+        "timestamp": "2026-03-01T15:23:43.462320",
+        "warmup_iterations": 5
+      },
+      "type": "python"
+    }
+  },
+  "hardware_key": "b200",
+  "schema_version": 2
+}

@@ -1157,6 +1157,12 @@ def is_distributed_benchmark(file_path: Path) -> bool:
     - Environment variables like WORLD_SIZE, RANK
     - Multi-GPU communication patterns
     """
+    name_lower = file_path.name.lower()
+    # Fast path: examples explicitly suffixed as multi-GPU should be skipped
+    # up-front on 1-GPU systems instead of failing at runtime.
+    if any(token in name_lower for token in ("_multigpu", "multi_gpu", "multi-gpu")):
+        return True
+
     try:
         content = file_path.read_text()
         content_lower = content.lower()
@@ -1291,6 +1297,32 @@ def check_hardware_limitation(error_msg: str) -> Optional[str]:
         if 'SKIPPED:' in error_msg:
             return error_msg.split('SKIPPED:', 1)[1].strip()
         return "Distributed benchmark requires multiple GPUs (insufficient GPUs available)"
+    if (
+        'world size mismatch' in error_lower
+        and 'visible gpu' in error_lower
+        and ('requires >= 2' in error_lower or 'requires exactly 2' in error_lower)
+    ):
+        return "Distributed benchmark requires multiple GPUs (insufficient GPUs available)"
+
+    # Missing optional serving/inference dependencies should be classified as
+    # software limitations in strict sweeps, not hard benchmark errors.
+    if (
+        "vllm required for this benchmark" in error_lower
+        or "no module named 'vllm'" in error_lower
+    ):
+        return "vLLM is not installed or not importable in this environment"
+    if "no module named 'flashinfer'" in error_lower:
+        return "flashinfer is not installed in this environment"
+    if (
+        "cutlass python package (cutlass_library) is missing" in error_lower
+        or "install nvidia-cutlass-dsl" in error_lower
+    ):
+        return "CUTLASS Python package (nvidia-cutlass-dsl / cutlass_library) is not installed"
+    if (
+        "no suitable algorithm found for nvfp4 gemm" in error_lower
+        or "fp4 not supported at all on this system" in error_lower
+    ):
+        return "cuBLASLt NVFP4 algorithm unavailable on this driver/toolchain"
     
     # Segmentation faults - these should be prevented by pre-compilation
     # If they still occur after pre-compilation, it's a real issue, not a limitation
@@ -2822,6 +2854,57 @@ def _merge_benchmark_config(
     return merged
 
 
+def _canonicalize_optimized_variants_for_full_sweep(
+    chapter_id: str,
+    python_pairs: List[Tuple[Path, List[Path], str]],
+    *,
+    include_alias_pairs: bool,
+    example_filters: Optional[Set[str]],
+) -> Tuple[List[Tuple[Path, List[Path], str]], int]:
+    """Reduce tuning-heavy optimization sets to canonical defaults by default.
+
+    For labs that intentionally keep many archived tuning variants, default behavior should
+    validate canonical examples rather than exhaustively replay every historical optimization
+    script. Users can opt into all variants via `AISP_INCLUDE_NVFP4_GROUP_GEMM_VARIANTS=1`.
+
+    Notes:
+    - Alias-targeted runs are left unchanged (`include_alias_pairs=True`).
+    - Canonical chapter:example targets are still canonicalized unless env override is set.
+    """
+    # Alias-targeted runs intentionally map to specific optimized variants.
+    if include_alias_pairs:
+        return python_pairs, 0
+
+    include_all_variants = os.environ.get(
+        "AISP_INCLUDE_NVFP4_GROUP_GEMM_VARIANTS", ""
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    if include_all_variants:
+        return python_pairs, 0
+
+    if chapter_id not in {"labs/nvfp4_group_gemm", "labs/nvfp4_group_gemm_v2"}:
+        return python_pairs, 0
+
+    suppressed = 0
+    canonical_pairs: List[Tuple[Path, List[Path], str]] = []
+    for baseline_path, optimized_paths, example_name in python_pairs:
+        canonical_name = baseline_path.stem.replace("baseline_", "", 1)
+        # Alias entries are already suppressed for full runs; keep any that remain untouched.
+        if example_name != canonical_name:
+            canonical_pairs.append((baseline_path, optimized_paths, example_name))
+            continue
+
+        canonical_opt = baseline_path.parent / f"optimized_{canonical_name}{baseline_path.suffix}"
+        if canonical_opt in optimized_paths:
+            removed = max(0, len(optimized_paths) - 1)
+            suppressed += removed
+            canonical_pairs.append((baseline_path, [canonical_opt], example_name))
+        else:
+            # Fallback to discovered variants when no canonical optimized file exists.
+            canonical_pairs.append((baseline_path, optimized_paths, example_name))
+
+    return canonical_pairs, suppressed
+
+
 def _test_chapter_impl(
     chapter_dir: Path,
     enable_profiling: bool = False,
@@ -3081,6 +3164,36 @@ def _test_chapter_impl(
                 pair for pair in python_pairs if pair[2] in example_filters
             ]
             logger.info(f"  Filtered to {len(python_pairs)} example(s): {', '.join(sorted(example_filters))}")
+    include_alias_pairs = os.environ.get("AISP_INCLUDE_ALIAS_BENCHMARKS", "").strip().lower() in {"1", "true", "yes", "on"}
+    if not example_filters and not include_alias_pairs:
+        # Full chapter runs should execute canonical baseline->optimized pairings once.
+        # Alias entries (added for chapter:example_variant targeting) duplicate work.
+        before_pairs = len(python_pairs)
+        python_pairs = [
+            pair
+            for pair in python_pairs
+            if pair[2] == pair[0].stem.replace("baseline_", "", 1)
+        ]
+        suppressed_pairs = before_pairs - len(python_pairs)
+        if suppressed_pairs:
+            logger.info(
+                "  Suppressed %d alias benchmark pair(s) for full chapter run "
+                "(set AISP_INCLUDE_ALIAS_BENCHMARKS=1 to include aliases).",
+                suppressed_pairs,
+            )
+    python_pairs, suppressed_variant_opts = _canonicalize_optimized_variants_for_full_sweep(
+        chapter_id,
+        python_pairs,
+        include_alias_pairs=include_alias_pairs,
+        example_filters=example_filters,
+    )
+    if suppressed_variant_opts:
+        logger.info(
+            "  Canonicalized %d optimization variant(s) for %s full sweep "
+            "(set AISP_INCLUDE_NVFP4_GROUP_GEMM_VARIANTS=1 to include all variants).",
+            suppressed_variant_opts,
+            chapter_id,
+        )
     if only_cuda or only_python:
         cuda_wrapped_pairs = [pair for pair in python_pairs if _is_cuda_wrapper(pair[0])]
         if only_cuda:
@@ -3580,6 +3693,8 @@ def _test_chapter_impl(
                         break
 
                     error_message = baseline_errors[0].strip() if baseline_errors else "Benchmark harness reported errors"
+                    if not skip_reason:
+                        skip_reason = check_hardware_limitation(error_message)
                     if skip_reason:
                         logger.warning(f"    WARNING: SKIPPED: {skip_reason}")
                         result_entry["status"] = "skipped"
@@ -4283,6 +4398,8 @@ def _test_chapter_impl(
                             break
 
                         error_message = optimized_errors[0].strip() if optimized_errors else "Benchmark harness reported errors"
+                        if not skip_reason:
+                            skip_reason = check_hardware_limitation(error_message)
                         if skip_reason:
                             logger.warning(f"    Testing: {opt_name}... SKIPPED: {skip_reason}")
                             result_entry["optimizations"].append({
@@ -7042,13 +7159,33 @@ def _test_chapter_impl(
     max_speedup = max(speedups) if speedups else 1.0
     min_speedup = min(speedups) if speedups else 1.0
 
+    # Final status counts must be derived from finalized benchmark entries.
+    # Per-optimization counters can over/under-count failure classes.
+    final_status_counts: Dict[str, int] = {}
+    for bench in benchmark_results:
+        raw_status = str(bench.get("status", "unknown") or "unknown").strip().lower() or "unknown"
+        final_status_counts[raw_status] = final_status_counts.get(raw_status, 0) + 1
+
+    successful_final = final_status_counts.get("succeeded", 0)
+    failed_error_final = final_status_counts.get("failed_error", 0)
+    failed_verification_final = final_status_counts.get("failed_verification", 0)
+    failed_regression_final = final_status_counts.get("failed_regression", 0)
+    failed_plain_final = final_status_counts.get("failed", 0)
+    total_failed = sum(
+        count for status, count in final_status_counts.items() if status == "failed" or status.startswith("failed_")
+    )
+    failed_other_final = max(
+        0,
+        total_failed - failed_error_final - failed_verification_final - failed_regression_final - failed_plain_final,
+    )
+    total_skipped = final_status_counts.get("skipped", 0)
+
     logger.info("\n" + "-" * 80)
     logger.info(f"{chapter_name.upper()} SUMMARY")
-    total_skipped = skipped_hw + skipped_distributed
-    total_failed = failed_error + failed_regression
     logger.info(
-        f"Benchmarks: {len(benchmark_results)} | Succeeded: {successful} | "
-        f"Failed: {total_failed} (errors={failed_error}, regressions={failed_regression}) | "
+        f"Benchmarks: {len(benchmark_results)} | Succeeded: {successful_final} | "
+        f"Failed: {total_failed} (errors={failed_error_final}, verification={failed_verification_final}, "
+        f"regressions={failed_regression_final}, generic={failed_plain_final}, other={failed_other_final}) | "
         f"Skipped: {total_skipped} (HW: {skipped_hw}, Dist: {skipped_distributed}) | "
         f"Informational: {informational_skipped}"
     )
@@ -7064,10 +7201,13 @@ def _test_chapter_impl(
         chapter=chapter_name,
         status="completed",
         total_benchmarks=len(benchmark_results),
-        successful=successful,
+        successful=successful_final,
         failed=total_failed,
-        failed_error=failed_error,
-        failed_regression=failed_regression,
+        failed_error=failed_error_final,
+        failed_verification=failed_verification_final,
+        failed_regression=failed_regression_final,
+        failed_generic=failed_plain_final,
+        failed_other=failed_other_final,
         skipped_hardware=skipped_hw,
         skipped_distributed=skipped_distributed,
         informational=informational_skipped,
@@ -7083,10 +7223,13 @@ def _test_chapter_impl(
         'manifests': manifest_entries,
         'summary': {
             'total_benchmarks': len(benchmark_results),
-            'successful': successful,
+            'successful': successful_final,
             'failed': total_failed,
-            'failed_error': failed_error,
-            'failed_regression': failed_regression,
+            'failed_error': failed_error_final,
+            'failed_verification': failed_verification_final,
+            'failed_regression': failed_regression_final,
+            'failed_generic': failed_plain_final,
+            'failed_other': failed_other_final,
             'skipped_hardware': skipped_hw,
             'skipped_distributed': skipped_distributed,
             'total_skipped': total_skipped,
@@ -8692,12 +8835,18 @@ def generate_markdown_report(
         total_informational = sum(r['summary'].get('informational', 0) for r in results)
         total_regressions = sum(r['summary'].get('failed_regression', 0) for r in results)
         total_failed_errors = sum(r['summary'].get('failed_error', 0) for r in results)
+        total_failed_verification = sum(r['summary'].get('failed_verification', 0) for r in results)
+        total_failed_generic = sum(r['summary'].get('failed_generic', 0) for r in results)
+        total_failed_other = sum(r['summary'].get('failed_other', 0) for r in results)
         
         f.write(f"- **Total benchmarks:** {total_benchmarks}\n")
         f.write(f"- **Successful:** {total_successful}\n")
         f.write(f"- **Failed:** {total_failed}\n")
         f.write(f"  - Errors: {total_failed_errors}\n")
+        f.write(f"  - Verification: {total_failed_verification}\n")
         f.write(f"  - Regressions: {total_regressions}\n")
+        f.write(f"  - Generic: {total_failed_generic}\n")
+        f.write(f"  - Other failed_*: {total_failed_other}\n")
         f.write(f"- **Informational (not benchmarked):** {total_informational}\n")
         if total_skipped_hw > 0:
             f.write(f"- **WARNING: Skipped (hardware/software limitations):** {total_skipped_hw}\n")
@@ -8800,6 +8949,8 @@ def generate_markdown_report(
                 bench_status = bench.get('status')
                 if bench_status == 'failed_error':
                     f.write(f"- Failed: {bench.get('error', 'Unknown error')}\n")
+                elif bench_status == 'failed_verification':
+                    f.write(f"- Verification failed: {bench.get('error', 'Correctness validation failed')}\n")
                 elif bench_status == 'failed_regression':
                     f.write(f"- Regression: {bench.get('error', 'Expectation regression detected')}\n")
                 elif bench_status == 'skipped':
@@ -9374,13 +9525,19 @@ def main():
     total_successful = sum(r['summary']['successful'] for r in all_results)
     total_failed = sum(r['summary']['failed'] for r in all_results)
     total_failed_errors = sum(r['summary'].get('failed_error', 0) for r in all_results)
+    total_failed_verification = sum(r['summary'].get('failed_verification', 0) for r in all_results)
     total_failed_regressions = sum(r['summary'].get('failed_regression', 0) for r in all_results)
+    total_failed_generic = sum(r['summary'].get('failed_generic', 0) for r in all_results)
+    total_failed_other = sum(r['summary'].get('failed_other', 0) for r in all_results)
     total_skipped_hw = sum(r['summary'].get('skipped_hardware', 0) for r in all_results)
     total_informational = sum(r['summary'].get('informational', 0) for r in all_results)
     
     logger.info(f"Total benchmarks tested: {total_benchmarks}")
     logger.info(f"Succeeded: {total_successful}")
-    logger.info(f"Failed: {total_failed} (errors={total_failed_errors}, regressions={total_failed_regressions})")
+    logger.info(
+        f"Failed: {total_failed} (errors={total_failed_errors}, verification={total_failed_verification}, "
+        f"regressions={total_failed_regressions}, generic={total_failed_generic}, other={total_failed_other})"
+    )
     logger.info(f"Informational (not benchmarked): {total_informational}")
     emit_event(
         event_logger,
@@ -9390,7 +9547,10 @@ def main():
         total_successful=total_successful,
         total_failed=total_failed,
         total_failed_errors=total_failed_errors,
+        total_failed_verification=total_failed_verification,
         total_failed_regressions=total_failed_regressions,
+        total_failed_generic=total_failed_generic,
+        total_failed_other=total_failed_other,
         total_skipped_hardware=total_skipped_hw,
         total_informational=total_informational,
         output_json=str(output_json),
