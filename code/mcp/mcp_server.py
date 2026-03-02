@@ -684,6 +684,7 @@ def _run_cli(args: List[str], timeout: Optional[int] = _BENCH_CLI_TIMEOUT) -> Di
             text=True,
             timeout=None if timeout is None or timeout <= 0 else timeout,
             env=env,
+            cwd=str(CODE_ROOT),
         )
         result = {
             "command": " ".join(cmd),
@@ -749,6 +750,7 @@ def _run_bench_cli(args: List[str], timeout: Optional[int] = _BENCH_CLI_TIMEOUT)
             text=True,
             timeout=None if timeout is None or timeout <= 0 else timeout,
             env=env,
+            cwd=str(CODE_ROOT),
         )
         result = {
             "command": " ".join(cmd),
@@ -2533,6 +2535,8 @@ def tool_run_benchmarks(params: Dict[str, Any]) -> Dict[str, Any]:
     raw_profile = params.get("profile") or "minimal"
     profile = normalize_param("profile", raw_profile, "minimal")
     artifacts_dir = params.get("artifacts_dir")
+    if artifacts_dir:
+        artifacts_dir = str(_resolve_artifact_path(str(artifacts_dir)))
     run_id_param = params.get("run_id")
     run_id = run_id_param.strip() if isinstance(run_id_param, str) else run_id_param
     if not run_id:

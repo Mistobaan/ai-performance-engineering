@@ -8,6 +8,8 @@ opt-in harness hook: if vLLM or the model is unavailable, it raises SKIPPED.
 from __future__ import annotations
 
 import argparse
+import importlib
+import importlib.metadata
 import io
 import json
 import sys
@@ -17,6 +19,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple
 
 import torch
+
+from core.harness.serving_stack import get_serving_stack_pins
 
 try:
     from vllm.engine.arg_utils import EngineArgs
@@ -37,6 +41,86 @@ from labs.dynamic_router.router_round_robin import Request
 
 def _skip(reason: str) -> None:
     raise RuntimeError(f"SKIPPED: {reason}")
+
+
+_SERVING_STACK_PINS = get_serving_stack_pins()
+_PINNED_SERVING_STACK = _SERVING_STACK_PINS.pinned_stack_str
+_EXPECTED_TORCH_VERSION = _SERVING_STACK_PINS.torch_version
+_EXPECTED_VLLM_DIST_VERSION = _SERVING_STACK_PINS.vllm_version
+_EXPECTED_FLASHINFER_DIST_VERSION = _SERVING_STACK_PINS.flashinfer_version
+
+
+def _is_vllm_abi_mismatch_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return (
+        ("undefined symbol" in text and ("vllm/_c.abi3.so" in text or "vllm._c" in text))
+        or "c10_cuda_check_implementation" in text
+    )
+
+
+def _format_vllm_import_error(exc: BaseException) -> str:
+    if _is_vllm_abi_mismatch_error(exc):
+        return (
+            "vLLM ABI mismatch detected while importing compiled extensions. "
+            f"Pin and reinstall the benchmark-host stack ({_PINNED_SERVING_STACK}). "
+            "Then verify with: "
+            "`python -c \"import importlib, importlib.metadata as md, torch, vllm; "
+            "importlib.import_module('vllm._C'); "
+            "print(torch.__version__, md.version('vllm'), vllm.__version__)\"`.\n"
+            f"Original error: {exc}"
+        )
+    return f"vLLM import failed: {exc}"
+
+
+def _distribution_version(dist_name: str) -> Optional[str]:
+    try:
+        return importlib.metadata.version(dist_name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def _assert_serving_stack_versions() -> None:
+    torch_version = torch.__version__
+    if torch_version != _EXPECTED_TORCH_VERSION:
+        _skip(
+            "Serving stack mismatch: expected "
+            f"torch=={_EXPECTED_TORCH_VERSION}, got {torch_version}. "
+            f"Pin and reinstall {_PINNED_SERVING_STACK}."
+        )
+
+    vllm_version = _distribution_version("vllm")
+    if vllm_version is None:
+        _skip("vLLM is not installed. Pin and reinstall " + _PINNED_SERVING_STACK + ".")
+    if vllm_version != _EXPECTED_VLLM_DIST_VERSION:
+        _skip(
+            "Serving stack mismatch: expected "
+            f"vllm=={_EXPECTED_VLLM_DIST_VERSION}, got {vllm_version}. "
+            f"Pin and reinstall {_PINNED_SERVING_STACK}."
+        )
+
+    flashinfer_version = _distribution_version("flashinfer-python")
+    if flashinfer_version is None:
+        _skip(
+            "flashinfer-python is not installed. "
+            f"Pin and reinstall {_PINNED_SERVING_STACK}."
+        )
+    if flashinfer_version != _EXPECTED_FLASHINFER_DIST_VERSION:
+        _skip(
+            "Serving stack mismatch: expected "
+            f"flashinfer-python=={_EXPECTED_FLASHINFER_DIST_VERSION}, got {flashinfer_version}. "
+            f"Pin and reinstall {_PINNED_SERVING_STACK}."
+        )
+
+
+def _assert_vllm_runtime_ready() -> None:
+    """Fail fast with actionable remediation before launching any lab workload."""
+    _assert_serving_stack_versions()
+    if _IMPORT_ERROR is not None:
+        _skip(_format_vllm_import_error(_IMPORT_ERROR))
+    try:
+        importlib.import_module("vllm._C")
+    except Exception as exc:  # pragma: no cover - optional dep/runtime ABI
+        _skip(_format_vllm_import_error(exc))
 
 
 def _parse_cli_args() -> argparse.Namespace:
@@ -77,8 +161,9 @@ class _VllmWrapper:
     """Minimal wrapper around LLMEngine for metrics and request tracking."""
 
     def __init__(self, gpu_id: str, device_index: int, model_id: str) -> None:
+        _assert_vllm_runtime_ready()
         if EngineArgs is None or LLMEngine is None or SamplingParams is None:
-            _skip(f"vLLM import failed: {_IMPORT_ERROR}")
+            _skip(_format_vllm_import_error(_IMPORT_ERROR or RuntimeError("unknown vLLM import failure")))
 
         self.gpu_id = gpu_id
         self.device_index = device_index
@@ -352,8 +437,6 @@ def run_vllm_routing(
     mode: str, req_count: Optional[int] = None, max_tokens: Optional[int] = None, cli_args: Optional[argparse.Namespace] = None
 ) -> Dict[str, float]:
     """Run a small vLLM-backed routing demo. Raises SKIPPED if prerequisites missing."""
-    if _IMPORT_ERROR is not None:
-        _skip(f"vLLM import failed: {_IMPORT_ERROR}")
     if not torch.cuda.is_available():
         _skip("CUDA is required for vLLM routing demo.")
     if torch.cuda.device_count() < 2:
@@ -363,6 +446,7 @@ def run_vllm_routing(
     model_id = args.model
     if not model_id:
         _skip("Pass --model <local HF path/id> to run vLLM demo.")
+    _assert_vllm_runtime_ready()
 
     req_count_val = req_count or args.req_count
     max_tokens_val = max_tokens or args.max_tokens
@@ -459,8 +543,6 @@ def run_dual_pool_vllm(
     """
     Dual-pool vLLM experiment: compare shared-pool vs disaggregated prefill/decode.
     """
-    if _IMPORT_ERROR is not None:
-        _skip(f"vLLM import failed: {_IMPORT_ERROR}")
     if not torch.cuda.is_available():
         _skip("CUDA is required for vLLM dual-pool demo.")
 
@@ -472,6 +554,7 @@ def run_dual_pool_vllm(
     model_id = args.model
     if not model_id:
         _skip("Pass --model <local HF path/id> to run vLLM dual-pool demo.")
+    _assert_vllm_runtime_ready()
 
     normalized_mode = mode.lower()
     if normalized_mode in {"dual", "dual_pool", "optimized"}:

@@ -205,6 +205,32 @@ VLLM_WHEEL_DIR="${THIRD_PARTY_DIR}/wheels"
 VLLM_WHEEL_INFO_PATH="${VLLM_WHEEL_INFO_PATH:-${VLLM_WHEEL_DIR}/vllm-build-info.json}"
 VLLM_WHEEL_ARCH="$(uname -m)"
 VLLM_EXTRA_INDEX_URL="${VLLM_EXTRA_INDEX_URL:-https://wheels.vllm.ai/cu130}"
+VLLM_PIP_SPEC="${VLLM_PIP_SPEC:-vllm==0.15.0+cu130}"
+FLASHINFER_EXPECTED_VERSION="${FLASHINFER_EXPECTED_VERSION:-0.6.2}"
+VLLM_RUNTIME_DEPS=(
+    "cbor2==5.8.0"
+    "msgspec==0.20.0"
+    "gguf==0.18.0"
+    "ijson==3.5.0"
+    "pybase64==1.4.3"
+    "setproctitle==1.3.7"
+    "diskcache==5.6.3"
+    "partial-json-parser==0.2.1.1.post7"
+    "lm-format-enforcer==0.11.3"
+    "outlines_core==0.2.11"
+    "llguidance==1.3.0"
+    "xgrammar==0.1.29"
+    "compressed-tensors==0.13.0"
+    "depyf==0.20.0"
+    "watchfiles==1.1.1"
+    "blake3==1.0.8"
+    "anthropic==0.84.0"
+    "openai==2.24.0"
+    "openai-harmony==0.0.8"
+    "model-hosting-container-standards==0.1.13"
+    "mcp==1.26.0"
+    "grpcio-reflection==1.78.0"
+)
 if [ "${VLLM_WHEEL_ARCH}" = "arm64" ]; then
     VLLM_WHEEL_ARCH="aarch64"
 fi
@@ -1708,6 +1734,30 @@ pip_uninstall -y torchvision >/dev/null 2>&1 || true
 # Use the updated requirements file with pinned versions
 REQUIREMENTS_FILE="$PROJECT_ROOT/requirements_latest.txt"
 
+# Single-source serving stack pins from requirements_latest.txt.
+# This keeps setup-time ABI checks aligned with runtime benchmark checks.
+if [ -f "$REQUIREMENTS_FILE" ]; then
+    REQ_TORCH_VERSION="$(grep -E '^torch==' "$REQUIREMENTS_FILE" | head -n 1 | cut -d= -f3 || true)"
+    REQ_VLLM_VERSION="$(grep -E '^vllm==' "$REQUIREMENTS_FILE" | head -n 1 | cut -d= -f3 || true)"
+    REQ_FLASHINFER_VERSION="$(grep -E '^flashinfer-python==' "$REQUIREMENTS_FILE" | head -n 1 | cut -d= -f3 || true)"
+
+    if [ -n "${REQ_TORCH_VERSION}" ]; then
+        PYTORCH_TORCH_VERSION="${REQ_TORCH_VERSION}"
+        PYTORCH_TORCHAUDIO_VERSION="${REQ_TORCH_VERSION}"
+    fi
+    if [ -n "${REQ_VLLM_VERSION}" ]; then
+        VLLM_PIP_SPEC="vllm==${REQ_VLLM_VERSION}"
+    fi
+    if [ -n "${REQ_FLASHINFER_VERSION}" ]; then
+        FLASHINFER_EXPECTED_VERSION="${REQ_FLASHINFER_VERSION}"
+    fi
+
+    echo "Serving stack pins (from requirements_latest.txt):"
+    echo "  torch==${PYTORCH_TORCH_VERSION}"
+    echo "  ${VLLM_PIP_SPEC}"
+    echo "  flashinfer-python==${FLASHINFER_EXPECTED_VERSION}"
+fi
+
 # Detect FlashInfer availability (flashinfer-python wheels target Python 3.10-3.14)
 FLASHINFER_SPEC=""
 SKIP_FLASHINFER=0
@@ -1729,18 +1779,17 @@ PY
     fi
 fi
 
-# Create temporary requirements file WITHOUT accelerate and torchtitan
-# (they pull in torch>=1.10.0 which installs CPU version)
-# We'll install them separately AFTER PyTorch CUDA is installed
+# Create temporary requirements file without packages we install in a pinned
+# post-CUDA step (prevents CPU torch overrides and vLLM ABI drift).
 TEMP_REQUIREMENTS="/tmp/requirements_no_torch_deps.txt"
 if [ -f "$REQUIREMENTS_FILE" ]; then
-    REQUIREMENTS_EXCLUDE_REGEX='^(accelerate==|torchtitan==)'
+    REQUIREMENTS_EXCLUDE_REGEX='^(accelerate==|torchtitan==|torch==|vllm==)'
     if [ "${SKIP_FLASHINFER}" -eq 1 ]; then
-        REQUIREMENTS_EXCLUDE_REGEX='^(accelerate==|torchtitan==|flashinfer-python==)'
+        REQUIREMENTS_EXCLUDE_REGEX='^(accelerate==|torchtitan==|torch==|vllm==|flashinfer-python==)'
     fi
     grep -Ev "${REQUIREMENTS_EXCLUDE_REGEX}" "$REQUIREMENTS_FILE" > "$TEMP_REQUIREMENTS" || true
-    echo "Created temporary requirements file excluding accelerate and torchtitan"
-    echo "  (these will be installed after PyTorch CUDA to prevent CPU version override)"
+    echo "Created temporary requirements file excluding torch/vLLM/accelerate/torchtitan"
+    echo "  (these are installed later in a pinned, post-CUDA compatibility step)"
 fi
 
 # Install dependencies with error handling (excluding accelerate/torchtitan)
@@ -2606,9 +2655,9 @@ if ! verify_and_restore_pytorch_cuda "FlashAttention installation"; then
 fi
 echo "✓ PyTorch CUDA verified after FlashAttention"
 
-# Install vLLM from source (latest main)
+# Install pinned vLLM serving stack and verify ABI against torch.
 echo ""
-echo "Ensuring vLLM (${VLLM_GIT_REF}) is built from latest GitHub source for this CUDA/toolchain..."
+echo "Installing pinned vLLM serving stack (${VLLM_PIP_SPEC}) for this CUDA/toolchain..."
 VLLM_ARCH_LIST="12.1"
 if [ -n "${GPU_COMPUTE_SM:-}" ]; then
     if [ "${#GPU_COMPUTE_SM}" -ge 3 ]; then
@@ -2617,6 +2666,7 @@ if [ -n "${GPU_COMPUTE_SM:-}" ]; then
         VLLM_ARCH_LIST="${major}.${minor}"
     fi
 fi
+VLLM_EXPECTED_VERSION="${VLLM_PIP_SPEC#vllm==}"
 
 # Binary-only mode: skip vLLM source sync/caching
 VLLM_WHEEL_PATH=""
@@ -2626,8 +2676,8 @@ echo "Installing vLLM from cu13 wheels (binary only, no deps)..."
 pip_uninstall -y vllm >/dev/null 2>&1 || true
 if ! pip_install --no-cache-dir --upgrade --ignore-installed --prefer-binary --only-binary=:all: --no-deps \
     ${VLLM_EXTRA_INDEX_URL:+--extra-index-url "${VLLM_EXTRA_INDEX_URL}"} \
-    vllm; then
-    echo "ERROR: Failed to install prebuilt vLLM wheel from index ${VLLM_EXTRA_INDEX_URL:-PyPI}."
+    "${VLLM_PIP_SPEC}"; then
+    echo "ERROR: Failed to install prebuilt ${VLLM_PIP_SPEC} wheel from index ${VLLM_EXTRA_INDEX_URL:-PyPI}."
     exit 1
 fi
 VLLM_WHEEL_PATH=""
@@ -2666,13 +2716,61 @@ else
     echo "vLLM prebuilt wheel installed from ${VLLM_EXTRA_INDEX_URL:-PyPI}; skipping local wheel cache handling."
 fi
 
-python3 <<'PY'
+echo "Installing pinned vLLM runtime dependencies (required when vLLM is installed with --no-deps)..."
+if ! pip_install --no-cache-dir --upgrade --ignore-installed "${VLLM_RUNTIME_DEPS[@]}"; then
+    echo "ERROR: Failed to install pinned vLLM runtime dependencies."
+    exit 1
+fi
+
+python3 <<PY
+import importlib
+import importlib.metadata
 try:
+    import torch
     import vllm  # type: ignore
-    print(f"✓ vLLM installed: {vllm.__version__}")
 except Exception as exc:
     print(f"ERROR: vLLM import failed: {exc}")
     raise SystemExit(1)
+
+expected_torch = "${PYTORCH_TORCH_VERSION}"
+expected_vllm = "${VLLM_EXPECTED_VERSION}"
+expected_flashinfer = "${FLASHINFER_EXPECTED_VERSION}"
+
+torch_version = torch.__version__
+def dist_version(dist_name: str) -> str:
+    try:
+        return importlib.metadata.version(dist_name)
+    except importlib.metadata.PackageNotFoundError:
+        print(f"ERROR: required package not installed: {dist_name}")
+        raise SystemExit(1)
+
+vllm_dist_version = dist_version("vllm")
+flashinfer_dist_version = dist_version("flashinfer-python")
+
+if torch_version != expected_torch:
+    print(f"ERROR: torch version mismatch: expected {expected_torch}, got {torch_version}")
+    raise SystemExit(1)
+if vllm_dist_version != expected_vllm:
+    print(f"ERROR: vLLM version mismatch: expected {expected_vllm}, got {vllm_dist_version}")
+    raise SystemExit(1)
+if flashinfer_dist_version != expected_flashinfer:
+    print(
+        f"ERROR: flashinfer-python version mismatch: "
+        f"expected {expected_flashinfer}, got {flashinfer_dist_version}"
+    )
+    raise SystemExit(1)
+
+try:
+    importlib.import_module("vllm._C")
+except Exception as exc:
+    print("ERROR: vLLM extension import failed (ABI mismatch likely):")
+    print(exc)
+    raise SystemExit(1)
+
+print(f"✓ torch installed: {torch_version}")
+print(f"✓ vLLM installed: {vllm_dist_version} (module reports {vllm.__version__})")
+print(f"✓ flashinfer-python installed: {flashinfer_dist_version}")
+print("✓ vLLM extension import succeeded: vllm._C")
 PY
 
 echo ""

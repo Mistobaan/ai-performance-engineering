@@ -72,6 +72,7 @@ from core.benchmark.defaults import BenchmarkDefaults, set_defaults, get_default
 from core.benchmark.run_manifest import get_gpu_state
 from core.benchmark.run_manifest import reset_gpu_state, get_git_info
 from core.profiling.gpu_telemetry import format_gpu_telemetry, query_gpu_telemetry
+from core.harness.serving_stack import get_serving_stack_pins
 from core.profiling.profiler_config import (
     build_profiler_config_from_benchmark,
     resolve_ncu_metrics,
@@ -170,6 +171,7 @@ def _query_gpu_telemetry_for_profile(
             return None
         raise
 PROGRESS_TOTAL_PHASES = max(PROGRESS_PHASES.values())
+_SERVING_STACK_PINS = get_serving_stack_pins()
 
 # Import metric extraction utilities
 try:
@@ -1307,6 +1309,15 @@ def check_hardware_limitation(error_msg: str) -> Optional[str]:
     # Missing optional serving/inference dependencies should be classified as
     # software limitations in strict sweeps, not hard benchmark errors.
     if (
+        "undefined symbol" in error_lower
+        and ("vllm/_c.abi3.so" in error_lower or "vllm._c" in error_lower)
+    ) or "c10_cuda_check_implementation" in error_lower:
+        return (
+            "vLLM extension ABI mismatch with torch/CUDA runtime. "
+            "Reinstall pinned benchmark stack: "
+            f"{_SERVING_STACK_PINS.pinned_stack_str}."
+        )
+    if (
         "vllm required for this benchmark" in error_lower
         or "no module named 'vllm'" in error_lower
     ):
@@ -1973,7 +1984,9 @@ def profile_python_benchmark(
         lock_gpu_clocks_flag = False
     gpu_sm_clock_mhz = getattr(bench_config, "gpu_sm_clock_mhz", None) if bench_config else None
     gpu_mem_clock_mhz = getattr(bench_config, "gpu_mem_clock_mhz", None) if bench_config else None
-    repo_root = chapter_dir.parent
+    # chapter_dir points to e.g. <repo>/ch10 or <repo>/labs/<lab>; use global
+    # repository root for package imports like `labs.*` and `core.*`.
+    repo_root = Path(__file__).resolve().parents[2]
 
     # Create a temporary wrapper script that runs the benchmark
     wrapper_script = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False)
@@ -2129,7 +2142,11 @@ def profile_cuda_executable(
             wait_mode="primary",
             finalize_grace_seconds=20.0,
             force_lineinfo=True,
-            extra_env=_harden_profile_env(None, repo_root=chapter_dir.parent, chapter_dir=chapter_dir),
+            extra_env=_harden_profile_env(
+                None,
+                repo_root=Path(__file__).resolve().parents[2],
+                chapter_dir=chapter_dir,
+            ),
             sanitize_python_startup=True,
         )
         if nsys_report and Path(nsys_report).exists():
@@ -2220,7 +2237,9 @@ def profile_python_benchmark_ncu(
     ncu_nvtx_includes = nvtx_includes
     if not ncu_nvtx_includes and not is_cuda_binary:
         ncu_nvtx_includes = [profile_nvtx_label]
-    repo_root = chapter_dir.parent
+    # chapter_dir points to e.g. <repo>/ch10 or <repo>/labs/<lab>; use global
+    # repository root for package imports like `labs.*` and `core.*`.
+    repo_root = Path(__file__).resolve().parents[2]
     chapter_num = None
     chapter_name = chapter_dir.name
     if chapter_name.startswith("ch") and chapter_name[2:].isdigit():
@@ -2340,6 +2359,7 @@ with lock_ctx:
                 metrics=metrics_override,
                 nvtx_includes=ncu_nvtx_includes,
             )
+        env = _harden_profile_env(env, repo_root=repo_root, chapter_dir=chapter_dir)
         ncu_env_overrides = getattr(benchmark, "ncu_env_overrides", None)
         if ncu_env_overrides:
             env.update({str(key): str(value) for key, value in ncu_env_overrides.items()})

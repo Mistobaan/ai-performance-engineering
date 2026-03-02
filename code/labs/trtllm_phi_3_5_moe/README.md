@@ -23,7 +23,8 @@ python -m cli.aisp bench run --targets labs/trtllm_phi_3_5_moe \
 ```
 
 ## Notes
-- Requires local Phi-3.5-MoE weights at `phi-3.5-moe/original` (override with `--model-path`).
+- Requires local Phi-3.5-MoE weights at `phi-3.5-moe/original` (override with `--model-path` or `AISP_PHI35_MOE_MODEL_PATH`).
+- Optimized path also requires a TensorRT-LLM engine plan/directory (pass `--engine-path` or set `AISP_PHI35_MOE_ENGINE_PATH`).
 - Recommended source: `microsoft/Phi-3.5-MoE-instruct`.
 - TRT-LLM must be built with `output_generation_logits=True` support; the benchmark validates `generation_logits`.
 - Keep TRT-LLM precision aligned with the baseline (e.g., FP16) to pass output verification.

@@ -12,17 +12,9 @@
 #include <cutlass/cluster_launch.hpp>
 #include <cutlass/half.h>
 
-#include <cute/algorithm/axpby.hpp>
-#include <cute/algorithm/cooperative_copy.hpp>
 #include <cute/arch/cluster_sm90.hpp>
-#include <cute/arch/copy_sm90_tma.hpp>
 #include <cute/arch/mma_sm100_umma.hpp>
 #include <cute/arch/tmem_allocator_sm100.hpp>
-#include <cute/arch/copy_sm100_tma.hpp>
-#include <cute/atom/copy_traits_sm90_tma.hpp>
-#include <cute/atom/copy_traits_sm100.hpp>
-#include <cute/atom/copy_traits_sm100_tma.hpp>
-#include <cute/atom/mma_atom.hpp>
 #include <cute/atom/mma_traits_sm100.hpp>
 #include <cute/numeric/integral_constant.hpp>
 #include <cute/tensor.hpp>
@@ -278,7 +270,10 @@ __global__ void gemm_device_variant(ATensor mA,
   Tensor tDrAcc = make_tensor<Accumulator>(shape(tDgD));
   copy(tiled_t2r_copy, tDtAcc, tDrAcc);
 
-  axpby(alpha, tDrAcc, beta, tDrC);
+  CUTE_UNROLL
+  for (int i = 0; i < size(tDrC); ++i) {
+    tDrC(i) = alpha * tDrAcc(i) + beta * tDrC(i);
+  }
   copy(tDrC, tDgD);
 
   __syncthreads();

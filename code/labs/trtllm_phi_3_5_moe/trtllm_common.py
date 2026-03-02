@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import importlib.machinery
 import importlib.util
@@ -16,7 +16,36 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL_PATH = REPO_ROOT / "phi-3.5-moe" / "original"
+MODEL_PATH_ENV = "AISP_PHI35_MOE_MODEL_PATH"
+ENGINE_PATH_ENV = "AISP_PHI35_MOE_ENGINE_PATH"
 PROMPT_TEXT = "Explain GPU kernel fusion in one sentence."
+
+
+def ensure_trtllm_assets(
+    model_path: Path,
+    *,
+    engine_path: Optional[Path] = None,
+    require_engine: bool = False,
+) -> None:
+    """Fail fast with explicit remediation when required TRT-LLM assets are absent."""
+    missing = []
+    if not model_path.exists():
+        missing.append(f"model_path={model_path}")
+    if require_engine and (engine_path is None or not engine_path.exists()):
+        if engine_path is None:
+            missing.append("engine_path=<unset>")
+        else:
+            missing.append(f"engine_path={engine_path}")
+    if not missing:
+        return
+    missing_text = ", ".join(missing)
+    raise RuntimeError(
+        "SKIPPED: TRT-LLM Phi-3.5-MoE assets unavailable "
+        f"({missing_text}). "
+        "Remediation: provide a local Phi-3.5-MoE checkout via --model-path "
+        f"(or ${MODEL_PATH_ENV}) and a built TensorRT-LLM engine via --engine-path "
+        f"(or ${ENGINE_PATH_ENV})."
+    )
 
 
 def load_trtllm_runtime():
@@ -61,9 +90,11 @@ def load_trtllm_runtime():
 
 
 def parse_trtllm_args() -> argparse.Namespace:
+    default_model_path = os.environ.get(MODEL_PATH_ENV, str(DEFAULT_MODEL_PATH))
+    default_engine_path = os.environ.get(ENGINE_PATH_ENV)
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--model-path", type=str, default=str(DEFAULT_MODEL_PATH))
-    parser.add_argument("--engine-path", type=str, default=None)
+    parser.add_argument("--model-path", type=str, default=default_model_path)
+    parser.add_argument("--engine-path", type=str, default=default_engine_path)
     parser.add_argument("--prompt-len", type=int, default=512)
     parser.add_argument("--max-new-tokens", type=int, default=128)
     parser.add_argument("--batch-size", type=int, default=1)

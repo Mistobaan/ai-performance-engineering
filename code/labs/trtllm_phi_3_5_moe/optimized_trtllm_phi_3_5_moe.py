@@ -16,6 +16,7 @@ from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from labs.trtllm_phi_3_5_moe.trtllm_common import (
     build_prompt_tokens,
+    ensure_trtllm_assets,
     load_trtllm_runtime,
     parse_trtllm_args,
     slice_logits,
@@ -51,27 +52,23 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def setup(self) -> None:
         if not torch.cuda.is_available():
-            raise RuntimeError("CUDA is required for the TRT-LLM Phi-3.5-MoE benchmark")
-        if not self.model_path.exists():
-            raise RuntimeError(
-                f"Model path not found: {self.model_path}. "
-                "Provide --model-path to a local Phi-3.5-MoE checkout."
-            )
-        if self.engine_path is None:
-            raise RuntimeError("--engine-path is required for TensorRT-LLM benchmarks")
-        if not self.engine_path.exists():
-            raise RuntimeError(f"Engine path not found: {self.engine_path}")
+            raise RuntimeError("SKIPPED: CUDA is required for the TRT-LLM Phi-3.5-MoE benchmark")
+        ensure_trtllm_assets(
+            self.model_path,
+            engine_path=self.engine_path,
+            require_engine=True,
+        )
         torch.manual_seed(42)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(42)
         try:
             from transformers import AutoTokenizer
         except ImportError as exc:
-            raise RuntimeError("Transformers is required for tokenizer support") from exc
+            raise RuntimeError("SKIPPED: transformers is required for tokenizer support") from exc
         try:
             runtime = load_trtllm_runtime()
         except Exception as exc:
-            raise RuntimeError("TensorRT-LLM is required for the optimized benchmark") from exc
+            raise RuntimeError("SKIPPED: TensorRT-LLM runtime is not importable for the optimized benchmark") from exc
         ModelRunner = runtime.ModelRunner
         SamplingConfig = runtime.SamplingConfig
 

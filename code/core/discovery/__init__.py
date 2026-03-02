@@ -468,6 +468,20 @@ def resolve_target_chapters(
         chapter_dir = Path(normalized)
         if not chapter_dir.is_absolute():
             chapter_dir = (primary_root / normalized).resolve()
+
+        # Expand top-level labs selector into concrete lab chapters so
+        # `-t labs` behaves like "all labs/*" instead of an empty top-level scan.
+        if chapter_dir.resolve() == (primary_root / "labs").resolve():
+            if sep and examples.strip():
+                raise ValueError(
+                    "Target 'labs:<example>' is ambiguous. "
+                    "Use 'labs/<lab>:<example>' to select a specific lab example."
+                )
+            for lab_dir in _lab_dirs(repo_root, bench_root=primary_root):
+                if lab_dir not in chapter_dirs:
+                    chapter_dirs.append(lab_dir)
+            continue
+
         if not chapter_dir.is_dir():
             raise FileNotFoundError(f"Chapter '{normalized}' not found at {chapter_dir}")
 

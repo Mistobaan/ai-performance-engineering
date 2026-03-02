@@ -27,14 +27,16 @@ def load_tcgen05_module():
     if _MODULE is not None:
         return _MODULE
 
-    te_cutlass = _REPO_ROOT / "third_party" / "TransformerEngine" / "3rdparty" / "cutlass" / "include"
+    cutlass_compat = _REPO_ROOT / "third_party" / "cutlass_compat" / "include"
     upstream_cutlass = _REPO_ROOT / "third_party" / "cutlass" / "include"
     clang_host = _REPO_ROOT / "third_party" / "llvm" / "bin" / "clang++"
 
     include_flags = []
+    if cutlass_compat.exists():
+        # Overlay patched cute/algorithm headers first to work around nvcc
+        # parser issues on this toolchain without mutating vendor trees.
+        include_flags.append(f"-I{cutlass_compat}")
     include_flags.append(f"-I{upstream_cutlass}")
-    if te_cutlass.exists():
-        include_flags.append(f"-I{te_cutlass}")
 
     extra_cuda_cflags = [
         "-std=c++20",

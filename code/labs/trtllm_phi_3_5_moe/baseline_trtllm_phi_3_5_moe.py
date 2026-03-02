@@ -14,7 +14,12 @@ if str(REPO_ROOT) not in sys.path:
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
-from labs.trtllm_phi_3_5_moe.trtllm_common import build_prompt_tokens, parse_trtllm_args, slice_logits
+from labs.trtllm_phi_3_5_moe.trtllm_common import (
+    build_prompt_tokens,
+    ensure_trtllm_assets,
+    parse_trtllm_args,
+    slice_logits,
+)
 
 
 class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
@@ -46,18 +51,14 @@ class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def setup(self) -> None:
         if not torch.cuda.is_available():
             raise RuntimeError("SKIPPED: CUDA is required for the TRT-LLM Phi-3.5-MoE baseline")
-        if not self.model_path.exists():
-            raise RuntimeError(
-                f"SKIPPED: Model path not found: {self.model_path}. "
-                "Provide --model-path to a local Phi-3.5-MoE checkout."
-            )
+        ensure_trtllm_assets(self.model_path, require_engine=False)
         torch.manual_seed(42)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(42)
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer
         except ImportError as exc:
-            raise RuntimeError("Transformers is required for the baseline TRT-LLM lab") from exc
+            raise RuntimeError("SKIPPED: transformers is required for the baseline TRT-LLM lab") from exc
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
         input_ids, attention_mask = build_prompt_tokens(
