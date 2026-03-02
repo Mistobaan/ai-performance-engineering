@@ -163,6 +163,8 @@
 
 #### Quality Bar (CRITICAL)
 - Taste in what to measure, reproducibility, rigor (multiple runs + warmups + noise notes), systems intuition, communication clarity, and practical empathy.
+- Always use evidence-based verification over opinion-based conclusions.
+- We develop on target hardware; test every assumption with concrete empirical evidence (bench outputs, profiler artifacts, and correctness verification) before declaring a result valid.
 
 #### Execution Order (CRITICAL)
 1. Discovery to meta.json.
