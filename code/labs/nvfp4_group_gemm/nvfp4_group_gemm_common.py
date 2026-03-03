@@ -16,7 +16,12 @@ from typing import Callable, List, Optional, Sequence, Tuple
 import torch
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
-from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
+from core.harness.benchmark_harness import (
+    BaseBenchmark,
+    BenchmarkConfig,
+    ExecutionMode,
+    WorkloadMetadata,
+)
 
 from labs.nvfp4_group_gemm.nvfp4_group_gemm_inputs import generate_input
 
@@ -301,9 +306,11 @@ class NVFP4GroupGemmBenchmark(VerificationPayloadMixin, BaseBenchmark):
             warmup=5,
             setup_timeout_seconds=900,
             measurement_timeout_seconds=300,
+            execution_mode=ExecutionMode.THREAD,
             clear_l2_cache=True,
             enable_nvtx=True,
             timing_method=_resolve_timing_method("cuda_event"),
+            timing_cross_validation_threshold=0.40,
             # Nsight Compute wrapper scripts profile benchmark_fn() directly (not via BenchmarkHarness),
             # so we rely on an explicit NVTX include filter and a matching NVTX range around the
             # measured call. See core/harness/run_benchmarks.py profiling wrappers.
