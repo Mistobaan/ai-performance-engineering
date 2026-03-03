@@ -1,7 +1,6 @@
-"""Type stubs for NVFP4 group GEMM benchmark inputs/outputs.
+"""Input/output type aliases for the canonical NVFP4 group GEMM lab.
 
-This mirrors the reference-kernels task.py so we can reuse the CuTe DSL submission
-implementation inside the AISP harness without depending on Popcorn's eval harness.
+These types are shared by the benchmark wrappers and the custom CUDA submission.
 """
 
 from __future__ import annotations
@@ -20,4 +19,3 @@ input_t = TypeVar(
     ],
 )
 output_t = TypeVar("output_t", bound=list[torch.Tensor])
-

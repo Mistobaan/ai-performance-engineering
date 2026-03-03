@@ -18,7 +18,12 @@ def _install_fastapi_stub() -> None:
     # Avoid importing asyncio at interpreter startup. Some profiling environments
     # execute sitecustomize with a restricted stdlib path and only need this stub
     # when tests exercise FastAPI endpoints.
-    import asyncio
+    try:
+        import asyncio
+    except Exception:
+        # Profiling subprocesses can run with constrained startup paths where
+        # asyncio is unavailable. In that case, skip the test-only FastAPI stub.
+        return
 
     def _set_module_spec(name: str, module: types.ModuleType, *, is_package: bool) -> None:
         module.__spec__ = importlib.machinery.ModuleSpec(name=name, loader=None, is_package=is_package)

@@ -17,14 +17,18 @@ Compares Hugging Face Transformers generation against TensorRT-LLM inference for
 
 ## Running
 ```bash
-# Baseline vs optimized (pass engine path for TRT-LLM)
+# Baseline vs optimized (auto-resolves repo-local model/engine defaults)
 python -m cli.aisp bench run --targets labs/trtllm_phi_3_5_moe \
-  --target-extra-arg labs/trtllm_phi_3_5_moe:optimized_trtllm_phi_3_5_moe="--engine-path /path/to/engine.plan"
+  --profile none
+
+# Optional explicit override for a non-default engine location
+python -m cli.aisp bench run --targets labs/trtllm_phi_3_5_moe \
+  --target-extra-arg labs/trtllm_phi_3_5_moe:optimized_trtllm_phi_3_5_moe="--engine-path /path/to/engine_dir_or_plan"
 ```
 
 ## Notes
-- Requires local Phi-3.5-MoE weights at `phi-3.5-moe/original` (override with `--model-path` or `AISP_PHI35_MOE_MODEL_PATH`).
-- Optimized path also requires a TensorRT-LLM engine plan/directory (pass `--engine-path` or set `AISP_PHI35_MOE_ENGINE_PATH`).
+- Canonical model default: `phi-3.5-moe/original` (override with `--model-path` or `AISP_PHI35_MOE_MODEL_PATH`).
+- Canonical engine defaults: `phi-3.5-moe/trtllm_engine_tp1_fp16` (preferred), `phi-3.5-moe/trtllm_engine` (legacy) (override with `--engine-path` or `AISP_PHI35_MOE_ENGINE_PATH`).
 - Recommended source: `microsoft/Phi-3.5-MoE-instruct`.
 - Optimized benchmark is strict TRT-LLM only: no implicit backend fallback is used.
 - Missing model/runtime/engine assets fail fast with explicit remediation text.

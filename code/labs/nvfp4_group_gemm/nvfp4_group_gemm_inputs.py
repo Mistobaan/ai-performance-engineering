@@ -49,7 +49,9 @@ def create_reordered_scale_factor_tensor(
     mma_permute_order = (3, 4, 1, 5, 2, 0)
 
     rand_int_tensor = torch.randint(1, 3, mma_shape, dtype=torch.int8, device="cuda", generator=gen)
-    reordered_f8_tensor = rand_int_tensor.to(dtype=torch.float8_e4m3fn).permute(*mma_permute_order)
+    # Keep the reordered scale dtype consistent with the reference scale dtype so data layout
+    # and byte-encoding stay aligned with the chosen FP8 scale format.
+    reordered_f8_tensor = rand_int_tensor.to(dtype=ref_f8_tensor.dtype).permute(*mma_permute_order)
 
     if ref_f8_tensor.device.type == "cpu":
         ref_f8_tensor = ref_f8_tensor.cuda()
@@ -130,4 +132,3 @@ def generate_input(
 
 
 __all__ = ["generate_input"]
-

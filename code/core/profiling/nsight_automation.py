@@ -226,6 +226,10 @@ class NsightAutomation:
             pythonpath_entries.insert(0, str(stub_dir))
             # Keep user-site packages out of profiler child processes.
             env.setdefault("PYTHONNOUSERSITE", "1")
+        # Some host images ship Transformer Engine in non-PyPI layouts that
+        # trip its import-time sanity assertions during profiled subprocesses.
+        # This disables those packaging assertions while preserving runtime behavior.
+        env.setdefault("NVTE_PROJECT_BUILDING", "1")
         existing = env.get("PYTHONPATH", "")
         if existing:
             pythonpath_entries.append(existing)
@@ -245,6 +249,17 @@ class NsightAutomation:
             _append_flag("NVCC_PREPEND_FLAGS", "-lineinfo")
             _append_flag("TORCH_NVCC_FLAGS", "-lineinfo")
         return env
+
+    @staticmethod
+    def _is_startup_sanitizer_issue(error_text: str) -> bool:
+        """Detect profiler child failures caused by startup-sanitized Python env."""
+        text = str(error_text or "").lower()
+        return (
+            "error in sitecustomize" in text
+            or "no module named 'asyncio'" in text
+            or "could not find `transformer-engine` pypi package" in text
+            or "could not find `transformer-engine` pypi package.".lower() in text
+        )
     
     def profile_nsys(
         self,
@@ -439,6 +454,27 @@ class NsightAutomation:
             # Automatic fallback: drop full_timeline categories and retry once
             self.last_error = e.stderr or e.stdout or str(e)
             logger.error(f"Nsight Systems failed: {self.last_error}")
+            if sanitize_python_startup and self._is_startup_sanitizer_issue(self.last_error):
+                logger.warning(
+                    "Retrying NSYS capture with sanitize_python_startup=False due to "
+                    "startup environment incompatibility."
+                )
+                return self.profile_nsys(
+                    command,
+                    output_name,
+                    trace_cuda=trace_cuda,
+                    trace_nvtx=trace_nvtx,
+                    trace_osrt=trace_osrt,
+                    full_timeline=full_timeline,
+                    trace_forks=trace_forks,
+                    preset=preset_normalized,
+                    force_lineinfo=force_lineinfo,
+                    timeout_seconds=timeout_seconds,
+                    wait_mode=wait_mode_norm,
+                    finalize_grace_seconds=finalize_grace_seconds,
+                    extra_env=extra_env,
+                    sanitize_python_startup=False,
+                )
             if full_timeline or preset_normalized == "full":
                 logger.warning("Retrying NSYS capture with preset=light (reduced trace categories)")
                 return self.profile_nsys(
@@ -620,6 +656,7 @@ class NsightAutomation:
         launch_skip: Optional[int] = None,
         launch_count: Optional[int] = None,
         replay_mode: str = 'application',
+        sanitize_python_startup: bool = True,
     ) -> Optional[Path]:
         """Run Nsight Compute profiling.
         
@@ -693,7 +730,10 @@ class NsightAutomation:
                 text=True,
                 check=True,
                 timeout=timeout_seconds if timeout_seconds and timeout_seconds > 0 else None,
-                env=self._build_env(force_lineinfo=force_lineinfo),
+                env=self._build_env(
+                    force_lineinfo=force_lineinfo,
+                    sanitize_python_startup=sanitize_python_startup,
+                ),
                 cwd=str(self.run_cwd),
             )
             logger.info(f"Nsight Compute report saved to {output_path}")
@@ -747,6 +787,28 @@ class NsightAutomation:
         except subprocess.CalledProcessError as e:
             self.last_error = e.stderr or e.stdout or str(e)
             logger.error(f"Nsight Compute failed: {self.last_error}")
+            if sanitize_python_startup and self._is_startup_sanitizer_issue(self.last_error):
+                logger.warning(
+                    "Retrying NCU capture with sanitize_python_startup=False due to "
+                    "startup environment incompatibility."
+                )
+                return self.profile_ncu(
+                    command,
+                    output_name,
+                    workload_type=workload_type,
+                    kernel_filter=kernel_filter,
+                    kernel_name_base=kernel_name_base,
+                    nvtx_includes=nvtx_includes,
+                    profile_from_start=profile_from_start,
+                    force_lineinfo=force_lineinfo,
+                    timeout_seconds=timeout_seconds,
+                    sampling_interval=sampling_interval,
+                    metric_set=metric_set,
+                    launch_skip=launch_skip,
+                    launch_count=launch_count,
+                    replay_mode=replay_mode,
+                    sanitize_python_startup=False,
+                )
             return None
     
     def batch_profile(

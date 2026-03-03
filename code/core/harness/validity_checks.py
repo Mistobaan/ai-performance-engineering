@@ -1017,18 +1017,11 @@ class StreamAuditor:
         self._default_stream_id = default_stream.cuda_stream
         self._observed_streams.add(self._default_stream_id)
         
-        # Monkeypatch torch.cuda.Stream to record new stream creation
+        # Keep torch.cuda.Stream as a type so libraries doing isinstance(..., torch.cuda.Stream)
+        # continue to work (e.g., TensorRT-LLM runtime). We intentionally avoid
+        # monkeypatching Stream construction on this runtime.
         try:
             self._orig_stream_cls = torch.cuda.Stream
-            auditor = self
-            orig_stream_cls = self._orig_stream_cls
-            
-            def _audited_stream(*args, **kwargs):  # type: ignore[override]
-                stream = orig_stream_cls(*args, **kwargs)
-                auditor.record_stream_event(stream, operation="stream_create")
-                return stream
-            
-            torch.cuda.Stream = _audited_stream  # type: ignore[assignment]
         except Exception:
             self._orig_stream_cls = None
 
@@ -1136,10 +1129,6 @@ class StreamAuditor:
         if torch is None or not torch.cuda.is_available():
             return
         if self._orig_stream_cls is not None:
-            try:
-                torch.cuda.Stream = self._orig_stream_cls  # type: ignore[assignment]
-            except Exception:
-                pass
             if self._orig_stream_synchronize is not None:
                 try:
                     self._orig_stream_cls.synchronize = self._orig_stream_synchronize  # type: ignore[assignment]

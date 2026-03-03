@@ -51,6 +51,52 @@ def _resolve_inputs_per_iteration(default_value: int) -> int:
     return value
 
 
+def _resolve_capture_iter_graph(default_value: bool) -> bool:
+    """Resolve iter-graph capture mode with an explicit env override.
+
+    This allows apples-to-apples matrix runs where baseline and optimized wrappers
+    are forced to the same graph setting:
+      AISP_NVFP4_GROUP_GEMM_CAPTURE_ITER_GRAPH=0|1
+    """
+    override = os.environ.get("AISP_NVFP4_GROUP_GEMM_CAPTURE_ITER_GRAPH")
+    if override is None or override.strip() == "":
+        return bool(default_value)
+
+    value = override.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(
+        "AISP_NVFP4_GROUP_GEMM_CAPTURE_ITER_GRAPH must be one of "
+        "{0,1,true,false,yes,no,on,off}"
+    )
+
+
+def _resolve_optional_bool_env(name: str) -> Optional[bool]:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return None
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be one of {{0,1,true,false,yes,no,on,off}}")
+
+
+def _resolve_timing_method(default_value: str = "cuda_event") -> str:
+    raw = os.environ.get("AISP_NVFP4_GROUP_GEMM_TIMING_METHOD")
+    if raw is None or raw.strip() == "":
+        return str(default_value)
+    value = raw.strip().lower()
+    if value not in {"cuda_event", "wall_clock"}:
+        raise ValueError(
+            "AISP_NVFP4_GROUP_GEMM_TIMING_METHOD must be one of {cuda_event,wall_clock}"
+        )
+    return value
+
+
 @dataclass(frozen=True)
 class GroupGemmCase:
     name: str
@@ -112,7 +158,7 @@ class NVFP4GroupGemmBenchmark(VerificationPayloadMixin, BaseBenchmark):
         custom_kernel: Callable[[input_t], output_t],
         prepare: Optional[Callable[[Sequence[input_t]], None]] = None,
         inputs_per_iteration: int = 15,
-        capture_iter_graph: bool = False,
+        capture_iter_graph: bool = True,
         name: Optional[str] = None,
     ) -> None:
         super().__init__()
@@ -126,7 +172,7 @@ class NVFP4GroupGemmBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self._last_output: Optional[output_t] = None
         self._iter_graph: Optional[torch.cuda.CUDAGraph] = None
         self._iter_graph_last_output: Optional[output_t] = None
-        self._capture_iter_graph = bool(capture_iter_graph)
+        self._capture_iter_graph = _resolve_capture_iter_graph(capture_iter_graph)
 
         # Workload invariant: competition eval averages 15 independent inputs per timing run.
         self._workload = WorkloadMetadata(requests_per_iteration=float(self.inputs_per_iteration))
@@ -250,18 +296,25 @@ class NVFP4GroupGemmBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def get_config(self) -> BenchmarkConfig:
         # Compilation happens in setup(); keep measured loop focused on steady-state execution.
-        return BenchmarkConfig(
+        config = BenchmarkConfig(
             iterations=25,
             warmup=5,
             setup_timeout_seconds=900,
             measurement_timeout_seconds=300,
             clear_l2_cache=True,
             enable_nvtx=True,
+            timing_method=_resolve_timing_method("cuda_event"),
             # Nsight Compute wrapper scripts profile benchmark_fn() directly (not via BenchmarkHarness),
             # so we rely on an explicit NVTX include filter and a matching NVTX range around the
             # measured call. See core/harness/run_benchmarks.py profiling wrappers.
             nsys_nvtx_include=["compute_kernel:benchmark_fn"],
         )
+        cross_validate_override = _resolve_optional_bool_env(
+            "AISP_NVFP4_GROUP_GEMM_CROSS_VALIDATE_TIMING"
+        )
+        if cross_validate_override is not None:
+            config.cross_validate_timing = bool(cross_validate_override)
+        return config
 
     def get_custom_metrics(self) -> Optional[dict]:
         # Per-call microseconds, matching competition-style reporting.

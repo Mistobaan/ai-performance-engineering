@@ -11,14 +11,62 @@ import importlib.util
 import os
 import platform
 import sys
+import warnings
 
 import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL_PATH = REPO_ROOT / "phi-3.5-moe" / "original"
+DEFAULT_ENGINE_PATH = REPO_ROOT / "phi-3.5-moe" / "trtllm_engine_tp1_fp16"
+LEGACY_ENGINE_PATH = REPO_ROOT / "phi-3.5-moe" / "trtllm_engine"
 MODEL_PATH_ENV = "AISP_PHI35_MOE_MODEL_PATH"
 ENGINE_PATH_ENV = "AISP_PHI35_MOE_ENGINE_PATH"
 PROMPT_TEXT = "Explain GPU kernel fusion in one sentence."
+
+
+def _suppress_optional_vllm_plugin_warning() -> None:
+    """Suppress known non-fatal modelopt vLLM plugin ABI warnings.
+
+    modelopt eagerly imports its optional vLLM plugin and emits a warning when
+    the host vLLM extension ABI does not match the active torch build. This lab
+    does not use that plugin path, so suppress this specific warning pattern
+    while preserving all other warnings.
+    """
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Failed to import vllm plugin due to: .*You may ignore this warning if you do not need this plugin\.",
+        category=UserWarning,
+    )
+
+
+def resolve_default_engine_path() -> Path:
+    """Resolve the canonical TRT-LLM engine path with repo-local fallbacks."""
+    env_engine = os.environ.get(ENGINE_PATH_ENV, "").strip()
+    if env_engine:
+        return Path(env_engine).expanduser()
+
+    for candidate in (DEFAULT_ENGINE_PATH, LEGACY_ENGINE_PATH):
+        if candidate.exists():
+            return candidate
+    return DEFAULT_ENGINE_PATH
+
+
+def _engine_path_has_assets(engine_path: Path) -> bool:
+    if not engine_path.exists():
+        return False
+    if engine_path.is_file():
+        return engine_path.stat().st_size > 0
+
+    # Common TRT-LLM engine-dir outputs include config.json + rank*.engine.
+    if (engine_path / "config.json").exists():
+        return True
+    if any(engine_path.glob("rank*.engine")):
+        return True
+    if any(engine_path.glob("*.engine")):
+        return True
+    if any(engine_path.glob("*.plan")):
+        return True
+    return False
 
 
 def resolve_model_path(model_path: Path) -> Path:
@@ -44,25 +92,44 @@ def ensure_trtllm_assets(
     missing = []
     if not model_path.exists():
         missing.append(f"model_path={model_path}")
-    if require_engine and (engine_path is None or not engine_path.exists()):
+    if require_engine:
         if engine_path is None:
             missing.append("engine_path=<unset>")
-        else:
-            missing.append(f"engine_path={engine_path}")
+        elif not _engine_path_has_assets(engine_path):
+            missing.append(f"engine_path={engine_path} (missing config/engine artifacts)")
     if not missing:
         return
     missing_text = ", ".join(missing)
+    default_engine_hint = (
+        f"{DEFAULT_ENGINE_PATH} (preferred) or {LEGACY_ENGINE_PATH} (legacy)."
+    )
     raise RuntimeError(
         "SKIPPED: TRT-LLM Phi-3.5-MoE assets unavailable "
         f"({missing_text}). "
         "Remediation: provide a local Phi-3.5-MoE checkout via --model-path "
         f"(or ${MODEL_PATH_ENV}) and a built TensorRT-LLM engine via --engine-path "
-        f"(or ${ENGINE_PATH_ENV})."
+        f"(or ${ENGINE_PATH_ENV}). Canonical repo defaults are "
+        f"{DEFAULT_MODEL_PATH} for model and {default_engine_hint}"
     )
+
+
+def parse_trtllm_args() -> argparse.Namespace:
+    default_model_path = os.environ.get(MODEL_PATH_ENV, str(DEFAULT_MODEL_PATH))
+    default_engine_path = str(resolve_default_engine_path())
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--model-path", type=str, default=default_model_path)
+    parser.add_argument("--engine-path", type=str, default=default_engine_path)
+    parser.add_argument("--prompt-len", type=int, default=512)
+    parser.add_argument("--max-new-tokens", type=int, default=128)
+    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--vocab-slice", type=int, default=256)
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def load_trtllm_runtime():
     """Load TensorRT-LLM runtime without importing the full package __init__."""
+    _suppress_optional_vllm_plugin_warning()
     os.environ.setdefault("OMPI_MCA_coll_ucc_enable", "0")
     if platform.system() == "Linux":
         try:
@@ -102,30 +169,16 @@ def load_trtllm_runtime():
     return runtime_mod
 
 
-def parse_trtllm_args() -> argparse.Namespace:
-    default_model_path = os.environ.get(MODEL_PATH_ENV, str(DEFAULT_MODEL_PATH))
-    default_engine_path = os.environ.get(ENGINE_PATH_ENV)
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--model-path", type=str, default=default_model_path)
-    parser.add_argument("--engine-path", type=str, default=default_engine_path)
-    parser.add_argument("--prompt-len", type=int, default=512)
-    parser.add_argument("--max-new-tokens", type=int, default=128)
-    parser.add_argument("--batch-size", type=int, default=1)
-    parser.add_argument("--vocab-slice", type=int, default=256)
-    args, _ = parser.parse_known_args()
-    return args
-
-
 def build_prompt_tokens(tokenizer, *, prompt_len: int, batch_size: int) -> Tuple[torch.Tensor, torch.Tensor]:
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     encoded = tokenizer.encode(PROMPT_TEXT, add_special_tokens=True)
-    if len(encoded) > prompt_len:
-        encoded = encoded[:prompt_len]
-    else:
-        encoded = encoded + [tokenizer.pad_token_id] * (prompt_len - len(encoded))
+    encoded = encoded[:prompt_len]
+    if not encoded:
+        raise ValueError("Prompt encoding produced no tokens")
     input_ids = torch.tensor([encoded] * batch_size, dtype=torch.long)
-    attention_mask = (input_ids != tokenizer.pad_token_id).to(torch.long)
+    # Keep prompt lengths identical across baseline and TRT-LLM by avoiding right-padding.
+    attention_mask = torch.ones_like(input_ids, dtype=torch.long)
     return input_ids, attention_mask
 
 

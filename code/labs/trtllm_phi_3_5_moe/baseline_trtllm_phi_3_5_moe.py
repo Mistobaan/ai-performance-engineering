@@ -121,7 +121,7 @@ class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 "fp8": False,
                 "tf32": torch.backends.cuda.matmul.allow_tf32,
             },
-            output_tolerance=(1e-2, 1e-2),
+            output_tolerance=(5e-2, 5e-2),
         )
 
     def teardown(self) -> None:

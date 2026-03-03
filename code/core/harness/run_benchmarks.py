@@ -2224,8 +2224,15 @@ def profile_python_benchmark_ncu(
         )
 
     profiler_config = build_profiler_config_from_benchmark(config)
-    nvtx_includes = profiler_config.nvtx_includes
+    configured_nvtx_includes = profiler_config.nvtx_includes
+    nvtx_includes = list(configured_nvtx_includes or [])
+    # Keep the emitted wrapper NVTX range aligned with configured include filters;
+    # otherwise NCU can connect/disconnect without capturing any kernels.
     profile_nvtx_label = "compute_kernel:profile"
+    if nvtx_includes:
+        first_include = str(nvtx_includes[0]).strip()
+        if first_include:
+            profile_nvtx_label = first_include.rstrip("/")
     try:
         from core.benchmark.cuda_binary_benchmark import CudaBinaryBenchmark
         is_cuda_binary = isinstance(benchmark, CudaBinaryBenchmark)
@@ -2234,7 +2241,7 @@ def profile_python_benchmark_ncu(
 
     # For in-process Python benchmarks, create a stable NVTX range and use it as
     # the default NCU filter to avoid profiling every kernel in the process.
-    ncu_nvtx_includes = nvtx_includes
+    ncu_nvtx_includes = nvtx_includes or None
     if not ncu_nvtx_includes and not is_cuda_binary:
         ncu_nvtx_includes = [profile_nvtx_label]
     # chapter_dir points to e.g. <repo>/ch10 or <repo>/labs/<lab>; use global
@@ -2297,7 +2304,7 @@ _profiling_config = BenchmarkConfig(
     enable_nsys=True,
     enable_ncu=True,
     enable_nvtx=True,
-    nsys_nvtx_include={nvtx_includes!r},
+    nsys_nvtx_include={configured_nvtx_includes!r},
     profile_type={config.profile_type!r},
     ncu_metric_set={config.ncu_metric_set!r},
     pm_sampling_interval={config.pm_sampling_interval!r},
@@ -2875,40 +2882,20 @@ def _merge_benchmark_config(
 
 
 def _canonicalize_optimized_variants_for_full_sweep(
-    chapter_id: str,
     python_pairs: List[Tuple[Path, List[Path], str]],
-    *,
-    include_alias_pairs: bool,
-    example_filters: Optional[Set[str]],
 ) -> Tuple[List[Tuple[Path, List[Path], str]], int]:
-    """Reduce tuning-heavy optimization sets to canonical defaults by default.
+    """Prefer one canonical optimized file per baseline when available.
 
-    For labs that intentionally keep many archived tuning variants, default behavior should
-    validate canonical examples rather than exhaustively replay every historical optimization
-    script. Users can opt into all variants via `AISP_INCLUDE_NVFP4_GROUP_GEMM_VARIANTS=1`.
-
-    Notes:
-    - Alias-targeted runs are left unchanged (`include_alias_pairs=True`).
-    - Canonical chapter:example targets are still canonicalized unless env override is set.
+    Discovery may return many optimized variants for a single baseline. For full chapter
+    sweeps, we prefer `optimized_<example>.py` when present and keep alias-targeted pairs
+    untouched.
     """
-    # Alias-targeted runs intentionally map to specific optimized variants.
-    if include_alias_pairs:
-        return python_pairs, 0
-
-    include_all_variants = os.environ.get(
-        "AISP_INCLUDE_NVFP4_GROUP_GEMM_VARIANTS", ""
-    ).strip().lower() in {"1", "true", "yes", "on"}
-    if include_all_variants:
-        return python_pairs, 0
-
-    if chapter_id not in {"labs/nvfp4_group_gemm", "labs/nvfp4_group_gemm_v2"}:
-        return python_pairs, 0
 
     suppressed = 0
     canonical_pairs: List[Tuple[Path, List[Path], str]] = []
     for baseline_path, optimized_paths, example_name in python_pairs:
         canonical_name = baseline_path.stem.replace("baseline_", "", 1)
-        # Alias entries are already suppressed for full runs; keep any that remain untouched.
+        # Keep alias-targeted entries unchanged.
         if example_name != canonical_name:
             canonical_pairs.append((baseline_path, optimized_paths, example_name))
             continue
@@ -3185,8 +3172,7 @@ def _test_chapter_impl(
                 pair for pair in python_pairs if pair[2] in example_filters
             ]
             logger.info(f"  Filtered to {len(python_pairs)} example(s): {', '.join(sorted(example_filters))}")
-    include_alias_pairs = os.environ.get("AISP_INCLUDE_ALIAS_BENCHMARKS", "").strip().lower() in {"1", "true", "yes", "on"}
-    if not example_filters and not include_alias_pairs:
+    if not example_filters:
         # Full chapter runs should execute canonical baseline->optimized pairings once.
         # Alias entries (added for chapter:example_variant targeting) duplicate work.
         before_pairs = len(python_pairs)
@@ -3198,20 +3184,15 @@ def _test_chapter_impl(
         suppressed_pairs = before_pairs - len(python_pairs)
         if suppressed_pairs:
             logger.info(
-                "  Suppressed %d alias benchmark pair(s) for full chapter run "
-                "(set AISP_INCLUDE_ALIAS_BENCHMARKS=1 to include aliases).",
+                "  Suppressed %d alias benchmark pair(s) for full chapter run.",
                 suppressed_pairs,
             )
     python_pairs, suppressed_variant_opts = _canonicalize_optimized_variants_for_full_sweep(
-        chapter_id,
         python_pairs,
-        include_alias_pairs=include_alias_pairs,
-        example_filters=example_filters,
     )
     if suppressed_variant_opts:
         logger.info(
-            "  Canonicalized %d optimization variant(s) for %s full sweep "
-            "(set AISP_INCLUDE_NVFP4_GROUP_GEMM_VARIANTS=1 to include all variants).",
+            "  Canonicalized %d optimization variant(s) for %s full sweep.",
             suppressed_variant_opts,
             chapter_id,
         )
@@ -9172,6 +9153,54 @@ def _resolve_target_override_path(
     return None
 
 
+def _phi35_default_model_path() -> Path:
+    return repo_root / "phi-3.5-moe" / "original"
+
+
+def _phi35_default_engine_candidates() -> List[Path]:
+    return [
+        repo_root / "phi-3.5-moe" / "trtllm_engine_tp1_fp16",
+        repo_root / "phi-3.5-moe" / "trtllm_engine",
+    ]
+
+
+def _phi35_engine_has_assets(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if path.is_file():
+        return path.stat().st_size > 0
+    if (path / "config.json").exists():
+        return True
+    if any(path.glob("rank*.engine")):
+        return True
+    if any(path.glob("*.engine")):
+        return True
+    if any(path.glob("*.plan")):
+        return True
+    return False
+
+
+def _resolve_phi35_model_path(model_override: Optional[Path]) -> Path:
+    if model_override is not None:
+        return model_override
+    env_model = os.environ.get("AISP_PHI35_MOE_MODEL_PATH", "").strip()
+    if env_model:
+        return Path(env_model).expanduser()
+    return _phi35_default_model_path()
+
+
+def _resolve_phi35_engine_path(engine_override: Optional[Path]) -> Path:
+    if engine_override is not None:
+        return engine_override
+    env_engine = os.environ.get("AISP_PHI35_MOE_ENGINE_PATH", "").strip()
+    if env_engine:
+        return Path(env_engine).expanduser()
+    for candidate in _phi35_default_engine_candidates():
+        if _phi35_engine_has_assets(candidate):
+            return candidate
+    return _phi35_default_engine_candidates()[0]
+
+
 def _preflight_target_coverage_and_assets(
     chapter_dirs: List[Path],
     chapter_filters: Dict[str, Set[str]],
@@ -9181,12 +9210,6 @@ def _preflight_target_coverage_and_assets(
     target_extra_args: Dict[str, List[str]],
 ) -> List[str]:
     issues: List[str] = []
-    include_alias_pairs = os.environ.get("AISP_INCLUDE_ALIAS_BENCHMARKS", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
 
     def _is_cuda_wrapper_pair(pair: Tuple[Path, List[Path], str]) -> bool:
         baseline_path = pair[0]
@@ -9205,17 +9228,14 @@ def _preflight_target_coverage_and_assets(
         python_pairs = discover_benchmarks(chapter_dir, warn_missing=False)
         if example_filters:
             python_pairs = [pair for pair in python_pairs if pair[2] in example_filters]
-        if not example_filters and not include_alias_pairs:
+        if not example_filters:
             python_pairs = [
                 pair
                 for pair in python_pairs
                 if pair[2] == pair[0].stem.replace("baseline_", "", 1)
             ]
         python_pairs, _ = _canonicalize_optimized_variants_for_full_sweep(
-            chapter_id,
             python_pairs,
-            include_alias_pairs=include_alias_pairs,
-            example_filters=example_filters,
         )
         if only_cuda or only_python:
             cuda_wrapped_pairs = [pair for pair in python_pairs if _is_cuda_wrapper_pair(pair)]
@@ -9249,32 +9269,23 @@ def _preflight_target_coverage_and_assets(
                 chapter_name=chapter_name,
                 flag="--engine-path",
             )
-
-            env_model = os.environ.get("AISP_PHI35_MOE_MODEL_PATH", "").strip()
-            env_engine = os.environ.get("AISP_PHI35_MOE_ENGINE_PATH", "").strip()
-
-            model_path = model_override or (Path(env_model).expanduser() if env_model else None)
-            if model_path is None:
-                model_path = repo_root / "phi-3.5-moe" / "original"
+            model_path = _resolve_phi35_model_path(model_override)
             if not model_path.exists():
                 issues.append(
                     "labs_trtllm_phi_3_5_moe: missing model assets at "
                     f"{model_path}. Remediation: set AISP_PHI35_MOE_MODEL_PATH or pass "
-                    "--target-extra-arg labs/trtllm_phi_3_5_moe:optimized_trtllm_phi_3_5_moe=\"--model-path /path/to/model\"."
+                    "--target-extra-arg labs/trtllm_phi_3_5_moe:optimized_trtllm_phi_3_5_moe=\"--model-path /path/to/model\". "
+                    f"Canonical repo default: {_phi35_default_model_path()}."
                 )
 
-            engine_path = engine_override or (Path(env_engine).expanduser() if env_engine else None)
-            if engine_path is None:
+            engine_path = _resolve_phi35_engine_path(engine_override)
+            if not _phi35_engine_has_assets(engine_path):
+                defaults_hint = ", ".join(str(p) for p in _phi35_default_engine_candidates())
                 issues.append(
-                    "labs_trtllm_phi_3_5_moe: missing TensorRT-LLM engine path. "
-                    "Remediation: set AISP_PHI35_MOE_ENGINE_PATH or pass "
-                    "--target-extra-arg labs/trtllm_phi_3_5_moe:optimized_trtllm_phi_3_5_moe=\"--engine-path /path/to/engine.plan\"."
-                )
-            elif not engine_path.exists():
-                issues.append(
-                    "labs_trtllm_phi_3_5_moe: configured TensorRT-LLM engine path does not exist at "
-                    f"{engine_path}. Remediation: rebuild/provide a valid engine and update "
-                    "AISP_PHI35_MOE_ENGINE_PATH (or --engine-path)."
+                    "labs_trtllm_phi_3_5_moe: missing TensorRT-LLM engine artifacts at "
+                    f"{engine_path}. Remediation: set AISP_PHI35_MOE_ENGINE_PATH or pass "
+                    "--target-extra-arg labs/trtllm_phi_3_5_moe:optimized_trtllm_phi_3_5_moe=\"--engine-path /path/to/engine_dir_or_plan\". "
+                    f"Canonical repo defaults: {defaults_hint}."
                 )
 
     return issues

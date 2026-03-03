@@ -250,7 +250,6 @@ class TestChapterDiscovery:
         assert chapters[1].name == "ch02"
         assert chapters[2].name == "ch10"
 
-
 class TestBenchmarkPairDiscovery:
     """Test discovery of benchmark pairs across chapters."""
     
