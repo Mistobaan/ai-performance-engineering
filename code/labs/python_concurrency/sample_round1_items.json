@@ -1,0 +1,10 @@
+[
+  {"id": "a1", "payload": "alpha", "duration_ms": 120, "should_fail": false},
+  {"id": "a2", "payload": "beta", "duration_ms": 450, "should_fail": false},
+  {"id": "a3", "payload": "gamma", "duration_ms": 700, "should_fail": true},
+  {"id": "a4", "payload": "delta", "duration_ms": 90, "should_fail": false},
+  {"id": "a5", "payload": "epsilon", "duration_ms": 300, "should_fail": false},
+  {"id": "a6", "payload": "zeta", "duration_ms": 650, "should_fail": false},
+  {"id": "a7", "payload": "eta", "duration_ms": 800, "should_fail": false},
+  {"id": "a8", "payload": "theta", "duration_ms": 50, "should_fail": false}
+]

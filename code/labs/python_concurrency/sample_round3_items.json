@@ -1,0 +1,50 @@
+[
+  {
+    "id": "r3-1",
+    "idempotency_key": "k-alpha",
+    "payload": "alpha",
+    "delay_ms": 120,
+    "transient_fail_rate": 0.0,
+    "permanent_fail": false
+  },
+  {
+    "id": "r3-2",
+    "idempotency_key": "k-alpha",
+    "payload": "alpha-duplicate",
+    "delay_ms": 80,
+    "transient_fail_rate": 0.0,
+    "permanent_fail": false
+  },
+  {
+    "id": "r3-3",
+    "idempotency_key": "k-beta",
+    "payload": "beta",
+    "delay_ms": 100,
+    "transient_fail_rate": 0.7,
+    "permanent_fail": false
+  },
+  {
+    "id": "r3-4",
+    "idempotency_key": "k-gamma",
+    "payload": "gamma",
+    "delay_ms": 90,
+    "transient_fail_rate": 0.0,
+    "permanent_fail": true
+  },
+  {
+    "id": "r3-5",
+    "idempotency_key": "k-delta",
+    "payload": "delta",
+    "delay_ms": 140,
+    "transient_fail_rate": 0.2,
+    "permanent_fail": false
+  },
+  {
+    "id": "r3-6",
+    "idempotency_key": "k-delta",
+    "payload": "delta-duplicate",
+    "delay_ms": 110,
+    "transient_fail_rate": 0.0,
+    "permanent_fail": false
+  }
+]

@@ -1,0 +1,75 @@
+[
+  {
+    "id": "x0",
+    "idempotency_key": "k0",
+    "payload": "alpha payload",
+    "fetch_delay_ms": 20,
+    "write_delay_ms": 20,
+    "fetch_fail_mode": "none",
+    "write_fail_mode": "none"
+  },
+  {
+    "id": "x1",
+    "idempotency_key": "k0",
+    "payload": "alpha duplicate",
+    "fetch_delay_ms": 20,
+    "write_delay_ms": 20,
+    "fetch_fail_mode": "none",
+    "write_fail_mode": "none"
+  },
+  {
+    "id": "x2",
+    "idempotency_key": "k2",
+    "payload": "fetch transient once",
+    "fetch_delay_ms": 20,
+    "write_delay_ms": 20,
+    "fetch_fail_mode": "transient_once",
+    "write_fail_mode": "none"
+  },
+  {
+    "id": "x3",
+    "idempotency_key": "k3",
+    "payload": "write transient always",
+    "fetch_delay_ms": 20,
+    "write_delay_ms": 20,
+    "fetch_fail_mode": "none",
+    "write_fail_mode": "transient_always"
+  },
+  {
+    "id": "x4",
+    "idempotency_key": "k4",
+    "payload": "cpu fail",
+    "fetch_delay_ms": 20,
+    "write_delay_ms": 20,
+    "cpu_fail": true,
+    "fetch_fail_mode": "none",
+    "write_fail_mode": "none"
+  },
+  {
+    "id": "x5",
+    "idempotency_key": "k5",
+    "payload": "fetch permanent",
+    "fetch_delay_ms": 20,
+    "write_delay_ms": 20,
+    "fetch_fail_mode": "permanent",
+    "write_fail_mode": "none"
+  },
+  {
+    "id": "x6",
+    "idempotency_key": "k6",
+    "payload": "write permanent",
+    "fetch_delay_ms": 20,
+    "write_delay_ms": 20,
+    "fetch_fail_mode": "none",
+    "write_fail_mode": "permanent"
+  },
+  {
+    "id": "x7",
+    "idempotency_key": "k7",
+    "payload": "fetch timeout",
+    "fetch_delay_ms": 1200,
+    "write_delay_ms": 20,
+    "fetch_fail_mode": "none",
+    "write_fail_mode": "none"
+  }
+]

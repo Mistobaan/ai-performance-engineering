@@ -1,0 +1,12 @@
+[
+  {"id": "u1", "delay_ms": 100, "fail_rate": 0.00},
+  {"id": "u2", "delay_ms": 220, "fail_rate": 0.10},
+  {"id": "u3", "delay_ms": 600, "fail_rate": 0.20},
+  {"id": "u4", "delay_ms": 1200, "fail_rate": 0.05},
+  {"id": "u5", "delay_ms": 350, "fail_rate": 0.00},
+  {"id": "u6", "delay_ms": 900, "fail_rate": 0.15},
+  {"id": "u7", "delay_ms": 120, "fail_rate": 0.05},
+  {"id": "u8", "delay_ms": 1800, "fail_rate": 0.00},
+  {"id": "u9", "delay_ms": 240, "fail_rate": 0.30},
+  {"id": "u10", "delay_ms": 420, "fail_rate": 0.00}
+]

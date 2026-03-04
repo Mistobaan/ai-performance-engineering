@@ -1,0 +1,42 @@
+[
+  {
+    "id": "h1",
+    "payload": "the quick brown fox",
+    "fetch_delay_ms": 80,
+    "write_delay_ms": 60,
+    "fetch_fail": false,
+    "write_fail": false
+  },
+  {
+    "id": "h2",
+    "payload": "jumps over the lazy dog",
+    "fetch_delay_ms": 120,
+    "write_delay_ms": 75,
+    "fetch_fail": false,
+    "write_fail": false
+  },
+  {
+    "id": "h3",
+    "payload": "pipeline stage demo",
+    "fetch_delay_ms": 90,
+    "write_delay_ms": 50,
+    "fetch_fail": false,
+    "write_fail": true
+  },
+  {
+    "id": "h4",
+    "payload": "bounded queue backpressure",
+    "fetch_delay_ms": 110,
+    "write_delay_ms": 80,
+    "fetch_fail": true,
+    "write_fail": false
+  },
+  {
+    "id": "h5",
+    "payload": "cpu parsing in process pool",
+    "fetch_delay_ms": 70,
+    "write_delay_ms": 70,
+    "fetch_fail": false,
+    "write_fail": false
+  }
+]
