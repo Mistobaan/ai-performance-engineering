@@ -1894,6 +1894,12 @@ if TYPER_AVAILABLE:
     def triage(
         data_file: Optional[Path] = Option(None, "--data-file", "-d", help="Path to benchmark_test_results.json"),
         baseline_file: Optional[Path] = Option(None, "--baseline", "-b", help="Optional baseline for regression detection"),
+        auto_deep_dive: bool = Option(False, "--auto-deep-dive", help="Automatically run deep_dive profiling for top regressions.", is_flag=True),
+        deep_dive_top_n: int = Option(3, "--deep-dive-top-n", help="Number of regressed benchmarks to deep-dive when --auto-deep-dive is set."),
+        deep_dive_iterations: int = Option(1, "--deep-dive-iterations", help="Iterations for deep-dive reruns."),
+        deep_dive_warmup: int = Option(5, "--deep-dive-warmup", help="Warmup iterations for deep-dive reruns."),
+        deep_dive_timeout_seconds: int = Option(900, "--deep-dive-timeout-seconds", help="Timeout for each deep-dive rerun."),
+        deep_dive_artifacts_dir: Optional[Path] = Option(None, "--deep-dive-artifacts-dir", help="Optional artifacts directory for deep-dive reruns."),
         json_output: bool = Option(False, "--json", help="Output as JSON"),
         top_n: int = Option(10, "--top", "-n", help="Number of items to show"),
     ):
@@ -2003,7 +2009,76 @@ if TYPER_AVAILABLE:
                 for b in improvements
             ],
             "recommendations": recommendations,
+            "deep_dive_runs": [],
         }
+
+        if auto_deep_dive and regressions:
+            if deep_dive_top_n <= 0:
+                if TYPER_AVAILABLE and typer is not None:
+                    raise typer.BadParameter("--deep-dive-top-n must be >= 1 when --auto-deep-dive is enabled.")
+                raise ValueError("--deep-dive-top-n must be >= 1 when --auto-deep-dive is enabled.")
+            selected = regressions[:deep_dive_top_n]
+            if not json_output:
+                typer.echo(f"\n🧪 AUTO DEEP-DIVE ({len(selected)} regression target(s)):")
+            for bench in selected:
+                chapter = str(bench.get("chapter", "")).strip()
+                name = str(bench.get("name", "")).strip()
+                if not chapter or not name:
+                    result["deep_dive_runs"].append(
+                        {
+                            "target": "",
+                            "status": "skipped",
+                            "reason": "missing_chapter_or_name",
+                        }
+                    )
+                    continue
+
+                target = f"{chapter}:{name}"
+                cmd: List[str] = [
+                    sys.executable,
+                    "-m",
+                    "cli.aisp",
+                    "bench",
+                    "run",
+                    "--targets",
+                    target,
+                    "--profile",
+                    "deep_dive",
+                    "--iterations",
+                    str(deep_dive_iterations),
+                    "--warmup",
+                    str(deep_dive_warmup),
+                    "--timeout-seconds",
+                    str(deep_dive_timeout_seconds),
+                ]
+                if deep_dive_artifacts_dir:
+                    cmd.extend(["--artifacts-dir", str(deep_dive_artifacts_dir)])
+
+                if not json_output:
+                    typer.echo(f"   • {target}")
+                    typer.echo(f"     cmd: {' '.join(shlex.quote(token) for token in cmd)}")
+
+                t0 = time.time()
+                if json_output:
+                    proc = subprocess.run(cmd, check=False, text=True, capture_output=True)
+                else:
+                    proc = subprocess.run(cmd, check=False)
+                elapsed_s = time.time() - t0
+                run_status = "ok" if proc.returncode == 0 else "failed"
+                run_entry: Dict[str, Any] = {
+                    "target": target,
+                    "status": run_status,
+                    "returncode": int(proc.returncode),
+                    "elapsed_s": round(elapsed_s, 3),
+                    "command": cmd,
+                }
+                if json_output:
+                    # Preserve machine-readable triage output while retaining useful command diagnostics.
+                    run_entry["stdout"] = (proc.stdout or "")[-4000:]
+                    run_entry["stderr"] = (proc.stderr or "")[-4000:]
+                result["deep_dive_runs"].append(run_entry)
+                if not json_output:
+                    typer.echo(f"     rc={proc.returncode} elapsed={elapsed_s:.1f}s")
         
         if json_output:
             typer.echo(json.dumps(result, indent=2))
@@ -2034,6 +2109,23 @@ if TYPER_AVAILABLE:
             priority_icon = "🔴" if rec["priority"] == "high" else "🟡" if rec["priority"] == "medium" else "🟢"
             typer.echo(f"   {i}. {priority_icon} {rec['tool']}")
             typer.echo(f"      └─ {rec['reason']}")
+
+        if result["deep_dive_runs"]:
+            ok = sum(1 for r in result["deep_dive_runs"] if r.get("status") == "ok")
+            fail = sum(1 for r in result["deep_dive_runs"] if r.get("status") == "failed")
+            skipped_dd = sum(1 for r in result["deep_dive_runs"] if r.get("status") == "skipped")
+            typer.echo(
+                f"\n🧾 DEEP-DIVE SUMMARY: {ok} succeeded, {fail} failed, {skipped_dd} skipped"
+            )
+            for entry in result["deep_dive_runs"]:
+                target = entry.get("target") or "<unknown>"
+                status = entry.get("status")
+                rc = entry.get("returncode")
+                elapsed = entry.get("elapsed_s")
+                if status == "skipped":
+                    typer.echo(f"   • {target}: skipped ({entry.get('reason', 'unknown')})")
+                else:
+                    typer.echo(f"   • {target}: {status} rc={rc} elapsed={elapsed}s")
         
         typer.echo()
 
