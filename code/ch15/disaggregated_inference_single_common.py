@@ -8,6 +8,7 @@ from typing import List, Optional
 import torch
 
 from core.benchmark.verification import PrecisionFlags
+from core.benchmark.wrapper_utils import attach_benchmark_metadata
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from core.optimization.moe_inference import (
     MoeInferenceConfig,
@@ -73,8 +74,8 @@ def _apply_profile_overrides(cfg: DisaggConfig) -> DisaggConfig:
     )
 
 
-class DisaggregatedInferenceSingleGPUBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Single-GPU analogue of disaggregated prefill/decode inference."""
+class _DisaggregatedInferenceSingleGPUBase(VerificationPayloadMixin, BaseBenchmark):
+    """Shared single-GPU disaggregated inference setup/verification logic."""
 
     ncu_env_overrides = {
         "AISP_NCU_PROFILE_REQUESTS": "4",
@@ -83,9 +84,8 @@ class DisaggregatedInferenceSingleGPUBenchmark(VerificationPayloadMixin, BaseBen
         "AISP_NCU_PROFILE_BATCH": "1",
     }
 
-    def __init__(self, *, use_host_staging: bool, label: str, cfg: Optional[DisaggConfig] = None) -> None:
+    def __init__(self, *, label: str, cfg: Optional[DisaggConfig] = None) -> None:
         super().__init__()
-        self.use_host_staging = bool(use_host_staging)
         self.label = label
         base_cfg = cfg or DisaggConfig()
         self.cfg = _apply_profile_overrides(base_cfg)
@@ -120,17 +120,6 @@ class DisaggregatedInferenceSingleGPUBenchmark(VerificationPayloadMixin, BaseBen
             device=self.device,
             dtype=torch.long,
         )
-        if not self.use_host_staging:
-            self.kv_caches = [
-                allocate_kv_cache(
-                    self.cfg.batch_size,
-                    self.cfg.tokens_per_request,
-                    self.cfg.hidden_size,
-                    self.cfg.dtype,
-                    self.device,
-                )
-                for _ in range(self.cfg.requests_per_rank)
-            ]
         self._param_count = sum(p.numel() for p in self.prefill_model.parameters()) + sum(
             p.numel() for p in self.decode_model.parameters()
         )
@@ -145,36 +134,21 @@ class DisaggregatedInferenceSingleGPUBenchmark(VerificationPayloadMixin, BaseBen
             self.device,
         )
 
-    def benchmark_fn(self) -> None:
-        if self.prefill_model is None or self.decode_model is None or self.prompts is None:
-            raise RuntimeError("setup() must run before benchmark_fn()")
+    def _run_decode_loop(self, kv_cache: torch.Tensor, seed_tokens: torch.Tensor) -> torch.Tensor:
+        if self.decode_model is None:
+            raise RuntimeError("Decode model not initialized")
+        tokens = seed_tokens
+        for step in range(self.cfg.decode_tokens):
+            _, decode_logits = self.decode_model.decode(
+                tokens,
+                kv_cache=kv_cache,
+                position=self.cfg.context_window + step,
+            )
+            tokens = torch.argmax(decode_logits[:, -1, :], dim=-1, keepdim=True)
+        return tokens.squeeze(0)
 
-        outputs: List[torch.Tensor] = []
-        with torch.no_grad():
-            for idx in range(self.cfg.requests_per_rank):
-                prompt = self.prompts[idx]
-                hidden, logits = self.prefill_model.prefill(prompt)
-                seed_tokens = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)
-                if self.use_host_staging:
-                    kv_cpu = hidden.cpu()
-                    kv_cache = self._allocate_kv_cache()
-                    kv_cache[:, : self.cfg.context_window] = kv_cpu.to(self.device)
-                else:
-                    kv_cache = self.kv_caches[idx]
-                    kv_cache[:, : self.cfg.context_window] = hidden
-
-                tokens = seed_tokens
-                for step in range(self.cfg.decode_tokens):
-                    _, decode_logits = self.decode_model.decode(
-                        tokens,
-                        kv_cache=kv_cache,
-                        position=self.cfg.context_window + step,
-                    )
-                    tokens = torch.argmax(decode_logits[:, -1, :], dim=-1, keepdim=True)
-                outputs.append(tokens.squeeze(0))
-
-        torch.cuda.synchronize(self.device)
-        self._output = torch.cat([out.detach().cpu() for out in outputs], dim=0)
+    def _set_output_from_tokens(self, outputs: List[torch.Tensor]) -> None:
+        self._output = torch.cat(outputs, dim=0)
 
     def capture_verification_payload(self) -> None:
         if self._output is None or self.prompts is None:
@@ -218,8 +192,59 @@ class DisaggregatedInferenceSingleGPUBenchmark(VerificationPayloadMixin, BaseBen
         return self._workload
 
 
-def attach_benchmark_metadata(bench: BaseBenchmark, module_file: str) -> BaseBenchmark:
-    """Ensure subprocess runner calls get_benchmark() for parameterized benchmarks."""
-    bench._module_file_override = module_file
-    bench._factory_name_override = "get_benchmark"
-    return bench
+class BaselineDisaggregatedInferenceSingleGPUBenchmark(_DisaggregatedInferenceSingleGPUBase):
+    """Baseline single-GPU disaggregated inference with host-staged KV handoff."""
+
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
+
+    def benchmark_fn(self) -> None:
+        if self.prefill_model is None or self.prompts is None:
+            raise RuntimeError("setup() must run before benchmark_fn()")
+
+        outputs: List[torch.Tensor] = []
+        with torch.no_grad():
+            for idx in range(self.cfg.requests_per_rank):
+                prompt = self.prompts[idx]
+                hidden, logits = self.prefill_model.prefill(prompt)
+                seed_tokens = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)
+                kv_cpu = hidden.cpu()
+                kv_cache = self._allocate_kv_cache()
+                kv_cache[:, : self.cfg.context_window] = kv_cpu.to(self.device)
+                outputs.append(self._run_decode_loop(kv_cache, seed_tokens))
+
+        self._set_output_from_tokens(outputs)
+
+
+class OptimizedDisaggregatedInferenceSingleGPUBenchmark(_DisaggregatedInferenceSingleGPUBase):
+    """Optimized single-GPU disaggregated inference with device-resident KV reuse."""
+
+    def setup(self) -> None:
+        super().setup()
+        self.kv_caches = [
+            allocate_kv_cache(
+                self.cfg.batch_size,
+                self.cfg.tokens_per_request,
+                self.cfg.hidden_size,
+                self.cfg.dtype,
+                self.device,
+            )
+            for _ in range(self.cfg.requests_per_rank)
+        ]
+
+    def benchmark_fn(self) -> None:
+        if self.prefill_model is None or self.prompts is None:
+            raise RuntimeError("setup() must run before benchmark_fn()")
+        if not self.kv_caches:
+            raise RuntimeError("Optimized KV caches not initialized")
+
+        outputs: List[torch.Tensor] = []
+        with torch.no_grad():
+            for idx in range(self.cfg.requests_per_rank):
+                prompt = self.prompts[idx]
+                hidden, logits = self.prefill_model.prefill(prompt)
+                seed_tokens = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)
+                kv_cache = self.kv_caches[idx]
+                kv_cache[:, : self.cfg.context_window] = hidden
+                outputs.append(self._run_decode_loop(kv_cache, seed_tokens))
+
+        self._set_output_from_tokens(outputs)

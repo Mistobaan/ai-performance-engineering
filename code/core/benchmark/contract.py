@@ -7,9 +7,368 @@ and provides utilities for validating benchmark compliance.
 from __future__ import annotations
 
 import ast
+from dataclasses import dataclass
+from functools import lru_cache
 import inspect
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+from core.benchmark.hot_path_checks import (
+    benchmark_fn_antipattern_warnings_for_class,
+    benchmark_fn_sync_warnings_for_class,
+)
+
+
+_CONTRACT_REPO_ROOT = Path(__file__).resolve().parents[2]
+_BASE_BENCHMARK_QUALNAME = "core.harness.benchmark_harness.BaseBenchmark"
+_VERIFICATION_PAYLOAD_MIXIN_QUALNAME = "core.benchmark.verification_mixin.VerificationPayloadMixin"
+
+
+@dataclass(frozen=True)
+class _ImportRef:
+    module_name: Optional[str]
+    symbol_name: Optional[str]
+
+
+@dataclass(frozen=True)
+class _ClassRef:
+    module_path: Path
+    class_name: str
+    qualified_name: str
+
+
+@dataclass(frozen=True)
+class _ModuleContext:
+    module_path: Path
+    module_name: str
+    tree: ast.Module
+    classes: Dict[str, ast.ClassDef]
+    imports: Dict[str, _ImportRef]
+
+
+@dataclass(frozen=True)
+class _AstClassInfo:
+    ref: _ClassRef
+    own_methods: Set[str]
+    method_origins: Dict[str, Set[str]]
+    ancestor_names: Set[str]
+
+
+def _attribute_chain(node: ast.AST) -> Tuple[str, ...]:
+    parts: List[str] = []
+    current = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if isinstance(current, ast.Name):
+        parts.append(current.id)
+    return tuple(reversed(parts))
+
+
+def _function_nodes(class_node: ast.ClassDef) -> List[ast.FunctionDef | ast.AsyncFunctionDef]:
+    return [
+        item for item in class_node.body
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+
+
+def _method_names(class_node: ast.ClassDef) -> Set[str]:
+    return {item.name for item in _function_nodes(class_node)}
+
+
+def _literal_string_collection(
+    class_node: ast.ClassDef,
+    attribute_name: str,
+) -> Set[str]:
+    for item in class_node.body:
+        if not isinstance(item, ast.Assign):
+            continue
+        if len(item.targets) != 1 or not isinstance(item.targets[0], ast.Name):
+            continue
+        if item.targets[0].id != attribute_name:
+            continue
+        try:
+            value = ast.literal_eval(item.value)
+        except Exception:
+            return set()
+        if isinstance(value, (list, tuple, set, frozenset)):
+            return {str(entry).strip().lower() for entry in value if str(entry).strip()}
+        return set()
+    return set()
+
+
+def _module_name_for_file(file_path: Path) -> str:
+    resolved = file_path.resolve()
+    try:
+        relative = resolved.relative_to(_CONTRACT_REPO_ROOT)
+    except ValueError:
+        return resolved.stem
+
+    if relative.name == "__init__.py":
+        return ".".join(relative.parts[:-1])
+    return ".".join(relative.with_suffix("").parts)
+
+
+def _module_path_for_name(module_name: Optional[str]) -> Optional[Path]:
+    if not module_name:
+        return None
+    candidate = _CONTRACT_REPO_ROOT / Path(*module_name.split("."))
+    module_file = candidate.with_suffix(".py")
+    if module_file.exists():
+        return module_file.resolve()
+    package_init = candidate / "__init__.py"
+    if package_init.exists():
+        return package_init.resolve()
+    return None
+
+
+def _absolute_import_module(current_module: str, module: Optional[str], level: int) -> Optional[str]:
+    if level == 0:
+        return module
+
+    package_parts = current_module.split(".")[:-1]
+    prefix_len = len(package_parts) - (level - 1)
+    if prefix_len < 0:
+        return None
+
+    prefix = package_parts[:prefix_len]
+    if module:
+        prefix.extend(module.split("."))
+    return ".".join(prefix)
+
+
+@lru_cache(maxsize=None)
+def _load_module_context(module_path_str: str) -> Optional[_ModuleContext]:
+    module_path = Path(module_path_str)
+    if not module_path.exists() or module_path.suffix != ".py":
+        return None
+
+    source = module_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(module_path))
+    module_name = _module_name_for_file(module_path)
+    imports: Dict[str, _ImportRef] = {}
+
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            absolute_module = _absolute_import_module(module_name, node.module, node.level)
+            for alias in node.names:
+                imports[alias.asname or alias.name] = _ImportRef(
+                    module_name=absolute_module,
+                    symbol_name=alias.name,
+                )
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imports[alias.asname or alias.name.split(".")[0]] = _ImportRef(
+                    module_name=alias.name,
+                    symbol_name=None,
+                )
+
+    classes = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+    }
+    return _ModuleContext(
+        module_path=module_path.resolve(),
+        module_name=module_name,
+        tree=tree,
+        classes=classes,
+        imports=imports,
+    )
+
+
+def _make_class_ref(module_ctx: _ModuleContext, class_name: str) -> _ClassRef:
+    return _ClassRef(
+        module_path=module_ctx.module_path,
+        class_name=class_name,
+        qualified_name=f"{module_ctx.module_name}.{class_name}",
+    )
+
+
+def _resolve_module_symbol(
+    module_name: Optional[str],
+    symbol_name: str,
+    seen: Optional[Set[Tuple[str, str]]] = None,
+) -> Optional[_ClassRef]:
+    if not module_name:
+        return None
+    key = (module_name, symbol_name)
+    if seen is not None and key in seen:
+        return None
+    next_seen = set(seen or set())
+    next_seen.add(key)
+    module_path = _module_path_for_name(module_name)
+    if module_path is None:
+        return None
+    module_ctx = _load_module_context(str(module_path))
+    if module_ctx is None:
+        return None
+    return _resolve_symbol(module_ctx, symbol_name, next_seen)
+
+
+def _resolve_symbol(
+    module_ctx: _ModuleContext,
+    symbol_name: str,
+    seen: Optional[Set[Tuple[str, str]]] = None,
+) -> Optional[_ClassRef]:
+    if symbol_name in module_ctx.classes:
+        return _make_class_ref(module_ctx, symbol_name)
+
+    import_ref = module_ctx.imports.get(symbol_name)
+    if import_ref is None or import_ref.symbol_name is None:
+        return None
+
+    return _resolve_module_symbol(import_ref.module_name, import_ref.symbol_name, seen)
+
+
+def _resolve_attr_base_expr(
+    module_ctx: _ModuleContext,
+    parts: Tuple[str, ...],
+    seen: Optional[Set[Tuple[str, str]]] = None,
+) -> Optional[_ClassRef]:
+    if len(parts) < 2:
+        return None
+
+    import_ref = module_ctx.imports.get(parts[0])
+    if import_ref is None or import_ref.module_name is None or import_ref.symbol_name is not None:
+        return None
+
+    module_name = import_ref.module_name
+    rest = list(parts[1:])
+    imported_suffix = module_name.split(".")[1:]
+    if rest[:-1] and imported_suffix == rest[:-1]:
+        return _resolve_module_symbol(module_name, rest[-1], seen)
+    if rest[:-1]:
+        module_name = ".".join([module_name, *rest[:-1]])
+    return _resolve_module_symbol(module_name, rest[-1], seen)
+
+
+def _resolve_base_expr(
+    module_ctx: _ModuleContext,
+    base_expr: ast.expr,
+    seen: Optional[Set[Tuple[str, str]]] = None,
+) -> Optional[_ClassRef]:
+    if isinstance(base_expr, ast.Name):
+        return _resolve_symbol(module_ctx, base_expr.id, seen)
+    parts = _attribute_chain(base_expr)
+    if not parts:
+        return None
+    return _resolve_attr_base_expr(module_ctx, parts, seen)
+
+
+@lru_cache(maxsize=None)
+def _get_ast_class_info(module_path_str: str, class_name: str) -> Optional[_AstClassInfo]:
+    module_ctx = _load_module_context(module_path_str)
+    if module_ctx is None:
+        return None
+    class_node = module_ctx.classes.get(class_name)
+    if class_node is None:
+        return None
+
+    class_ref = _make_class_ref(module_ctx, class_name)
+    own_methods = _method_names(class_node)
+    method_origins: Dict[str, Set[str]] = {
+        method_name: {class_ref.qualified_name}
+        for method_name in own_methods
+    }
+    ancestor_names: Set[str] = {class_ref.qualified_name}
+
+    for base in class_node.bases:
+        base_ref = _resolve_base_expr(module_ctx, base)
+        if base_ref is None:
+            continue
+        ancestor_names.add(base_ref.qualified_name)
+        base_info = _get_ast_class_info(str(base_ref.module_path), base_ref.class_name)
+        if base_info is None:
+            continue
+        ancestor_names.update(base_info.ancestor_names)
+        for method_name, providers in base_info.method_origins.items():
+            method_origins.setdefault(method_name, set()).update(providers)
+
+    return _AstClassInfo(
+        ref=class_ref,
+        own_methods=own_methods,
+        method_origins=method_origins,
+        ancestor_names=ancestor_names,
+    )
+
+
+def _resolve_return_expr_to_class_refs(
+    module_ctx: _ModuleContext,
+    expr: ast.expr,
+    assignments: Dict[str, ast.expr],
+    seen_locals: Optional[Set[str]] = None,
+) -> List[_ClassRef]:
+    local_seen = set(seen_locals or set())
+
+    if isinstance(expr, ast.Name):
+        assigned = assignments.get(expr.id)
+        if assigned is not None and expr.id not in local_seen:
+            local_seen.add(expr.id)
+            return _resolve_return_expr_to_class_refs(module_ctx, assigned, assignments, local_seen)
+        class_ref = _resolve_symbol(module_ctx, expr.id)
+        return [class_ref] if class_ref is not None else []
+
+    if isinstance(expr, ast.Call):
+        if isinstance(expr.func, ast.Name) and expr.func.id == "attach_benchmark_metadata" and expr.args:
+            return _resolve_return_expr_to_class_refs(module_ctx, expr.args[0], assignments, local_seen)
+
+        class_ref = _resolve_base_expr(module_ctx, expr.func)
+        return [class_ref] if class_ref is not None else []
+
+    return []
+
+
+def _returned_benchmark_class_refs(module_ctx: _ModuleContext) -> List[_ClassRef]:
+    refs: List[_ClassRef] = []
+    seen: Set[Tuple[Path, str]] = set()
+
+    for node in module_ctx.tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name != "get_benchmark":
+            continue
+
+        assignments: Dict[str, ast.expr] = {}
+        for stmt in node.body:
+            if isinstance(stmt, ast.Assign):
+                if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+                    continue
+                assignments[stmt.targets[0].id] = stmt.value
+                continue
+            if isinstance(stmt, ast.AnnAssign):
+                if not isinstance(stmt.target, ast.Name) or stmt.value is None:
+                    continue
+                assignments[stmt.target.id] = stmt.value
+                continue
+            if not isinstance(stmt, ast.Return) or stmt.value is None:
+                continue
+            for class_ref in _resolve_return_expr_to_class_refs(module_ctx, stmt.value, assignments):
+                key = (class_ref.module_path, class_ref.class_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                refs.append(class_ref)
+
+    return refs
+
+
+def _method_has_non_base_provider(class_info: _AstClassInfo, method_name: str) -> bool:
+    providers = class_info.method_origins.get(method_name, set())
+    return any(provider != _BASE_BENCHMARK_QUALNAME for provider in providers)
+
+
+def _candidate_benchmark_class_refs(module_ctx: _ModuleContext) -> List[_ClassRef]:
+    explicit = _returned_benchmark_class_refs(module_ctx)
+    if explicit:
+        return explicit
+
+    inferred: List[_ClassRef] = []
+    for class_name in sorted(module_ctx.classes):
+        class_info = _get_ast_class_info(str(module_ctx.module_path), class_name)
+        if class_info is None:
+            continue
+        if _method_has_non_base_provider(class_info, "benchmark_fn"):
+            inferred.append(_make_class_ref(module_ctx, class_name))
+    return inferred
 
 
 class BenchmarkContract:
@@ -62,7 +421,10 @@ class BenchmarkContract:
     }
     
     @staticmethod
-    def validate_benchmark_class_ast(class_node: ast.ClassDef) -> Tuple[List[str], List[str]]:
+    def validate_benchmark_class_ast(
+        class_node: ast.ClassDef,
+        class_info: Optional[_AstClassInfo] = None,
+    ) -> Tuple[List[str], List[str]]:
         """Validate benchmark class using AST (side-effect free).
         
         Args:
@@ -73,53 +435,69 @@ class BenchmarkContract:
         """
         errors = []
         warnings = []
-        
-        # Get method names
-        method_names = {
-            item.name for item in class_node.body
-            if isinstance(item, ast.FunctionDef)
-        }
-        
-        # Check required methods
+
+        if class_info is None:
+            synthetic_ref = _ClassRef(
+                module_path=Path("<ast>"),
+                class_name=class_node.name,
+                qualified_name=class_node.name,
+            )
+            own_methods = _method_names(class_node)
+            class_info = _AstClassInfo(
+                ref=synthetic_ref,
+                own_methods=own_methods,
+                method_origins={name: {synthetic_ref.qualified_name} for name in own_methods},
+                ancestor_names={synthetic_ref.qualified_name},
+            )
+
         for method_name in BenchmarkContract.REQUIRED_METHODS:
-            if method_name not in method_names:
+            if method_name == "benchmark_fn":
+                if not _method_has_non_base_provider(class_info, method_name):
+                    errors.append(f"Missing required method: {method_name}()")
+                continue
+            if method_name not in class_info.method_origins:
                 errors.append(f"Missing required method: {method_name}()")
-        
-        # Check verification required methods (warn in AST mode since we don't know enforcement phase)
+
         for method_name in BenchmarkContract.VERIFICATION_REQUIRED_METHODS:
-            if method_name not in method_names:
+            providers = class_info.method_origins.get(method_name, set())
+            if method_name == "validate_result":
+                if not providers:
+                    errors.append(f"Missing verification method: {method_name}()")
+                continue
+            if not providers or not _method_has_non_base_provider(class_info, method_name):
                 errors.append(f"Missing verification method: {method_name}()")
-        
-        # Check recommended methods
-        for method_name in BenchmarkContract.RECOMMENDED_METHODS:
-            if method_name not in method_names:
-                warnings.append(f"Missing recommended method: {method_name}()")
-        
-        # Check method signatures
-        for item in class_node.body:
-            if isinstance(item, ast.FunctionDef):
-                method_name = item.name
-                if method_name in BenchmarkContract.REQUIRED_METHODS:
-                    # Check signature - should only take self
-                    args = item.args.args
-                    if len(args) > 1:
-                        # More than just self
-                        # Allow *args and **kwargs
-                        has_var_args = any(arg.arg == '*' for arg in args) or any(arg.arg == '**' for arg in args)
-                        if not has_var_args:
-                            errors.append(f"{method_name}() should take no arguments (except self)")
-        
-        # Check for docstring
-        if not ast.get_docstring(class_node):
-            warnings.append("Class should have a docstring")
-        
-        # Check benchmark_fn docstring
-        for item in class_node.body:
-            if isinstance(item, ast.FunctionDef) and item.name == "benchmark_fn":
-                if not ast.get_docstring(item):
-                    warnings.append("benchmark_fn() should have a docstring describing what it benchmarks")
+
+        for item in _function_nodes(class_node):
+            method_name = item.name
+            if method_name not in BenchmarkContract.REQUIRED_METHODS:
+                continue
+            args = item.args.args
+            if len(args) > 1:
+                has_var_args = item.args.vararg is not None
+                has_var_kwargs = item.args.kwarg is not None
+                if not (has_var_args or has_var_kwargs):
+                    errors.append(f"{method_name}() should take no arguments (except self)")
+
+        for item in _function_nodes(class_node):
+            if item.name == "benchmark_fn":
+                allowed_antipatterns = _literal_string_collection(
+                    class_node,
+                    "allowed_benchmark_fn_antipatterns",
+                )
+                warnings.extend(
+                    benchmark_fn_sync_warnings_for_class(
+                        class_node,
+                        allowed_codes=allowed_antipatterns,
+                    )
+                )
+                warnings.extend(
+                    benchmark_fn_antipattern_warnings_for_class(
+                        class_node,
+                        allowed_codes=allowed_antipatterns,
+                    )
+                )
                 break
-        
+
         return errors, warnings
     
     @staticmethod
@@ -165,23 +543,7 @@ class BenchmarkContract:
                 errors.append(f"{method_name} is not callable")
                 continue
         
-        # Check recommended methods (warn, don't fail)
-        warnings = []
-        for method_name in BenchmarkContract.RECOMMENDED_METHODS:
-            if not hasattr(cls, method_name):
-                warnings.append(f"Missing recommended method: {method_name}()")
-        
-        # Check for docstring (recommended)
-        if not cls.__doc__:
-            warnings.append("Class should have a docstring describing the benchmark")
-        
-        # Check benchmark_fn docstring (recommended)
-        if hasattr(cls, "benchmark_fn"):
-            benchmark_fn = getattr(cls, "benchmark_fn")
-            if callable(benchmark_fn) and not benchmark_fn.__doc__:
-                warnings.append("benchmark_fn() should have a docstring describing what it benchmarks")
-        
-        return len(errors) == 0, errors + warnings
+        return len(errors) == 0, errors
     
     @staticmethod
     def validate_benchmark_instance(benchmark: Any, run_setup: bool = False) -> Tuple[bool, List[str]]:
@@ -348,47 +710,44 @@ def check_benchmark_file_ast(file_path: Path) -> Tuple[bool, List[str], List[str
         return False, [f"Not a Python file: {file_path}"], []
     
     try:
-        source = file_path.read_text()
-        tree = ast.parse(source, filename=str(file_path))
-        
-        # Check for get_benchmark function
+        module_ctx = _load_module_context(str(file_path.resolve()))
+        if module_ctx is None:
+            errors.append(f"Failed to parse file: unable to load module context for {file_path}")
+            return False, errors, warnings
+
+        tree = module_ctx.tree
+
         has_get_benchmark = False
-        benchmark_classes = []
-        
-        # Walk tree to find get_benchmark function and benchmark classes
-        for node in ast.walk(tree):
-            # Check for module-level get_benchmark function
-            if isinstance(node, ast.FunctionDef) and node.name == "get_benchmark":
-                # Check if it's at module level (not inside a class)
-                # We'll check this by seeing if it's directly in tree.body
-                is_module_level = node in tree.body
-                if is_module_level:
-                    has_get_benchmark = True
-                    # Check signature - should take no args
-                    if len(node.args.args) > 0:
-                        errors.append("get_benchmark() should take no arguments")
-            
-            # Find classes with benchmark_fn method
-            if isinstance(node, ast.ClassDef):
-                has_benchmark_fn = any(
-                    isinstance(item, ast.FunctionDef) and item.name == "benchmark_fn"
-                    for item in node.body
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name != "get_benchmark":
+                continue
+            has_get_benchmark = True
+            if len(node.args.args) > 0 or node.args.vararg is not None or node.args.kwarg is not None:
+                errors.append("get_benchmark() should take no arguments")
+
+        benchmark_class_refs = _candidate_benchmark_class_refs(module_ctx)
+        for class_ref in benchmark_class_refs:
+            class_module_ctx = _load_module_context(str(class_ref.module_path))
+            if class_module_ctx is None:
+                errors.append(
+                    f"Failed to parse file: unable to load benchmark class module for {class_ref.qualified_name}"
                 )
-                if has_benchmark_fn:
-                    benchmark_classes.append(node.name)
-                    # Validate class structure
-                    class_errors, class_warnings = BenchmarkContract.validate_benchmark_class_ast(node)
-                    errors.extend(class_errors)
-                    warnings.extend(class_warnings)
-        
-        if not has_get_benchmark and not benchmark_classes:
+                continue
+            class_node = class_module_ctx.classes.get(class_ref.class_name)
+            if class_node is None:
+                errors.append(f"Failed to parse file: benchmark class not found: {class_ref.qualified_name}")
+                continue
+            class_info = _get_ast_class_info(str(class_ref.module_path), class_ref.class_name)
+            class_errors, class_warnings = BenchmarkContract.validate_benchmark_class_ast(
+                class_node,
+                class_info=class_info,
+            )
+            errors.extend(class_errors)
+            warnings.extend(class_warnings)
+
+        if not has_get_benchmark and not benchmark_class_refs:
             errors.append("No get_benchmark() function or benchmark class found")
-        
-        # Check for docstring (recommended)
-        module_docstring = ast.get_docstring(tree)
-        if not module_docstring:
-            warnings.append("Module should have a docstring")
-        
+
     except SyntaxError as e:
         errors.append(f"Syntax error: {e}")
     except Exception as e:

@@ -91,7 +91,6 @@ class OptimizedPersistentDecodeCUDABenchmark(VerificationPayloadMixin, BaseBench
             self.inputs.out,
             self.blocks,
         )
-        torch.cuda.synchronize(self.device)
         # Capture a representative slice of the output
         self.output = self.inputs.out[:1, : min(8, self.inputs.out.shape[1])].detach().float().clone()
         if self.inputs is None or self.output is None:

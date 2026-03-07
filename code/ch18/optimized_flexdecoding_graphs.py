@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 from typing import Dict, List
 
@@ -72,7 +71,7 @@ class OptimizedFlexDecodingGraphsBenchmark(FlexDecodingHarness):
             self.static_decode_out.copy_(out)
         torch.cuda.synchronize(self.device)
 
-    def benchmark_fn(self) -> Dict[str, List[float]]:
+    def benchmark_fn(self) -> Optional[Dict[str, List[float]]]:
         if (
             self.model is None
             or self.prefill_tokens is None
@@ -84,38 +83,41 @@ class OptimizedFlexDecodingGraphsBenchmark(FlexDecodingHarness):
         ):
             raise RuntimeError("Graph path not initialized")
 
-        prefill_times: List[float] = []
-        decode_times: List[float] = []
-
         self.model.clear_cache(batch=self.prefill_tokens.size(0))
+        if self._prefill_events is None or self._decode_events is None:
+            raise RuntimeError("Timing events not initialized")
+        if len(self._decode_events) != self.decode_tokens:
+            raise RuntimeError("Timing event count mismatch")
 
         with torch.no_grad():
             with self._nvtx_range("flex_prefill"):
-                start = time.perf_counter()
+                prefill_start, prefill_end = self._prefill_events
+                prefill_start.record()
                 _ = self.model.prefill(self.prefill_tokens)
-                torch.cuda.synchronize(self.device)
-                prefill_times.append((time.perf_counter() - start) * 1000.0)
+                prefill_end.record()
 
             with self._nvtx_range("flex_decode_graph"):
                 self.static_decode_in.copy_(self.decode_token)
                 heads = self.model.cfg.heads
                 head_dim = self.model.head_dim
+                default_stream = torch.cuda.current_stream(device=self.device)
                 for pos in range(self.decode_tokens):
-                    start = time.perf_counter()
+                    start_evt, end_evt = self._decode_events[pos]
+                    start_evt.record(default_stream)
                     k = self.model.k_proj(self.decode_token).view(1, 1, heads, head_dim)
                     v = self.model.v_proj(self.decode_token).view(1, 1, heads, head_dim)
                     self.model._update_cache(k, v, self.base_position + pos)
                     self.model._set_offset(self.base_position + pos)
                     with torch.cuda.stream(self.capture_stream):
+                        self.capture_stream.wait_stream(default_stream)
                         self.graph.replay()
-                    torch.cuda.synchronize(self.device)
-                    decode_times.append((time.perf_counter() - start) * 1000.0)
+                        end_evt.record()
+                    default_stream.wait_stream(self.capture_stream)
 
         # Store last output for verification (graph replay writes into static_decode_out)
         self._last_output = self.static_decode_out
-        self._history["prefill_ms"].extend(prefill_times)
-        self._history["decode_ms"].extend(decode_times)
-        return {"prefill_ms": prefill_times, "decode_ms": decode_times}
+        self._pending_iteration_metrics = True
+        return None
 
     def teardown(self) -> None:
         if self.model is not None and torch.cuda.is_available():

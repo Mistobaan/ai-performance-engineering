@@ -174,7 +174,6 @@ class TritonMatmulProtonBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 self._output = self._runner()
                 # Expose output for harness verification (harness looks for self.output)
                 self.output = self._output
-            torch.cuda.synchronize()
         except AttributeError as exc:
             if "SymNodeVariable" in str(exc):
                 raise RuntimeError("SKIPPED: Triton/Proton SymNode inference is incompatible on this build.") from exc

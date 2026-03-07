@@ -49,7 +49,6 @@ class BaselineAutotuningBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 window = self.input[start:end]
                 transformed = self._transform(window)
                 self.output[start:end].copy_(transformed)
-            self._synchronize()
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

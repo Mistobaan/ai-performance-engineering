@@ -52,7 +52,6 @@ class OptimizedWarpSpecializationTrainingBenchmark(BaselineWarpSpecializationTra
                     self.scale2,
                     self.bias2,
                 )
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

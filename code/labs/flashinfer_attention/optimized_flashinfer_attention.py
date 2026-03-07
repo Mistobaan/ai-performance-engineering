@@ -98,7 +98,6 @@ class OptimizedFlashInferAttentionLab(VerificationPayloadMixin, BaseBenchmark):
             attn_out = self.wrapper.run(self.q, self.k, self.v)
             proj_in = attn_out.reshape(self.seq_len, self.hidden_size)
             self.output = self.out_proj(proj_in)
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

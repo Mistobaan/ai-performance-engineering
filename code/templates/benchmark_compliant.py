@@ -4,6 +4,10 @@ Copy this file when adding a new benchmark. It demonstrates:
 - Deterministic seeding (seed=42)
 - VerificationPayloadMixin to surface inputs/output/signature/tolerance
 - Explicit BenchmarkConfig with warmup/iterations
+
+Run standalone checks from the repo root via ``python -m chXX.your_benchmark``
+or ``python -m cli.aisp bench ...``. Do not add local ``sys.path`` surgery to
+benchmark files.
 """
 
 from __future__ import annotations
@@ -35,6 +39,7 @@ class CompliantBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.input = torch.randn(self.batch_size, self.hidden_dim, device=self.device, dtype=torch.float32)
 
     def benchmark_fn(self) -> None:
+        """Benchmark hot path; avoid syncs, host transfers, and input regeneration here."""
         if self.model is None or self.input is None:
             raise RuntimeError("Benchmark not initialized")
         with torch.inference_mode():
@@ -63,6 +68,22 @@ class CompliantBenchmark(VerificationPayloadMixin, BaseBenchmark):
             iterations=10,
             warmup=10,
         )
+
+    def get_input_signature(self):
+        return super().get_input_signature()
+
+    def get_verify_output(self):
+        return super().get_verify_output()
+
+    def get_output_tolerance(self):
+        return super().get_output_tolerance()
+
+    def teardown(self) -> None:
+        self.model = None
+        self.input = None
+        self.output = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 def get_benchmark() -> BaseBenchmark:

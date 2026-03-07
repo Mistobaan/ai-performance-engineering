@@ -17,6 +17,7 @@ Explains how to overlap compute, memory, and communication on Blackwell using CU
 | `baseline_gemm_streams.py`, `optimized_gemm_streams.py`, `baseline_tensor_cores_streams.py`, `optimized_tensor_cores_streams.py` | GEMM pipelines that schedule tensor-core kernels across multiple streams to decouple math vs IO phases. |
 | `baseline_distributed_streams.py`, `optimized_distributed_streams.py`, `baseline_adaptive_streams.py`, `optimized_adaptive_streams.py` | Adaptive streaming controllers that balance NCCL, compute, and IO tasks on large systems. |
 | `baseline_warp_specialization_multistream.*`, `optimized_warp_specialized_multistream.*`, `warp_specialized_cluster_pipeline_multistream.cu` | Warp-specialized multistream kernels demonstrating DSMEM usage and per-stream specialization. |
+| `labs/python_concurrency/` | Practical Python concurrency playbook: bounded `asyncio` workers, timeout/retry patterns, rate limiting, cancellation semantics, idempotency, and hybrid asyncio/process pipelines. |
 | `compare.py`, `Makefile`, `expectations_{hardware_key}.json` | Harness driver plus expectation data for concurrency regressions. |
 
 ## Running the Benchmarks

@@ -12,6 +12,7 @@ from core.harness.hardware_capabilities import (
     detect_capabilities,
     format_capability_report,
 )
+import ctypes
 import glob
 import os
 import site
@@ -51,6 +52,8 @@ ENV_DEFAULTS: Dict[str, str] = {
 
 CUDA_PATH_SUFFIXES: Tuple[str, ...] = ("bin",)
 CUDA_LIBRARY_SUFFIXES: Tuple[str, ...] = ("lib64",)
+CUDA_WHEEL_PRELOAD_LIBS: Tuple[str, ...] = ("libcublasLt.so.12", "libcublas.so.12")
+_PRELOADED_CUDA_WHEEL_LIBS: Set[str] = set()
 
 # Try to find NCCL library for current architecture
 def _find_nccl_library() -> str:
@@ -164,6 +167,66 @@ def _candidate_torch_site_roots() -> Iterable[Path]:
             continue
         seen.add(root)
         yield root
+
+
+def _discover_nvidia_wheel_lib_dirs() -> List[str]:
+    """Discover CUDA/NVIDIA wheel shared-library directories.
+
+    These libraries (for example libcublas.so.12) are required by some Python
+    packages such as transformer_engine when imported transitively via
+    transformers/accelerate.
+    """
+    discovered: List[str] = []
+    seen: Set[str] = set()
+    for root in _candidate_torch_site_roots():
+        nvidia_root = root / "nvidia"
+        if not nvidia_root.is_dir():
+            continue
+        for lib_dir in sorted(nvidia_root.glob("*/lib")):
+            if not lib_dir.is_dir():
+                continue
+            path_str = str(lib_dir)
+            if path_str in seen:
+                continue
+            seen.add(path_str)
+            discovered.append(path_str)
+    return discovered
+
+
+def _ensure_cuda_wheel_runtime_libs() -> None:
+    """Ensure NVIDIA wheel runtime libs are available on LD_LIBRARY_PATH."""
+    lib_dirs = _discover_nvidia_wheel_lib_dirs()
+    # Preserve discovered order when prepending.
+    for lib_dir in reversed(lib_dirs):
+        _prepend_if_missing("LD_LIBRARY_PATH", lib_dir)
+
+
+def _preload_cuda_wheel_runtime_libs() -> None:
+    """Preload critical CUDA wheel libs for in-process extension loading.
+
+    Updating LD_LIBRARY_PATH after process start does not always affect dynamic
+    linker resolution for ctypes/extension modules. Preloading with RTLD_GLOBAL
+    ensures symbols are available for transitive imports (e.g. transformers ->
+    accelerate -> transformer_engine).
+    """
+    search_dirs = _discover_nvidia_wheel_lib_dirs()
+    if not search_dirs:
+        return
+
+    rtld_global = getattr(ctypes, "RTLD_GLOBAL", 0)
+    for lib_name in CUDA_WHEEL_PRELOAD_LIBS:
+        if lib_name in _PRELOADED_CUDA_WHEEL_LIBS:
+            continue
+        for lib_dir in search_dirs:
+            candidate = Path(lib_dir) / lib_name
+            if not candidate.is_file():
+                continue
+            try:
+                ctypes.CDLL(str(candidate), mode=rtld_global)
+                _PRELOADED_CUDA_WHEEL_LIBS.add(lib_name)
+                break
+            except OSError:
+                continue
 
 
 def _discover_torch_lib_dirs() -> List[str]:
@@ -303,6 +366,10 @@ def apply_env_defaults() -> Dict[str, str]:
     else:
         # CUDA_HOME is set by user - only prepend paths if they're missing (don't force our defaults)
         _ensure_cuda_paths(use_existing_cuda_home=True)
+
+    # Ensure CUDA wheel user-mode runtime libs are discoverable (e.g. libcublas.so.12).
+    _ensure_cuda_wheel_runtime_libs()
+    _preload_cuda_wheel_runtime_libs()
 
     # Ensure runtime library precedence is explicit and deterministic.
     _prioritize_runtime_libraries()

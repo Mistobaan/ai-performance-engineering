@@ -230,8 +230,8 @@ if typer:
     # Domain 10: Export - CSV, PDF, HTML reports
     export_app = typer.Typer(help="Export: CSV, PDF, HTML reports")
 
-    # Extra group: Cluster - field report eval suite + validation helpers
-    cluster_app = typer.Typer(help="Cluster: eval suite, field report validation")
+    # Extra group: Cluster - preset evals, raw suite, canonical packaging, and validation helpers
+    cluster_app = typer.Typer(help="Cluster: common eval presets, raw suite, canonical packaging, field report validation")
     
 # =============================================================================
 # Root callback
@@ -1719,6 +1719,46 @@ if typer and cluster_app is not None:
         typer.echo(json.dumps(result, indent=2))
         raise typer.Exit(0)
 
+    @cluster_app.command("common-eval", help="Run a preset system-evaluation bundle for common benchmark questions")
+    def cluster_common_eval_cmd(
+        ctx: typer.Context,
+        preset: str = typer.Option("core-system", "--preset", help="Preset: common-answer-fast, core-system, modern-llm, or multinode-readiness"),
+        run_id: Optional[str] = typer.Option(None, "--run-id", help="RUN_ID prefix (default: YYYY-MM-DD)"),
+        hosts: str = typer.Option(..., "--hosts", help="Comma-separated host list"),
+        labels: Optional[str] = typer.Option(None, "--labels", help="Comma-separated labels (optional; must match hosts count)"),
+        ssh_user: Optional[str] = typer.Option(None, "--ssh-user", help="SSH user"),
+        ssh_key: Optional[Path] = typer.Option(None, "--ssh-key", help="SSH key path"),
+        oob_if: Optional[str] = typer.Option(None, "--oob-if", help="Out-of-band interface (required for multi-node readiness and network-heavy presets)"),
+        socket_ifname: Optional[str] = typer.Option(None, "--socket-ifname", help="NCCL socket interface"),
+        nccl_ib_hca: Optional[str] = typer.Option(None, "--nccl-ib-hca", help="NCCL_IB_HCA allowlist"),
+        primary_label: Optional[str] = typer.Option(None, "--primary-label", help="Label for single-node/local steps"),
+        coverage_baseline_run_id: Optional[str] = typer.Option(None, "--coverage-baseline-run-id", help="Optional baseline run id for coverage delta output"),
+        timeout_seconds: Optional[int] = typer.Option(None, "--timeout", help="Optional timeout in seconds"),
+        extra_arg: List[str] = typer.Option([], "--extra-arg", help="Extra args appended after the preset flags", show_default=False),
+    ) -> None:
+        from core.cluster import run_cluster_common_eval
+
+        host_list = [h.strip() for h in hosts.split(",") if h.strip()]
+        label_list = [l.strip() for l in (labels or "").split(",") if l.strip()] if labels else None
+
+        result = run_cluster_common_eval(
+            preset=preset,
+            run_id=run_id,
+            hosts=host_list,
+            labels=label_list,
+            ssh_user=ssh_user,
+            ssh_key=str(ssh_key) if ssh_key else None,
+            oob_if=oob_if,
+            socket_ifname=socket_ifname,
+            nccl_ib_hca=nccl_ib_hca,
+            primary_label=primary_label,
+            coverage_baseline_run_id=coverage_baseline_run_id,
+            extra_args=extra_arg or None,
+            timeout_seconds=timeout_seconds,
+        )
+        typer.echo(json.dumps(result, indent=2))
+        raise typer.Exit(0)
+
     @cluster_app.command("validate-field-report", help="Validate cluster field report requirements + artifact hygiene")
     def cluster_validate_field_report_cmd(
         ctx: typer.Context,
@@ -1739,6 +1779,56 @@ if typer and cluster_app is not None:
             runbook=str(runbook) if runbook else None,
             canonical_run_id=canonical_run_id,
             allow_run_id=allow_run_id or None,
+            timeout_seconds=timeout_seconds,
+        )
+        typer.echo(json.dumps(result, indent=2))
+        raise typer.Exit(0)
+
+    @cluster_app.command("build-canonical-package", help="Materialize a clean canonical cluster package from selected runs")
+    def cluster_build_canonical_package_cmd(
+        ctx: typer.Context,
+        canonical_run_id: str = typer.Option(..., "--canonical-run-id", help="Primary canonical run id to package"),
+        comparison_run_id: List[str] = typer.Option([], "--comparison-run-id", help="Additional comparison/baseline run ids", show_default=False),
+        historical_run_id: List[str] = typer.Option([], "--historical-run-id", help="Historical run ids to preserve as references or package when present", show_default=False),
+        output_dir: Optional[Path] = typer.Option(None, "--output-dir", help="Package output directory (must not already contain files)"),
+        timeout_seconds: int = typer.Option(300, "--timeout", help="Builder timeout in seconds"),
+    ) -> None:
+        from core.cluster import build_canonical_package
+
+        result = build_canonical_package(
+            canonical_run_id=canonical_run_id,
+            comparison_run_ids=comparison_run_id or None,
+            historical_run_ids=historical_run_id or None,
+            output_dir=str(output_dir) if output_dir else None,
+            timeout_seconds=timeout_seconds,
+        )
+        typer.echo(json.dumps(result, indent=2))
+        raise typer.Exit(0)
+
+    @cluster_app.command("promote-run", help="Promote one run-local cluster result tree into the published cluster package")
+    def cluster_promote_run_cmd(
+        ctx: typer.Context,
+        run_id: str = typer.Option(..., "--run-id", help="Run id under cluster/runs/<run_id>"),
+        label: str = typer.Option("localhost", "--label", help="Host label for localhost report rendering"),
+        allow_run_id: List[str] = typer.Option([], "--allow-run-id", help="Additional run ids to retain during cleanup/validation hygiene checks", show_default=False),
+        publish_report_path: Optional[Path] = typer.Option(None, "--publish-report-path", help="Published localhost report path"),
+        publish_notes_path: Optional[Path] = typer.Option(None, "--publish-notes-path", help="Published localhost notes path"),
+        skip_render_localhost_report: bool = typer.Option(False, "--skip-render-localhost-report", help="Skip rendering run-local + published localhost report markdown"),
+        skip_validate_localhost_report: bool = typer.Option(False, "--skip-validate-localhost-report", help="Skip localhost report validation after promotion"),
+        cleanup: bool = typer.Option(False, "--cleanup", help="Run cleanup_run_artifacts.sh after promotion using this run_id as canonical"),
+        timeout_seconds: int = typer.Option(300, "--timeout", help="Promotion timeout in seconds"),
+    ) -> None:
+        from core.cluster import promote_cluster_run
+
+        result = promote_cluster_run(
+            run_id=run_id,
+            label=label,
+            allow_run_ids=allow_run_id or None,
+            publish_report_path=str(publish_report_path) if publish_report_path else None,
+            publish_notes_path=str(publish_notes_path) if publish_notes_path else None,
+            skip_render_localhost_report=skip_render_localhost_report,
+            skip_validate_localhost_report=skip_validate_localhost_report,
+            cleanup=cleanup,
             timeout_seconds=timeout_seconds,
         )
         typer.echo(json.dumps(result, indent=2))
@@ -1886,7 +1976,7 @@ if typer:
     app.add_typer(benchmark_app, name="benchmark", help="Benchmark: microbench diagnostics, speed tests")
     app.add_typer(ai_app, name="ai", help="AI: ask, explain, suggest")
     app.add_typer(export_app, name="export", help="Export: CSV, PDF, HTML")
-    app.add_typer(cluster_app, name="cluster", help="Cluster: eval suite + field report validation")
+    app.add_typer(cluster_app, name="cluster", help="Cluster: common eval presets + raw suite + canonical packaging + field report validation")
 
 
 # =============================================================================

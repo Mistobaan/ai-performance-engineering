@@ -33,6 +33,8 @@ if [[ ! -f "${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh" ]]; then
   echo "ERROR: missing stack profile helper: ${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh" >&2
   exit 1
 fi
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 # shellcheck source=scripts/cluster_perf_stack_profiles.sh
 source "${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh"
 
@@ -87,14 +89,17 @@ if [[ "$RUNTIME" == "container" && -z "$IMAGE" ]]; then
   exit 2
 fi
 
-mkdir -p "${ROOT_DIR}/results/raw" "${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+mkdir -p "${OUT_RAW_DIR}" "${OUT_STRUCT_DIR}"
 
-OUT_LOG="${ROOT_DIR}/results/raw/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke.log"
-OUT_JSON="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke.json"
-LOCK_META="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke_clock_lock.json"
-PREFLIGHT_STACK_META="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke_preflight_stack.json"
-PREFLIGHT_CLOCK_META="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke_preflight_clock_lock.json"
-OUT_JSON_IN_CONTAINER="/workspace/results/structured/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke.json"
+OUT_LOG="${OUT_RAW_DIR}/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke.log"
+OUT_JSON="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke.json"
+LOCK_META="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke_clock_lock.json"
+PREFLIGHT_STACK_META="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke_preflight_stack.json"
+PREFLIGHT_CLOCK_META="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_perf_fp4_smoke_preflight_clock_lock.json"
+OUT_JSON_IN_CONTAINER="/workspace/${OUT_JSON#${ROOT_DIR}/}"
 MATH_ALLOW_TF32="$(cluster_perf_profile_math_allow_tf32 "$ROOT_DIR" "$STACK_PROFILE")"
 MATH_FP32_MATMUL_PRECISION="$(cluster_perf_profile_math_precision "$ROOT_DIR" "$STACK_PROFILE")"
 HOST_CUDA_HOME=""

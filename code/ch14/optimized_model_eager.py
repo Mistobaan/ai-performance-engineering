@@ -154,7 +154,6 @@ class OptimizedModelCompiledBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with nvtx_range("model_eager", enable=enable_nvtx):
             with torch.no_grad():
                 self.output = self.compiled_model(self.input_ids)
-        self._synchronize()
         if self.output is None or self.input_ids is None:
             raise RuntimeError("benchmark_fn() must produce output")
         dtype = self.output.dtype

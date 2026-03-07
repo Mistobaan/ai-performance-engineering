@@ -189,7 +189,6 @@ class BaselineKVCacheNaiveBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.output = token.detach().clone()
         if self._verify_input is None:
             raise RuntimeError("Verification input not initialized")
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

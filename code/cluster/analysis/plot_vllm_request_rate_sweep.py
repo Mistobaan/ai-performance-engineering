@@ -29,9 +29,24 @@ def _load_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
+def _row_is_valid(row: dict[str, str]) -> bool:
+    completed = _as_float(row.get("completed"))
+    failed = _as_float(row.get("failed"))
+    total_tok = _as_float(row.get("total_token_throughput"))
+    if completed is None or completed <= 0:
+        return False
+    if failed is None or failed > 0:
+        return False
+    if total_tok is None or total_tok <= 0:
+        return False
+    return True
+
+
 def _group_mean(rows: list[dict[str, str]], x_key: str, y_key: str) -> tuple[list[float], list[float]]:
     groups: dict[float, list[float]] = {}
     for row in rows:
+        if not _row_is_valid(row):
+            continue
         x = _as_float(row.get(x_key))
         y = _as_float(row.get(y_key))
         if x is None or y is None:

@@ -196,7 +196,6 @@ class VectorizedRouterBenchmark(VerificationPayloadMixin, BaseBenchmark):
             else:
                 with torch.inference_mode():
                     self.output = self.model(self.inputs)
-        torch.cuda.synchronize(self.device)
         if self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")
 

@@ -1,6 +1,6 @@
 # Cluster Perf Field Report (Localhost, 1 Node)
 
-Last updated: 2026-02-24. Canonical run: `2026-02-24_localhost_fullsuite_r8`.
+Last updated: 2026-03-06. Canonical run: `2026-03-05_localhost_modern_profile_r24_full20b`.
 
 ## Table of Contents
 1. [TL;DR](#tldr)
@@ -26,11 +26,11 @@ Last updated: 2026-02-24. Canonical run: `2026-02-24_localhost_fullsuite_r8`.
 | Topic | Summary |
 | --- | --- |
 | Scope | `localhost` only, 1 GPU(s) |
-| Canonical run | `2026-02-24_localhost_fullsuite_r8` |
-| Suite status | `21/21` steps green; `validate_required_artifacts=0` |
-| Networking headline | NCCL single-node peak algbw `1401.1 GB/s` (16777216 bytes); connectivity probe `68.407 GB/s` payload algbw |
-| Inference headline | vLLM total throughput `317.354 tok/s` (c=1) -> `799.393 tok/s` (c=2); p99 TTFT `123.940 ms` -> `49.053 ms` |
-| Operator checks | quick_friction `ok` (pass=4, failed=3, expected=3, unexpected=0), monitoring_expectations `ok` |
+| Canonical run | `2026-03-05_localhost_modern_profile_r24_full20b` |
+| Suite status | `48/71` steps green; `validate_required_artifacts=1` |
+| Networking headline | NCCL single-node peak algbw `2255.5 GB/s` (67108864 bytes); connectivity probe `131.514 GB/s` payload algbw |
+| Inference headline | vLLM total throughput `1572.544 tok/s` (c=32) -> `21456.795 tok/s` (c=512); p99 TTFT `460.532 ms` -> `4453.392 ms` |
+| Operator checks | quick_friction `ok` (pass=6, failed=1, expected=1, unexpected=0), monitoring_expectations `ok` |
 | Key weird/new | Single-node NCCL env sweep can show `busbw=0.0` by definition (rank=1), while algbw is still strong. |
 
 ## Scope + Canonical Artifacts
@@ -39,117 +39,121 @@ Last updated: 2026-02-24. Canonical run: `2026-02-24_localhost_fullsuite_r8`.
 | Hosts in-scope | `localhost` |
 | Excluded hosts | none |
 | GPUs per host | `1` |
-| Canonical manifest | [results/structured/2026-02-24_localhost_fullsuite_r8_manifest.json](results/structured/2026-02-24_localhost_fullsuite_r8_manifest.json) |
-| Canonical suite steps | [results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json](results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json) |
-| Meta snapshot | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta.json) |
-| Node parity summary | [results/structured/2026-02-24_localhost_fullsuite_r8_node_parity_summary.json](results/structured/2026-02-24_localhost_fullsuite_r8_node_parity_summary.json) |
-| Operator checks dashboard | [results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json](results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json) |
+| Canonical manifest | [published/current/manifest.json](published/current/manifest.json) |
+| Canonical suite steps | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json) |
+| Meta snapshot | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta.json) |
+| Node parity summary | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_node_parity_summary.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_node_parity_summary.json) |
+| Operator checks dashboard | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json) |
 
 ## Required Reliability Gates (Canonical Run)
 | Gate | Status | Key result | Structured artifact |
 | --- | --- | --- | --- |
-| Hang-triage readiness (`py-spy` + `strace`) | `ok` | semantic status `ok` for localhost | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_hang_triage_readiness.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_hang_triage_readiness.json) |
-| Torchrun connectivity probe | `ok` | `world_size=1`, barrier mean `0.0920 ms`, payload algbw `68.407 GB/s` | [results/structured/2026-02-24_localhost_fullsuite_r8_torchrun_connectivity_probe.json](results/structured/2026-02-24_localhost_fullsuite_r8_torchrun_connectivity_probe.json) |
-| NCCL env sensitivity sweep | `ok` (`failure_count=0`) | baseline peak busbw `0.000` (rank-1 expected), no failed profiles | [results/structured/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.json](results/structured/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.json) |
+| Hang-triage readiness (`py-spy` + `strace`) | `ok` | semantic status `ok` for localhost | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_hang_triage_readiness.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_hang_triage_readiness.json) |
+| Torchrun connectivity probe | `ok` | `world_size=1`, barrier mean `0.0696 ms`, payload algbw `131.514 GB/s` | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_torchrun_connectivity_probe.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_torchrun_connectivity_probe.json) |
+| NCCL env sensitivity sweep | `ok` (`failure_count=0`) | baseline peak busbw `0.000` (rank-1 expected), no failed profiles | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json) |
 
-<p><a href="docs/figures/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.png"><img src="docs/figures/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.png" alt="NCCL env sensitivity localhost" width="920"/></a></p>
+<p><a href="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.png"><img src="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.png" alt="NCCL env sensitivity localhost" width="920"/></a></p>
 
-Data: [results/structured/2026-02-24_localhost_fullsuite_r8_manifest.json](results/structured/2026-02-24_localhost_fullsuite_r8_manifest.json), [results/structured/2026-02-24_localhost_fullsuite_r8_torchrun_connectivity_probe.json](results/structured/2026-02-24_localhost_fullsuite_r8_torchrun_connectivity_probe.json), [results/structured/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.json](results/structured/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.json), [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_hang_triage_readiness.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_hang_triage_readiness.json)
+Data: [published/current/manifest.json](published/current/manifest.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_torchrun_connectivity_probe.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_torchrun_connectivity_probe.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_hang_triage_readiness.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_hang_triage_readiness.json)
 
 ## Operator Friction + Monitoring Expectations (New Checks)
 | Check | Status | Key diagnostics | Structured artifacts |
 | --- | --- | --- | --- |
-| quick_friction | `ok` | pass=4, failed=3, expected_failed=uv_torch_install,ip_owner,speedtest, unexpected_failed=none | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json) |
-| monitoring_expectations | `ok` | control_plane=not_applicable, gpu_telemetry=ok, system_signals=ok | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_monitoring_expectations.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_monitoring_expectations.json) |
-| operator dashboard | generated | consolidated status for quick-friction + monitoring expectations | [results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json](results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json) |
+| quick_friction | `ok` | pass=6, failed=1, expected_failed=uv_torch_install, unexpected_failed=none | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json) |
+| monitoring_expectations | `ok` | control_plane=not_applicable, gpu_telemetry=ok, system_signals=ok | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json) |
+| operator dashboard | generated | consolidated status for quick-friction + monitoring expectations | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json) |
 
-<p><a href="docs/figures/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.png"><img src="docs/figures/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.png" alt="Operator checks dashboard localhost" width="920"/></a></p>
+<p><a href="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.png"><img src="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.png" alt="Operator checks dashboard localhost" width="920"/></a></p>
 
-Data: [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json), [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_monitoring_expectations.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_monitoring_expectations.json), [results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json](results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json)
+Data: [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json)
 
 ## Cluster Story (First Contact)
 | UTC time | Milestone | Status |
 | --- | --- | --- |
-| `15:40:18` | preflight started | ok |
-| `15:40:18` | discovery started | ok |
-| `15:40:21` | quick friction completed | ok |
-| `15:41:38` | monitoring expectations completed | ok |
-| `15:41:58` | hang triage completed | ok |
-| `15:41:58` | connectivity probe completed | ok |
-| `15:42:13` | NCCL env sweep completed | ok |
-| `15:42:57` | vLLM serve sweep completed | ok |
-| `15:46:53` | operator dashboard generated | ok |
-| `15:46:54` | required artifact validation completed | ok |
-| `15:46:54` | manifest refreshed | ok |
+| `01:28:22` | preflight started | ok |
+| `01:28:22` | discovery started | ok |
+| `01:28:25` | quick friction completed | ok |
+| `01:29:48` | monitoring expectations completed | ok |
+| `01:30:08` | hang triage completed | ok |
+| `01:30:08` | connectivity probe completed | ok |
+| `01:30:23` | NCCL env sweep completed | ok |
+| `03:35:42` | vLLM serve sweep completed | ok |
+| `04:39:16` | operator dashboard generated | ok |
+| `15:35:24` | required artifact validation completed | ok |
+| `04:39:17` | manifest refreshed | ok |
+| `04:39:18` | localhost report package rendered | ok |
 
-<p><a href="docs/figures/2026-02-24_localhost_fullsuite_r8_cluster_story_dashboard.png"><img src="docs/figures/2026-02-24_localhost_fullsuite_r8_cluster_story_dashboard.png" alt="Cluster story dashboard localhost" width="920"/></a></p>
+<p><a href="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_cluster_story_dashboard.png"><img src="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_cluster_story_dashboard.png" alt="Cluster story dashboard localhost" width="920"/></a></p>
 
-Data: [results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json](results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json)
+Data: [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json)
 
 ## Weird / New / Interesting (with Normal Baseline)
 ### Baseline vs Weird Log
 | Area | Normal (canonical localhost) | Weird / notable | Why it matters | Evidence |
 | --- | --- | --- | --- | --- |
-| Preflight services | strict service checks pass | prior flake path removed (`systemctl show`-based unit check) | avoids false-negative invalidations | [results/structured/2026-02-24_localhost_fullsuite_r8_preflight_services.json](results/structured/2026-02-24_localhost_fullsuite_r8_preflight_services.json) |
-| NVLink topology parsing | topology summary generated | parser now handles single-GPU header formats robustly | keeps topology evidence reproducible on localhost | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.json) |
-| NCCL env sweep | all profiles `ok` | `busbw=0.0` in rank-1 mode looks odd but is expected | prevents false network conclusions on 1-GPU runs | [results/structured/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.json](results/structured/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.json) |
-| Operator friction | full quick-friction battery executed | expected failures captured explicitly (`uv_torch_install,ip_owner,speedtest`) | preserves operator visibility without false-red localhost status | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json) |
-| Monitoring mode | gpu/system checks run | control-plane checks can be `not_applicable` without kubeconfig | clarifies expected non-K8s behavior | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_monitoring_expectations.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_monitoring_expectations.json) |
+| Preflight services | strict service checks pass | prior flake path removed (`systemctl show`-based unit check) | avoids false-negative invalidations | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_preflight_services.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_preflight_services.json) |
+| NVLink topology parsing | topology summary generated | parser now handles single-GPU header formats robustly | keeps topology evidence reproducible on localhost | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.json) |
+| NCCL env sweep | all profiles `ok` | `busbw=0.0` in rank-1 mode looks odd but is expected | prevents false network conclusions on 1-GPU runs | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json) |
+| Operator friction | full quick-friction battery executed | expected failures captured explicitly (`uv_torch_install` if present) | preserves operator visibility without false-red localhost status | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json) |
+| Monitoring mode | gpu/system checks run | control-plane checks can be `not_applicable` without kubeconfig | clarifies expected non-K8s behavior | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json) |
 
 ### Deep-Dive Findings
 | Finding | Baseline anchor | Reinforcement insight | Evidence |
 | --- | --- | --- | --- |
-| 1 | Preflight services | service gate remains strict while eliminating pipeline flake behavior | [results/structured/2026-02-24_localhost_fullsuite_r8_preflight_services.json](results/structured/2026-02-24_localhost_fullsuite_r8_preflight_services.json) |
-| 2 | NVLink topology parsing | single-node topology visual now lands in canonical package consistently | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.json) |
-| 3 | Operator friction classification | expected misses are tracked separately from unexpected failures | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json) |
+| 1 | Preflight services | service gate remains strict while eliminating pipeline flake behavior | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_preflight_services.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_preflight_services.json) |
+| 2 | NVLink topology parsing | single-node topology visual now lands in canonical package consistently | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.json) |
+| 3 | Operator friction classification | expected misses are tracked separately from unexpected failures when operator checks are enabled | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json) |
 
-<p><a href="docs/figures/2026-02-24_localhost_fullsuite_r8_cluster_story_dashboard.png"><img src="docs/figures/2026-02-24_localhost_fullsuite_r8_cluster_story_dashboard.png" alt="Weird and normal baseline dashboard localhost" width="920"/></a></p>
+<p><a href="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_cluster_story_dashboard.png"><img src="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_cluster_story_dashboard.png" alt="Weird and normal baseline dashboard localhost" width="920"/></a></p>
 
-Data: [results/structured/2026-02-24_localhost_fullsuite_r8_preflight_services.json](results/structured/2026-02-24_localhost_fullsuite_r8_preflight_services.json), [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.json), [results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json](results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json)
+Data: [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_preflight_services.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_preflight_services.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json)
 
 ## Benchmark A (Networking Story)
 | Metric | Value |
 | --- | ---: |
-| NCCL single-node peak algbw | `1401.1 GB/s` |
-| Peak message size | `16777216` bytes |
-| Connectivity probe payload algbw | `68.407 GB/s` |
-| Connectivity barrier mean | `0.0920 ms` |
+| NCCL single-node peak algbw | `2255.5 GB/s` |
+| Peak message size | `67108864` bytes |
+| Connectivity probe payload algbw | `131.514 GB/s` |
+| Connectivity barrier mean | `0.0696 ms` |
 
 Interpretation: single-node communication path is healthy; rank-1 `busbw` should not be interpreted as fabric bottleneck evidence.
 
-<p><a href="docs/figures/2026-02-24_localhost_fullsuite_r8_node1_nccl_bw_vs_msg.png"><img src="docs/figures/2026-02-24_localhost_fullsuite_r8_node1_nccl_bw_vs_msg.png" alt="NCCL bandwidth localhost" width="920"/></a></p>
-<p><a href="docs/figures/2026-02-24_localhost_fullsuite_r8_node1_nccl_scaling_efficiency.png"><img src="docs/figures/2026-02-24_localhost_fullsuite_r8_node1_nccl_scaling_efficiency.png" alt="NCCL scaling localhost" width="920"/></a></p>
+<p><a href="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl_bw_vs_msg.png"><img src="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl_bw_vs_msg.png" alt="NCCL bandwidth localhost" width="920"/></a></p>
+<p><a href="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl_scaling_efficiency.png"><img src="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl_scaling_efficiency.png" alt="NCCL scaling localhost" width="920"/></a></p>
 
-Data: [results/structured/2026-02-24_localhost_fullsuite_r8_node1_nccl.json](results/structured/2026-02-24_localhost_fullsuite_r8_node1_nccl.json), [results/structured/2026-02-24_localhost_fullsuite_r8_torchrun_connectivity_probe.json](results/structured/2026-02-24_localhost_fullsuite_r8_torchrun_connectivity_probe.json)
+Data: [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_torchrun_connectivity_probe.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_torchrun_connectivity_probe.json)
 
 ## Benchmark B (Inference Story)
 | Concurrency | Total tok/s | Mean TTFT (ms) | p99 TTFT (ms) | p99 TPOT (ms) |
 | ---: | ---: | ---: | ---: | ---: |
-| `1` | `317.354` | `42.973` | `123.940` | `14.726` |
-| `2` | `799.393` | `30.198` | `49.053` | `8.191` |
+| `32` | `1572.544` | `181.753` | `460.532` | `41.494` |
+| `64` | `3065.010` | `224.361` | `722.190` | `42.715` |
+| `128` | `5840.971` | `280.415` | `1202.268` | `44.318` |
+| `256` | `12223.246` | `374.170` | `2196.305` | `43.529` |
+| `512` | `21456.795` | `603.621` | `4453.392` | `50.598` |
 
-Interpretation: this is a canary/sparse sweep (<3 concurrency points); use for smoke directionality, not full knee modeling.
+Interpretation: throughput/latency curve is dense enough to discuss knees directly from this run.
 
-<p><a href="docs/figures/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_total_tok_s_vs_concurrency.png"><img src="docs/figures/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_total_tok_s_vs_concurrency.png" alt="vLLM throughput localhost" width="920"/></a></p>
-<p><a href="docs/figures/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_ttft_vs_concurrency.png"><img src="docs/figures/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_ttft_vs_concurrency.png" alt="vLLM TTFT localhost" width="920"/></a></p>
+<p><a href="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_total_tok_s_vs_concurrency.png"><img src="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_total_tok_s_vs_concurrency.png" alt="vLLM throughput localhost" width="920"/></a></p>
+<p><a href="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_ttft_vs_concurrency.png"><img src="published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_ttft_vs_concurrency.png" alt="vLLM TTFT localhost" width="920"/></a></p>
 
-Data: [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.csv](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.csv), [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.jsonl](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.jsonl)
+Data: [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.jsonl](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.jsonl)
 
 ## Required Issues (Explicit)
 | Required issue (verbatim) | Status now | Evidence |
 | --- | --- | --- |
-| Missing node2 fio artifact in canonical package (node2_fio.json absent). | Not applicable (single-node localhost scope) | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_fio.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_fio.json) |
-| No multinode vLLM artifact in canonical package. | Not applicable (single-node localhost scope) | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.csv](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.csv) |
-| No nvbandwidth bundle in canonical package. | Not applicable for this localhost package unless explicitly enabled | [results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json](results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json) |
-| Health suite had GDR requested, but effective GDR was false due non-CUDA IB local checks. | Not applicable when `--health-suite off` for localhost package | [results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json](results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json) |
-| Tail latency knee is severe at high concurrency (throughput up, TTFT/p99 TTFT much worse). | Observed (severe latency knee present in this sweep) | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.csv](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.csv) |
+| Missing node2 fio artifact in canonical package (node2_fio.json absent). | Not applicable (single-node localhost scope) | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_fio.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_fio.json) |
+| No multinode vLLM artifact in canonical package. | Not applicable (single-node localhost scope) | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv) |
+| No nvbandwidth bundle in canonical package. | Not applicable for this localhost package unless explicitly enabled | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json) |
+| Health suite had GDR requested, but effective GDR was false due non-CUDA IB local checks. | Not applicable when `--health-suite off` for localhost package | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json) |
+| Tail latency knee is severe at high concurrency (throughput up, TTFT/p99 TTFT much worse). | Observed (severe latency knee present in this sweep) | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv) |
 
 ## Root Cause + Fix Mapping
 | Issue | Root cause | Fix | Verification |
 | --- | --- | --- | --- |
-| `preflight_services` false negatives | pipeline-based unit detection could produce flaky non-zero under strict shell options | use `systemctl show -p LoadState` for deterministic service presence checks | clean preflight status in [results/structured/2026-02-24_localhost_fullsuite_r8_preflight_services.json](results/structured/2026-02-24_localhost_fullsuite_r8_preflight_services.json) and step rc=0 in [results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json](results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json) |
-| NVLink parser robustness | topology parser assumptions missed some single-GPU header patterns | robust tokenization and header parsing | topology summary/figure generated: [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.json) and [docs/figures/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.png](docs/figures/2026-02-24_localhost_fullsuite_r8_localhost_meta_nvlink_topology.png) |
-| Quick-friction false-red localhost | missing optional internet/operator tools should be visible but classifiable | added expected-failure classification (`expected_failed_checks`) and auto localhost allowlist | quick-friction artifact shows expected vs unexpected failures: [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json) |
+| `preflight_services` false negatives | pipeline-based unit detection could produce flaky non-zero under strict shell options | use `systemctl show -p LoadState` for deterministic service presence checks | clean preflight status in [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_preflight_services.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_preflight_services.json) and step rc=0 in [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json) |
+| NVLink parser robustness | topology parser assumptions missed some single-GPU header patterns | robust tokenization and header parsing | topology summary/figure generated: [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.json) and [published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.png](published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.png) |
+| Quick-friction false-red localhost | missing optional internet/operator tools should be visible but classifiable | added expected-failure classification (`expected_failed_checks`) and auto localhost allowlist | quick-friction artifact shows expected vs unexpected failures: [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json) |
 
 ## Report Completeness Delta (vs prior condensed revision)
 | Area | Prior state | Current state |
@@ -162,7 +166,7 @@ Data: [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve
 ## Gaps, Risks, and Smell Checks
 | Severity | Check | Outcome |
 | --- | --- | --- |
-| Medium | quick friction optional tooling | status `ok` with expected failures `uv_torch_install,ip_owner,speedtest` and unexpected failures `none` |
+| Medium | quick friction optional tooling | status `ok` with expected failures `uv_torch_install` and unexpected failures `none` |
 | Medium | control-plane observability on non-K8s localhost | monitoring control_plane status `not_applicable` |
 | Medium | single-node-only networking conclusions | scope constrained; no multi-node claims in this package |
 | Low | report/template synchronization drift | mitigated via generated localhost report package and validator gate |
@@ -185,17 +189,17 @@ Data: [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve
 ## Repro Steps
 | Step | Command |
 | --- | --- |
-| Run localhost canonical full package | `sg docker -c "cluster/scripts/run_cluster_eval_suite.sh --run-id 2026-02-24_localhost_fullsuite_r8 --hosts localhost --labels localhost --ssh-user $(id -un) --primary-label localhost --skip-bootstrap-nodes --disable-fp4 --health-suite off --skip-vllm-multinode --model openai-community/gpt2 --tp 1 --isl 128 --osl 64 --concurrency-range '1 2' --fio-runtime 15 --skip-nvbandwidth"` |
-| Validate localhost report package | `cluster/scripts/validate_field_report_requirements.sh --report cluster/field-report-localhost.md --notes cluster/field-report-localhost-notes.md --canonical-run-id 2026-02-24_localhost_fullsuite_r8` |
+| Run localhost common system eval | `python -m cli.aisp cluster common-eval --preset core-system --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --labels localhost --ssh-user $(id -un) --primary-label localhost --timeout 7200 --extra-arg --skip-bootstrap-nodes --extra-arg --disable-fp4 --extra-arg --health-suite --extra-arg off --extra-arg --skip-vllm-multinode --extra-arg --model --extra-arg openai-community/gpt2 --extra-arg --tp --extra-arg 1 --extra-arg --isl --extra-arg 128 --extra-arg --osl --extra-arg 64 --extra-arg --concurrency-range --extra-arg '1 2' --extra-arg --vllm-request-rate-range --extra-arg '1 2' --extra-arg --vllm-request-rate-max-concurrency --extra-arg 4 --extra-arg --vllm-request-rate-num-prompts --extra-arg 80 --extra-arg --fio-runtime --extra-arg 15 --extra-arg --nvbandwidth-quick` |
+| Validate localhost report package | `cluster/scripts/validate_field_report_requirements.sh --report cluster/field-report-localhost.md --notes cluster/field-report-localhost-notes.md --canonical-run-id 2026-03-05_localhost_modern_profile_r24_full20b` |
 
 ## Reproducibility Package
 | Artifact class | Links |
 | --- | --- |
-| Manifest + suite | [results/structured/2026-02-24_localhost_fullsuite_r8_manifest.json](results/structured/2026-02-24_localhost_fullsuite_r8_manifest.json), [results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json](results/structured/2026-02-24_localhost_fullsuite_r8_suite_steps.json) |
-| Reliability gates | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_hang_triage_readiness.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_hang_triage_readiness.json), [results/structured/2026-02-24_localhost_fullsuite_r8_torchrun_connectivity_probe.json](results/structured/2026-02-24_localhost_fullsuite_r8_torchrun_connectivity_probe.json), [results/structured/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.json](results/structured/2026-02-24_localhost_fullsuite_r8_nccl_env_sensitivity.json) |
-| Operator checks | [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_quick_friction.json), [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_monitoring_expectations.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_monitoring_expectations.json), [results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json](results/structured/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.json) |
-| Core benchmarks | [results/structured/2026-02-24_localhost_fullsuite_r8_node1_nccl.json](results/structured/2026-02-24_localhost_fullsuite_r8_node1_nccl.json), [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.csv](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_sweep.csv), [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_gemm_gpu_sanity.csv](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_gemm_gpu_sanity.csv), [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_fio.json](results/structured/2026-02-24_localhost_fullsuite_r8_localhost_fio.json) |
-| Figures | [docs/figures/2026-02-24_localhost_fullsuite_r8_cluster_story_dashboard.png](docs/figures/2026-02-24_localhost_fullsuite_r8_cluster_story_dashboard.png), [docs/figures/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.png](docs/figures/2026-02-24_localhost_fullsuite_r8_operator_checks_dashboard.png), [docs/figures/2026-02-24_localhost_fullsuite_r8_node1_nccl_bw_vs_msg.png](docs/figures/2026-02-24_localhost_fullsuite_r8_node1_nccl_bw_vs_msg.png), [docs/figures/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_total_tok_s_vs_concurrency.png](docs/figures/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve_total_tok_s_vs_concurrency.png) |
+| Manifest + suite | [published/current/manifest.json](published/current/manifest.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json) |
+| Reliability gates | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_hang_triage_readiness.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_hang_triage_readiness.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_torchrun_connectivity_probe.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_torchrun_connectivity_probe.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json) |
+| Operator checks | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json) |
+| Core benchmarks | [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl.json), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_gemm_gpu_sanity.csv](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_gemm_gpu_sanity.csv), [published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_fio.json](published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_fio.json) |
+| Figures | [published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_cluster_story_dashboard.png](published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_cluster_story_dashboard.png), [published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.png](published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.png), [published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl_bw_vs_msg.png](published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl_bw_vs_msg.png), [published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_total_tok_s_vs_concurrency.png](published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_total_tok_s_vs_concurrency.png) |
 
 ## Appendix (Coverage vs Case-Study Goals)
 | Case-study goal | Coverage |
@@ -209,14 +213,15 @@ Data: [results/structured/2026-02-24_localhost_fullsuite_r8_localhost_vllm_serve
 ## Activity Log
 | UTC | Action | Result |
 | --- | --- | --- |
-| `15:40:18` | preflight started | ok |
-| `15:40:18` | discovery started | ok |
-| `15:40:21` | quick friction completed | ok |
-| `15:41:38` | monitoring expectations completed | ok |
-| `15:41:58` | hang triage completed | ok |
-| `15:41:58` | connectivity probe completed | ok |
-| `15:42:13` | NCCL env sweep completed | ok |
-| `15:42:57` | vLLM serve sweep completed | ok |
-| `15:46:53` | operator dashboard generated | ok |
-| `15:46:54` | required artifact validation completed | ok |
-| `15:46:54` | manifest refreshed | ok |
+| `01:28:22` | preflight started | ok |
+| `01:28:22` | discovery started | ok |
+| `01:28:25` | quick friction completed | ok |
+| `01:29:48` | monitoring expectations completed | ok |
+| `01:30:08` | hang triage completed | ok |
+| `01:30:08` | connectivity probe completed | ok |
+| `01:30:23` | NCCL env sweep completed | ok |
+| `03:35:42` | vLLM serve sweep completed | ok |
+| `04:39:16` | operator dashboard generated | ok |
+| `15:35:24` | required artifact validation completed | ok |
+| `04:39:17` | manifest refreshed | ok |
+| `04:39:18` | localhost report package rendered | ok |

@@ -10,11 +10,11 @@ Runs a single-GPU Torch GEMM microbench under strict GPU clock lock and records
 1 Hz telemetry via nvidia-smi while the benchmark is running.
 
 Outputs:
-  results/structured/<run_id>_<label>_gpu<idx>_gemm.csv
-  results/structured/<run_id>_<label>_gpu<idx>_gemm_clock_lock.json
-  results/raw/<run_id>_<label>_gpu<idx>_gemm.log
-  results/raw/<run_id>_<label>_gpu<idx>_gemm_telemetry_query.csv
-  results/raw/<run_id>_<label>_gpu<idx>_gemm_telemetry_pmon.log
+  runs/<run_id>/structured/<run_id>_<label>_gpu<idx>_gemm.csv
+  runs/<run_id>/structured/<run_id>_<label>_gpu<idx>_gemm_clock_lock.json
+  runs/<run_id>/raw/<run_id>_<label>_gpu<idx>_gemm.log
+  runs/<run_id>/raw/<run_id>_<label>_gpu<idx>_gemm_telemetry_query.csv
+  runs/<run_id>/raw/<run_id>_<label>_gpu<idx>_gemm_telemetry_pmon.log
 
 Options:
   --run-id <id>          RUN_ID prefix (default: YYYY-MM-DD_HHMMSS_gemm_telemetry)
@@ -30,9 +30,11 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_RAW="${ROOT_DIR}/results/raw"
-OUT_STRUCT="${ROOT_DIR}/results/structured"
-mkdir -p "$OUT_RAW" "$OUT_STRUCT"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
 
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d_%H%M%S)_gemm_telemetry}"
 LABEL="${LABEL:-$(hostname)}"
@@ -70,6 +72,11 @@ case "$DTYPE" in
   bf16|fp16) ;;
   *) echo "ERROR: --dtype must be bf16 or fp16" >&2; exit 2 ;;
 esac
+
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+mkdir -p "$OUT_RAW" "$OUT_STRUCT"
 
 # Deterministic output names (fail fast on collision to avoid mixing schemas/runs).
 GEMM_CSV="${OUT_STRUCT}/${RUN_ID}_${LABEL}_gpu${GPU}_gemm.csv"
@@ -144,4 +151,3 @@ set -e
 
 echo "bench_rc=${BENCH_RC}"
 exit "$BENCH_RC"
-

@@ -92,7 +92,6 @@ class BaselineFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.output = stacked.permute(1, 0, 2).reshape(
                 1, self.seq_len, self.embed_dim * self.repeat_passes
             ).contiguous()
-            self._synchronize()
         if self.output is None or self.q is None or self.k is None or self.v is None:
             raise RuntimeError("Verification input/output not initialized")
 

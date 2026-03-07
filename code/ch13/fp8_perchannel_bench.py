@@ -161,7 +161,6 @@ class OptimizedFP8PerChannelBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self._error_sum = error.item()
             self._last = float(output.sum())
             self.output = output.detach().clone()
-            self._synchronize()
         if self._verify_input is None:
             raise RuntimeError("Verification input not initialized")
         dtype = self._verify_input.dtype

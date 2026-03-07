@@ -1,0 +1,22 @@
+Lowering --gpu-memory-utilization from 0.8 to 0.8000 based on free VRAM (182514 MiB / 183359 MiB).
+Skipping completed concurrency point 32 (resume).
+Skipping completed concurrency point 64 (resume).
+Skipping completed concurrency point 128 (resume).
+Skipping completed concurrency point 256 (resume).
+Skipping completed concurrency point 512 (resume).
+All concurrency points already completed; nothing to run.
+
+========================================
+vLLM Concurrency Sweep Results
+========================================
+Model: openai/gpt-oss-20b
+TP: 1
+ISL: 1024, OSL: 1024
+
+Concurrency | Output tok/s | Total tok/s | Mean TTFT | Mean TPOT | P99 TPOT
+------------|--------------|-------------|-----------|-----------|----------
+32          | 786.49       | 1572.99     | 186.96    | 40.531    | 41.360   
+64          | 1532.51      | 3065.01     | 227.48    | 41.560    | 42.715   
+128         | 2893.40      | 5786.80     | 280.33    | 43.971    | 45.421   
+256         | 5811.89      | 11623.78    | 377.00    | 43.644    | 50.829   
+512         | 10966.75     | 21933.50    | 593.77    | 45.992    | 49.592   

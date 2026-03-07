@@ -63,8 +63,7 @@ class NVLSCollectivesBenchmark(VerificationPayloadMixin, BaseBenchmark):
         enable_nvtx = get_nvtx_enabled(self.get_config())
         with nvtx_range("nvls_allreduce", enable=enable_nvtx):
             dist.all_reduce(self.tensor)
-        torch.cuda.synchronize(self.device)
-        return {"sum": float(self.tensor[0].item())}
+        return {}
 
     def capture_verification_payload(self) -> None:
         if not self._initialized or self.tensor is None:

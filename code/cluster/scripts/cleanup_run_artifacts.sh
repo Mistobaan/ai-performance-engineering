@@ -7,11 +7,13 @@ Usage:
   cluster/scripts/cleanup_run_artifacts.sh --canonical-run-id <id> [options]
 
 Removes superseded run artifacts from:
+  cluster/runs/
   cluster/results/structured/
   cluster/results/raw/
   cluster/docs/figures/
 
 Options:
+  --repo-root <path>         Override repo root (default: auto-detect from script path)
   --canonical-run-id <id>   Canonical run id to retain (required)
   --allow-run-id <id>       Additional run id to retain (repeatable)
   --apply                   Execute deletions (default: dry-run)
@@ -28,6 +30,10 @@ VERBOSE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --repo-root)
+      ROOT_DIR="$2"
+      shift 2
+      ;;
     --canonical-run-id)
       CANONICAL_RUN_ID="$2"
       shift 2
@@ -77,11 +83,12 @@ allow = set(sys.argv[5:])
 structured = root / "cluster" / "results" / "structured"
 raw = root / "cluster" / "results" / "raw"
 figures = root / "cluster" / "docs" / "figures"
+runs = root / "cluster" / "runs"
 
 manifest_run_pattern = re.compile(r"^(20\d{2}-\d{2}-\d{2}_[A-Za-z0-9][A-Za-z0-9._-]*)_manifest\.json$")
 date_prefixed_pattern = re.compile(r"^20\d{2}-\d{2}-\d{2}_[A-Za-z0-9][A-Za-z0-9._-]*")
 orphan_pattern = re.compile(r"^_[A-Za-z0-9].*")
-mcp_smoke_pattern = re.compile(r"^mcp_cluster_smoke_test_[A-Za-z0-9._-]*$")
+mcp_smoke_pattern = re.compile(r"^mcp_cluster_smoke_test(?:_[A-Za-z0-9._-]+)?$")
 
 keep = {canonical} | allow
 
@@ -91,6 +98,10 @@ if structured.exists():
         m = manifest_run_pattern.match(path.name)
         if m:
             run_ids.add(m.group(1))
+if runs.exists():
+    for path in runs.iterdir():
+        if path.is_dir() and date_prefixed_pattern.match(path.name):
+            run_ids.add(path.name)
 
 stale_run_ids = sorted(run_ids - keep)
 
@@ -124,6 +135,15 @@ for base in (structured, raw, figures):
             continue
         # Prune ad-hoc smoke outputs that are not part of canonical run packaging.
         if mcp_smoke_pattern.match(path.name):
+            stale_paths.add(path)
+
+if runs.exists():
+    for path in runs.iterdir():
+        if not path.is_dir():
+            continue
+        if path.name in keep:
+            continue
+        if date_prefixed_pattern.match(path.name) or mcp_smoke_pattern.match(path.name):
             stale_paths.add(path)
 
 stale_paths = sorted(stale_paths)

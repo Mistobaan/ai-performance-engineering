@@ -14,11 +14,12 @@ repo_root = Path(__file__).parent.parent
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
+from core.benchmark.verification_mixin import VerificationPayloadMixin  # noqa: E402
 from core.harness.benchmark_harness import BaseBenchmark, WorkloadMetadata  # noqa: E402
 from core.profiling.nvtx_helper import get_nvtx_enabled, nvtx_range  # noqa: E402
 
 
-class SchedulingBenchmark(BaseBenchmark):
+class SchedulingBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Toy scheduler that batches requests and accepts speculative drafts."""
 
     def __init__(self) -> None:
@@ -26,13 +27,18 @@ class SchedulingBenchmark(BaseBenchmark):
         self.queue: Deque[int] = deque()
         self._workload = WorkloadMetadata(requests_per_iteration=1.0, tokens_per_iteration=64.0)
         self._history: Dict[str, float] = {}
+        self.request_lengths: list[int] = []
+        self.output: Optional[torch.Tensor] = None
 
     def setup(self) -> None:
+        random.seed(42)
         self.queue.clear()
+        self.request_lengths = [random.randint(4, 32) for _ in range(8)]
+        self.output = None
 
-    def _generate_requests(self, n: int = 8) -> None:
-        for _ in range(n):
-            self.queue.append(random.randint(4, 32))
+    def _enqueue_requests(self) -> None:
+        for tokens in self.request_lengths:
+            self.queue.append(tokens)
 
     def _serve_batch(self, batch_tokens: int) -> int:
         # Simulate speculative accept ratio.
@@ -43,7 +49,7 @@ class SchedulingBenchmark(BaseBenchmark):
         enable_nvtx = get_nvtx_enabled(self.get_config())
         with nvtx_range("scheduling_vllm_sglang", enable=enable_nvtx):
             if not self.queue:
-                self._generate_requests()
+                self._enqueue_requests()
             batch_tokens = 0
             served = 0
             while self.queue and batch_tokens < 64:
@@ -51,7 +57,35 @@ class SchedulingBenchmark(BaseBenchmark):
                 batch_tokens += tokens
                 served += self._serve_batch(tokens)
         self._history["served_tokens"] = served
+        self._history["batched_tokens"] = batch_tokens
+        self.output = torch.tensor([served, batch_tokens], dtype=torch.float32)
         return {"served_tokens": served, "batched_tokens": batch_tokens}
+
+    def capture_verification_payload(self) -> None:
+        if self.output is None:
+            raise RuntimeError("benchmark_fn() must run before capture_verification_payload()")
+        self._set_verification_payload(
+            inputs={
+                "request_lengths": torch.tensor(self.request_lengths, dtype=torch.int64),
+            },
+            output=self.output,
+            batch_size=1,
+            parameter_count=0,
+            precision_flags={
+                "fp16": False,
+                "bf16": False,
+                "fp8": False,
+                "tf32": False,
+            },
+            output_tolerance=(0.0, 0.0),
+        )
+
+    def validate_result(self) -> Optional[str]:
+        if self.output is None:
+            return "Output not produced"
+        if self.output.numel() != 2:
+            return "Unexpected output shape"
+        return None
 
     def get_workload_metadata(self) -> Optional[WorkloadMetadata]:
         return self._workload

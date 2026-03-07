@@ -219,7 +219,6 @@ class OptimizedKVCacheNaivePoolBenchmark(VerificationPayloadMixin, BaseBenchmark
                         hidden = layer(hidden, self.kv_cache, request_id, layer_idx, pos)
                 
                 self.kv_cache.free(request_id)
-        self._synchronize()
         # Capture output from the final forward for verification
         self.output = hidden.detach().clone()
         if self._verify_input is None:

@@ -82,7 +82,6 @@ class BaselineAttentionStandardBenchmark(VerificationPayloadMixin, BaseBenchmark
                 scores = torch.matmul(self.q, self.k.transpose(-2, -1)) / (self.head_dim ** 0.5)
                 attn = torch.softmax(scores, dim=-1)
                 self.output = torch.matmul(attn, self.v)
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

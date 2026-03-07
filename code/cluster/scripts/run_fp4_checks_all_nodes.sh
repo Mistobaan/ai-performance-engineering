@@ -14,9 +14,9 @@ Runs FP4 checks:
      + cross-host consistency report)
 
 Outputs are written under:
-  results/raw/
-  results/structured/
-  docs/figures/
+  runs/<run_id>/raw/
+  runs/<run_id>/structured/
+  runs/<run_id>/figures/
 
 Options:
   --run-id <id>          RUN_ID prefix (default: YYYY-MM-DD)
@@ -62,7 +62,7 @@ Bootstrap (recommended for reproducibility; default: enabled):
   --bootstrap-install-python-deps  Ensure env/venv + python deps (default: on)
   --bootstrap-skip-python-deps     Skip python dependency install
   --bootstrap-host-parity-image <ref>  Source image for host-only parity install
-                                       (default: cfregly/cluster_perf_orig_parity:latest)
+                                       (default: cluster_perf_orig_parity:latest)
   --bootstrap-torch-index-url <url>  Legacy fallback torch index (default: https://pypi.ngc.nvidia.com)
   --bootstrap-torch-version <ver>    Expected torch version after bootstrap parity install
                                      (default: 2.10.0a0+a36e1d39eb.nv26.01.42222806)
@@ -74,6 +74,8 @@ if [[ ! -f "${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh" ]]; then
   echo "ERROR: missing stack profile helper: ${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh" >&2
   exit 1
 fi
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 # shellcheck source=scripts/cluster_perf_stack_profiles.sh
 source "${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh"
 
@@ -106,7 +108,7 @@ BOOTSTRAP_NODES=1
 BOOTSTRAP_INSTALL_SYSTEM_PACKAGES=1
 BOOTSTRAP_SYNC_CODE=1
 BOOTSTRAP_INSTALL_PYTHON_DEPS=1
-BOOTSTRAP_HOST_PARITY_IMAGE="${BOOTSTRAP_HOST_PARITY_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+BOOTSTRAP_HOST_PARITY_IMAGE="${BOOTSTRAP_HOST_PARITY_IMAGE:-cluster_perf_orig_parity:latest}"
 BOOTSTRAP_TORCH_INDEX_URL="https://pypi.ngc.nvidia.com"
 BOOTSTRAP_TORCH_VERSION="2.10.0a0+a36e1d39eb.nv26.01.42222806"
 ATTESTATION_MODE="balanced"
@@ -218,6 +220,17 @@ if [[ -n "$LABELS" && "${#LABEL_ARR[@]}" -ne "${#HOST_ARR[@]}" ]]; then
   exit 2
 fi
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+LOCAL_RAW_REL="${CLUSTER_RAW_DIR_EFFECTIVE#${ROOT_DIR}/}"
+LOCAL_STRUCTURED_REL="${CLUSTER_STRUCTURED_DIR_EFFECTIVE#${ROOT_DIR}/}"
+LOCAL_FIGURES_REL="${CLUSTER_FIGURES_DIR_EFFECTIVE#${ROOT_DIR}/}"
+REMOTE_RAW_DIR="$(cluster_raw_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+REMOTE_STRUCTURED_DIR="$(cluster_structured_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+REMOTE_FIGURES_DIR="$(cluster_figures_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+REMOTE_RAW_REL="${REMOTE_RAW_DIR#${REMOTE_ROOT}/}"
+REMOTE_STRUCTURED_REL="${REMOTE_STRUCTURED_DIR#${REMOTE_ROOT}/}"
+REMOTE_FIGURES_REL="${REMOTE_FIGURES_DIR#${REMOTE_ROOT}/}"
+
 if [[ "$BOOTSTRAP_NODES" -eq 1 ]]; then
   bootstrap_args=(
     --run-id "${RUN_ID}"
@@ -324,7 +337,7 @@ copy_attestation_target_snapshot() {
   local label="$2"
   local local_target_abs="${ROOT_DIR}/${ATTESTATION_TARGET_REL}"
   local remote_target_abs="${REMOTE_ROOT}/${ATTESTATION_TARGET_REL}"
-  local rel_path="results/raw/${RUN_ID}_${label}_grouped_gemm_bench.snapshot.py"
+  local rel_path="${LOCAL_RAW_REL}/${RUN_ID}_${label}_grouped_gemm_bench.snapshot.py"
   local abs_path="${ROOT_DIR}/${rel_path}"
 
   mkdir -p "$(dirname "$abs_path")"
@@ -690,14 +703,14 @@ verify_local_artifact() {
 }
 
 write_smoke_skew_guard() {
-  local root_dir="$1"
+  local structured_dir="$1"
   local out_path="$2"
   local run_id="$3"
   local threshold_pct="$4"
   local smoke_rounds="$5"
   local labels_csv="$6"
 
-  python3 - "$root_dir" "$out_path" "$run_id" "$threshold_pct" "$smoke_rounds" "$labels_csv" <<'PY'
+  python3 - "$structured_dir" "$out_path" "$run_id" "$threshold_pct" "$smoke_rounds" "$labels_csv" <<'PY'
 import itertools
 import json
 import statistics
@@ -705,13 +718,12 @@ import sys
 import time
 from pathlib import Path
 
-root_dir, out_path, run_id, threshold_pct_raw, smoke_rounds_raw, labels_csv = sys.argv[1:]
+structured_dir, out_path, run_id, threshold_pct_raw, smoke_rounds_raw, labels_csv = sys.argv[1:]
 threshold_pct = float(threshold_pct_raw)
 smoke_rounds = int(smoke_rounds_raw)
 labels = [x.strip() for x in labels_csv.split(",") if x.strip()]
 
-root = Path(root_dir)
-structured = root / "results" / "structured"
+structured = Path(structured_dir)
 
 def load_tflops(path: Path) -> float:
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -865,14 +877,17 @@ for idx in "${!HOST_ARR[@]}"; do
     echo "ERROR: unable to detect GPU names on host ${host}" >&2
     exit 2
   fi
-  gb_sku="$(printf '%s\n' "$gpu_names" | grep -Eoi 'GB[0-9]{3}' | head -n 1 | tr '[:lower:]' '[:upper:]' || true)"
+  gb_sku="$(printf '%s\n' "$gpu_names" | grep -Eoi '(GB|B)[0-9]{3}' | head -n 1 | tr '[:lower:]' '[:upper:]' || true)"
+  if [[ "$gb_sku" =~ ^B([0-9]{3})$ ]]; then
+    gb_sku="GB${BASH_REMATCH[1]}"
+  fi
   host_preset="$PRESET"
   if [[ "$PRESET" == "auto" ]]; then
     host_preset="all"
   fi
 
   if [[ -z "$gb_sku" ]]; then
-    echo "ERROR: FP4 checks require GB-family GPUs (GB200/GB300/...). Host ${host} reported:" >&2
+    echo "ERROR: FP4 checks require Blackwell GB/B family GPUs (GB200/GB300/B200/B300...). Host ${host} reported:" >&2
     printf '%s\n' "$gpu_names" | sed 's/^/  - /' >&2
     exit 2
   fi
@@ -926,10 +941,10 @@ fi
   semantic_source_sha="$(python3 -c 'import json,sys; print((json.loads(sys.stdin.read()) or {}).get("source_sha256",""))' <<<"$semantic_json")"
   echo "Semantic attestation passed: signature=${semantic_signature} source_sha256=${semantic_source_sha}"
 
-  grouped_log_rel="results/structured/${RUN_ID}_${label}_cluster_perf_grouped_gemm.txt"
-  grouped_summary_rel="results/structured/${RUN_ID}_${label}_cluster_perf_grouped_gemm_summary.json"
-  grouped_clock_rel="results/structured/${RUN_ID}_${label}_cluster_perf_grouped_gemm_clock_lock.json"
-  grouped_plot_rel="docs/figures/${RUN_ID}_${label}_cluster_perf_grouped_gemm_tflops.png"
+  grouped_log_rel="${LOCAL_STRUCTURED_REL}/${RUN_ID}_${label}_cluster_perf_grouped_gemm.txt"
+  grouped_summary_rel="${LOCAL_STRUCTURED_REL}/${RUN_ID}_${label}_cluster_perf_grouped_gemm_summary.json"
+  grouped_clock_rel="${LOCAL_STRUCTURED_REL}/${RUN_ID}_${label}_cluster_perf_grouped_gemm_clock_lock.json"
+  grouped_plot_rel="${LOCAL_FIGURES_REL}/${RUN_ID}_${label}_cluster_perf_grouped_gemm_tflops.png"
   grouped_args=(
     scripts/run_cluster_perf_grouped_gemm.sh
     --runtime "${RUNTIME}"
@@ -987,7 +1002,7 @@ fi
   torch_version="$(trim_ws "$(run_host_cmd "$host" "cd $(printf '%q' "$REMOTE_ROOT") && ./env/venv/bin/python -c 'import torch; print(torch.__version__)' 2>/dev/null || true" | head -n 1)")"
   deep_gemm_version="$(trim_ws "$(run_host_cmd "$host" "cd $(printf '%q' "$REMOTE_ROOT") && ./env/venv/bin/python -c 'import importlib.metadata as m; print(m.version(\"deep_gemm\"))' 2>/dev/null || true" | head -n 1)")"
 
-  platform_meta_rel="results/structured/${RUN_ID}_${label}_cluster_perf_fp4_platform.json"
+  platform_meta_rel="${LOCAL_STRUCTURED_REL}/${RUN_ID}_${label}_cluster_perf_fp4_platform.json"
   platform_meta_abs="${ROOT_DIR}/${platform_meta_rel}"
   gpu_names_b64="$(printf '%s' "$gpu_names" | base64 | tr -d '\n')"
   semantic_json_b64="$(printf '%s' "$semantic_json" | base64 | tr -d '\n')"
@@ -1024,7 +1039,7 @@ done
 
 if [[ "${#ATTESTATION_LABELS[@]}" -gt 0 ]]; then
   attestation_labels_csv="$(IFS=,; echo "${ATTESTATION_LABELS[*]}")"
-  attestation_consistency_rel="results/structured/${RUN_ID}_fp4_attestation_consistency.json"
+  attestation_consistency_rel="${LOCAL_STRUCTURED_REL}/${RUN_ID}_fp4_attestation_consistency.json"
   echo "Evaluating FP4 attestation consistency across hosts..."
   if ! write_attestation_consistency "${ROOT_DIR}" "${RUN_ID}" "${attestation_labels_csv}" "${ROOT_DIR}/${attestation_consistency_rel}"; then
     echo "ERROR: FP4 attestation consistency failed. See ${attestation_consistency_rel}" >&2
@@ -1073,13 +1088,13 @@ if [[ "$SKIP_SMOKE" -eq 0 ]]; then
       remote_cmd="cd $(printf '%q' "${REMOTE_ROOT}") && ${smoke_str}"
       run_host_cmd "$host" "$remote_cmd"
 
-      fetch_and_verify_if_remote "$host" "results/raw/${round_run_id}_${label}_cluster_perf_fp4_smoke.log"
-      fetch_and_verify_if_remote "$host" "results/structured/${round_run_id}_${label}_cluster_perf_fp4_smoke.json"
-      fetch_and_verify_if_remote "$host" "results/structured/${round_run_id}_${label}_cluster_perf_fp4_smoke_clock_lock.json"
+      fetch_and_verify_if_remote "$host" "${LOCAL_RAW_REL}/${round_run_id}_${label}_cluster_perf_fp4_smoke.log"
+      fetch_and_verify_if_remote "$host" "${LOCAL_STRUCTURED_REL}/${round_run_id}_${label}_cluster_perf_fp4_smoke.json"
+      fetch_and_verify_if_remote "$host" "${LOCAL_STRUCTURED_REL}/${round_run_id}_${label}_cluster_perf_fp4_smoke_clock_lock.json"
     done
   done
 
-  guard_rel="results/structured/${RUN_ID}_fp4_smoke_skew_guard.json"
+  guard_rel="${LOCAL_STRUCTURED_REL}/${RUN_ID}_fp4_smoke_skew_guard.json"
   echo "Evaluating FP4 smoke skew guard (rounds=${SMOKE_ROUNDS}, threshold_pct=${SMOKE_SKEW_THRESHOLD_PCT})..."
   if [[ -n "$TRIMMED_LABELS" ]]; then
     guard_labels="$TRIMMED_LABELS"
@@ -1096,7 +1111,7 @@ if [[ "$SKIP_SMOKE" -eq 0 ]]; then
     done
   fi
 
-  if ! write_smoke_skew_guard "${ROOT_DIR}" "${ROOT_DIR}/${guard_rel}" "${RUN_ID}" "${SMOKE_SKEW_THRESHOLD_PCT}" "${SMOKE_ROUNDS}" "${guard_labels}"; then
+  if ! write_smoke_skew_guard "${CLUSTER_STRUCTURED_DIR_EFFECTIVE}" "${ROOT_DIR}/${guard_rel}" "${RUN_ID}" "${SMOKE_SKEW_THRESHOLD_PCT}" "${SMOKE_ROUNDS}" "${guard_labels}"; then
     echo "ERROR: FP4 smoke skew guard failed. See ${guard_rel}" >&2
     exit 1
   fi

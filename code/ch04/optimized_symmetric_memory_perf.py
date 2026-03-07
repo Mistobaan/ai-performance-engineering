@@ -9,6 +9,7 @@ from typing import Dict, Optional
 
 import torch
 
+from core.benchmark.cuda_event_timing import elapsed_ms
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
 from core.benchmark.metrics import compute_memory_transfer_metrics
 from ch04.verification_payload_mixin import VerificationPayloadMixin
@@ -25,6 +26,7 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         self.peer_buffer: Optional[torch.Tensor] = None
         self._last_avg_ms = 0.0
         self._bytes_transferred = 0.0
+        self._pending_timing_pair: Optional[tuple[torch.cuda.Event, torch.cuda.Event]] = None
         self.register_workload_metadata(requests_per_iteration=1.0)
         self._verify_input: Optional[torch.Tensor] = None
 
@@ -48,20 +50,20 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         start.record()
         self.peer_buffer.copy_(self.local_tensor, non_blocking=True)
         end.record()
-        torch.cuda.synchronize(self.device)
+        self._pending_timing_pair = (start, end)
+        return None
 
-        elapsed_ms = start.elapsed_time(end)
-        bytes_moved = float(self.local_tensor.numel() * self.local_tensor.element_size())
-
-        self._last_avg_ms = elapsed_ms
-        self._bytes_transferred = bytes_moved
-
-        return {
-            "copy.elapsed_ms": elapsed_ms,
-            "copy.size_mb": self.size_mb,
-        }
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, float]]:
+        if self._pending_timing_pair is None or self.local_tensor is None:
+            return None
+        elapsed_ms_value = elapsed_ms(self._pending_timing_pair)
+        self._pending_timing_pair = None
+        self._last_avg_ms = elapsed_ms_value
+        self._bytes_transferred = float(self.local_tensor.numel() * self.local_tensor.element_size())
+        return None
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         if self.peer_buffer is None:
             if self._verify_input is None:
                 torch.manual_seed(42)
@@ -98,6 +100,7 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         return BenchmarkConfig(iterations=20, warmup=5)
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        self.finalize_iteration_metrics()
         return compute_memory_transfer_metrics(
             bytes_transferred=self._bytes_transferred,
             elapsed_ms=self._last_avg_ms,
@@ -105,6 +108,7 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         )
 
     def validate_result(self) -> Optional[str]:
+        self.finalize_iteration_metrics()
         if self.peer_buffer is None:
             return "No output captured"
         if self._last_avg_ms <= 0:

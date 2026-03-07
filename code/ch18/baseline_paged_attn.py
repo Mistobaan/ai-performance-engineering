@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional
 
@@ -17,25 +16,6 @@ if str(repo_root) not in sys.path:
 from core.harness.benchmark_harness import BaseBenchmark, WorkloadMetadata  # noqa: E402
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.profiling.nvtx_helper import get_nvtx_enabled, nvtx_range  # noqa: E402
-
-# Use new SDPA API when available
-try:
-    from torch.nn.attention import sdpa_kernel, SDPBackend
-    _MATH_BACKENDS = [SDPBackend.MATH]
-    _NEW_SDPA_API = True
-except ImportError:
-    sdpa_kernel = None  # type: ignore[assignment]
-    SDPBackend = None  # type: ignore[assignment]
-    _MATH_BACKENDS = []
-    _NEW_SDPA_API = False
-
-
-def _math_sdpa_context():
-    """Return context manager for math-only attention backend (baseline)."""
-    if _NEW_SDPA_API and sdpa_kernel is not None:
-        return sdpa_kernel(_MATH_BACKENDS)
-    return nullcontext()
-
 
 class BaselinePagedAttnBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def __init__(self) -> None:
@@ -57,24 +37,31 @@ class BaselinePagedAttnBenchmark(VerificationPayloadMixin, BaseBenchmark):
         q = self.qkv[:, :, :, 0]
         k = self.qkv[:, :, :, 1]
         v = self.qkv[:, :, :, 2]
-        with _math_sdpa_context():
-            for _ in range(5):
-                _ = F.scaled_dot_product_attention(q, k, v)
-                torch.cuda.synchronize(self.device)
+        if not torch.cuda.is_available():
+            raise RuntimeError("FAIL FAST: paged attention benchmark requires CUDA")
+        # Enforce strict math path to keep baseline stable across backend policy changes.
+        torch.backends.cuda.enable_flash_sdp(False)
+        torch.backends.cuda.enable_math_sdp(True)
+        torch.backends.cuda.enable_mem_efficient_sdp(False)
+        if hasattr(torch.backends.cuda, "enable_cudnn_sdp"):
+            torch.backends.cuda.enable_cudnn_sdp(False)
+        if not torch.backends.cuda.math_sdp_enabled():
+            raise RuntimeError("FAIL FAST: Math SDPA backend is not enabled")
+        for _ in range(8):
+            _ = F.scaled_dot_product_attention(q, k, v)
+            torch.cuda.synchronize(self.device)
 
     def benchmark_fn(self) -> Optional[dict]:
         if self.qkv is None:
-            raise RuntimeError("SKIPPED: QKV not initialized")
+            raise RuntimeError("FAIL FAST: QKV not initialized")
         q = self.qkv[:, :, :, 0]
         k = self.qkv[:, :, :, 1]
         v = self.qkv[:, :, :, 2]
 
         enable_nvtx = get_nvtx_enabled(self.get_config())
         # Force the unfused math path so the optimized variant can contrast flash SDPA.
-        with _math_sdpa_context():
-            with nvtx_range("paged_attn_baseline", enable=enable_nvtx):
-                self.output = F.scaled_dot_product_attention(q, k, v)
-        torch.cuda.synchronize(self.device)
+        with nvtx_range("paged_attn_baseline", enable=enable_nvtx):
+            self.output = F.scaled_dot_product_attention(q, k, v)
         if self.output is None or self.qkv is None:
             raise RuntimeError("benchmark_fn() must produce output")
         return {}

@@ -58,7 +58,6 @@ class BaselineAIBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 out = self.inputs
                 for block in self.blocks:
                     out = block(out)
-                    self._synchronize()
         self.output = out.detach()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output")

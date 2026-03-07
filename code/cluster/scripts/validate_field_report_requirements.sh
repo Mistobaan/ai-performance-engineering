@@ -14,6 +14,7 @@ usage() {
 Usage: cluster/scripts/validate_field_report_requirements.sh [options]
 
 Options:
+  --repo-root <path>        Override repo root (default: auto-detect from script path)
   --report <path>          Path to field-report.md (default: cluster/field-report.md)
   --notes <path>           Path to field-report-notes.md (default: cluster/field-report-notes.md)
   --template <path>        Path to field-report-template.md (default: cluster/docs/field-report-template.md)
@@ -26,6 +27,14 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --repo-root)
+      ROOT_DIR="$2"
+      REPORT="${ROOT_DIR}/cluster/field-report.md"
+      NOTES="${ROOT_DIR}/cluster/field-report-notes.md"
+      TEMPLATE="${ROOT_DIR}/cluster/docs/field-report-template.md"
+      RUNBOOK="${ROOT_DIR}/cluster/docs/advanced-runbook.md"
+      shift 2
+      ;;
     --report)
       REPORT="$2"
       shift 2
@@ -296,7 +305,7 @@ require_contains "$RUNBOOK" "operator_checks_dashboard" "runbook references oper
 forbid_contains "$REPORT" "## Normal vs Weird Log" "legacy split header absent: ## Normal vs Weird Log"
 forbid_contains "$REPORT" "## Weird / New / Interesting Findings" "legacy split header absent: ## Weird / New / Interesting Findings"
 
-if ! rg -n 'results/structured/.*\.(json|csv|jsonl|txt)' "$REPORT" >/dev/null 2>&1; then
+if ! rg -n '(published/current/structured|cluster/published/.*/structured|results/structured|cluster/runs/.*/structured|runs/.*/structured)/.*\.(json|csv|jsonl|txt)' "$REPORT" >/dev/null 2>&1; then
   fail "no structured artifact links found in report"
 else
   pass "structured artifact links present"
@@ -420,10 +429,20 @@ for text in (report, notes):
             link_targets.append(t)
 
 manifest_runs = []
-for p in (root / "cluster" / "results" / "structured").glob("*_manifest.json"):
-    name = p.name
-    if re.match(r"20\d{2}-\d{2}-\d{2}_", name):
-        manifest_runs.append(name[:-len("_manifest.json")])
+flat_structured = root / "cluster" / "results" / "structured"
+if flat_structured.exists():
+    for p in flat_structured.glob("*_manifest.json"):
+        name = p.name
+        if re.match(r"20\d{2}-\d{2}-\d{2}_", name):
+            manifest_runs.append(name[:-len("_manifest.json")])
+
+runs_root = root / "cluster" / "runs"
+if runs_root.exists():
+    for p in runs_root.iterdir():
+        if not p.is_dir():
+            continue
+        if re.match(r"20\d{2}-\d{2}-\d{2}_", p.name) and (p / "manifest.json").exists():
+            manifest_runs.append(p.name)
 
 stale = []
 for run_id in sorted(set(manifest_runs)):
@@ -436,13 +455,18 @@ for run_id in sorted(set(manifest_runs)):
     structured = list((root / "cluster" / "results" / "structured").glob(f"{run_id}*"))
     raw = list((root / "cluster" / "results" / "raw").glob(f"{run_id}*"))
     figures = list((root / "cluster" / "docs" / "figures").glob(f"{run_id}*"))
-    total = len(structured) + len(raw) + len(figures)
+    run_dir = root / "cluster" / "runs" / run_id
+    run_dir_present = run_dir.exists()
+    total = len(structured) + len(raw) + len(figures) + (1 if run_dir_present else 0)
     if total > 0:
-        stale.append((run_id, len(structured), len(raw), len(figures), total))
+        stale.append((run_id, len(structured), len(raw), len(figures), int(run_dir_present), total))
 
 if stale:
-    for run_id, s_cnt, r_cnt, f_cnt, total in stale:
-        print(f"STALE {run_id} structured={s_cnt} raw={r_cnt} figures={f_cnt} total={total}")
+    for run_id, s_cnt, r_cnt, f_cnt, run_dir_present, total in stale:
+        print(
+            f"STALE {run_id} structured={s_cnt} raw={r_cnt} figures={f_cnt} "
+            f"run_dir={run_dir_present} total={total}"
+        )
     sys.exit(2)
 
 print("STALE none")

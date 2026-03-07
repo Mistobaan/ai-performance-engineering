@@ -2,13 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
-
 import torch
 
 
@@ -100,8 +93,7 @@ class OptimizedKernelFusionBenchmark(VerificationPayloadMixin, BaseBenchmark):
             with torch.cuda.stream(stream):
                 self._extension.fused_kernel(self.data, self.iterations)
 
-        # Synchronize only our benchmark stream to avoid stalling unrelated work.
-        stream.synchronize()
+        torch.cuda.current_stream(device=self.device).wait_stream(stream)
 
         if self.data is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")

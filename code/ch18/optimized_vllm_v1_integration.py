@@ -39,12 +39,21 @@ import numba  # noqa: F401
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
-from core.harness.serving_stack import get_serving_stack_pins
+from core.harness.serving_stack import (
+    configure_serving_stack_cache_env,
+    configure_serving_stack_runtime_env,
+    get_serving_stack_pins,
+    preload_serving_stack_shared_libs,
+)
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.utils.logger import get_logger
+from ch18.vllm_process_cleanup import shutdown_vllm_runtime
 
 logger = get_logger(__name__)
 _SERVING_STACK = get_serving_stack_pins()
+_SERVING_STACK_LIB_DIRS = configure_serving_stack_runtime_env()
+_SERVING_STACK_CACHE_DIRS = configure_serving_stack_cache_env()
+_SERVING_STACK_PRELOADED_LIBS = preload_serving_stack_shared_libs()
 
 
 def _is_vllm_abi_mismatch_error(exc: BaseException) -> bool:
@@ -122,6 +131,16 @@ def _assert_vllm_runtime_ready(import_error: Optional[BaseException]) -> None:
             f"Original error: {exc}"
         ) from exc
 
+
+def _fixed_kv_cache_memory_bytes() -> int:
+    """Use a deterministic KV-cache budget to avoid unstable init profiling.
+
+    vLLM's default startup path profiles available GPU memory and can fail when
+    free memory changes mid-profile in shared/containerized environments.
+    Supplying kv_cache_memory_bytes skips that fragile profiling path.
+    """
+    return 2 * 1024**3  # 2 GiB is sufficient for opt-125m @ max_model_len=512
+
 # Check for vLLM
 try:
     from vllm import LLM, SamplingParams
@@ -149,20 +168,24 @@ class OptimizedVLLMV1Integration:
         self.model_name = model_name
         self.max_tokens = max_tokens
         self.batch_size = batch_size
-        self.use_vllm = use_vllm and VLLM_AVAILABLE
+        if not use_vllm:
+            raise RuntimeError(
+                "FAIL FAST: OptimizedVLLMV1Integration requires vLLM execution "
+                "(use_vllm=False is unsupported)."
+            )
+        self.use_vllm = True
         self.enable_chunked_prefill = enable_chunked_prefill
-        self._runtime_mode = "unknown"
-        
-        if not self.use_vllm:
-            logger.info("Running in simulation mode (vLLM not available)")
+        self._runtime_mode = "cuda_graphs"
 
-    def _new_llm(self, *, enforce_eager: bool, gpu_memory_utilization: float) -> "LLM":
+    def _new_llm(self) -> "LLM":
         return LLM(
             model=self.model_name,
-            enforce_eager=enforce_eager,
+            enforce_eager=False,
             enable_prefix_caching=True,
             enable_chunked_prefill=self.enable_chunked_prefill,
-            gpu_memory_utilization=gpu_memory_utilization,
+            # Keep headroom for shared GPU environments; vLLM hard-gates init on this ratio.
+            gpu_memory_utilization=0.15,
+            kv_cache_memory_bytes=_fixed_kv_cache_memory_bytes(),
             dtype="bfloat16",
             tensor_parallel_size=1,
             max_model_len=512,
@@ -174,49 +197,53 @@ class OptimizedVLLMV1Integration:
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
         _assert_vllm_runtime_ready(_IMPORT_ERROR)
-        if self.use_vllm:
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-
-            self._runtime_mode = "cuda_graphs"
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        last_engine_error: Optional[RuntimeError] = None
+        for attempt in range(2):
             try:
-                # Preferred optimized path.
-                self.llm = self._new_llm(enforce_eager=False, gpu_memory_utilization=0.7)
+                self.llm = self._new_llm()
+                break
             except RuntimeError as err:
                 err_msg = str(err)
-                # Keep the benchmark runnable on hosts where vLLM core init is flaky.
                 if "Engine core initialization failed" not in err_msg:
                     raise
-                logger.warning(
-                    "Optimized vLLM startup failed with CUDA graphs; retrying in eager fallback mode: %s",
-                    err_msg,
-                )
-                gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-                self.llm = self._new_llm(enforce_eager=True, gpu_memory_utilization=0.65)
-                self._runtime_mode = "eager_fallback"
+                last_engine_error = err
+                if attempt == 0:
+                    logger.warning(
+                        "Optimized CUDA-graphs vLLM init failed on first attempt; forcing cleanup and retrying once: %s",
+                        err_msg,
+                    )
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+                    time.sleep(2.0)
+                    continue
+                raise RuntimeError(
+                    "FAIL FAST: Optimized vLLM engine initialization failed in CUDA-graphs mode "
+                    "after retry. Remediation: ensure the serving stack matches pinned versions "
+                    "and rerun after clearing GPU state. "
+                    f"Original error: {err_msg}"
+                ) from err
+        else:
+            if last_engine_error is not None:
+                raise RuntimeError(
+                    "FAIL FAST: Optimized CUDA-graphs vLLM engine initialization failed unexpectedly."
+                ) from last_engine_error
+            raise RuntimeError("FAIL FAST: Optimized CUDA-graphs vLLM engine did not initialize")
 
-            logger.info(
-                "Loaded model: %s (runtime_mode=%s, torch=%s, vllm=%s, flashinfer=%s)",
-                self.model_name,
-                self._runtime_mode,
-                _SERVING_STACK.torch_version,
-                _SERVING_STACK.vllm_version,
-                _SERVING_STACK.flashinfer_version,
-            )
-            if self._runtime_mode == "cuda_graphs":
-                logger.info("Optimized config: CUDA graphs, prefix caching, chunked prefill")
-            else:
-                logger.warning(
-                    "Running optimized benchmark in eager fallback mode (CUDA graphs unavailable on this host/state)."
-                )
-
-        if not self.use_vllm:
-            raise RuntimeError("vLLM required for this benchmark. Install with: pip install vllm")
+        logger.info(
+            "Loaded model: %s (runtime_mode=%s, torch=%s, vllm=%s, flashinfer=%s)",
+            self.model_name,
+            self._runtime_mode,
+            _SERVING_STACK.torch_version,
+            _SERVING_STACK.vllm_version,
+            _SERVING_STACK.flashinfer_version,
+        )
+        logger.info("Optimized config: CUDA graphs, prefix caching, chunked prefill")
 
         tokenizer = self.llm.get_tokenizer()
         base_ids = tokenizer.encode("Once upon a time in a land far away, ", add_special_tokens=False)
@@ -284,8 +311,11 @@ class OptimizedVLLMV1Integration:
     
     def cleanup(self):
         """Clean up resources."""
-        if self.use_vllm and hasattr(self, 'llm'):
-            del self.llm
+        if hasattr(self, 'llm'):
+            try:
+                shutdown_vllm_runtime(self.llm, logger=logger.warning)
+            finally:
+                del self.llm
         torch.cuda.empty_cache()
 
 
@@ -295,6 +325,14 @@ class OptimizedVLLMV1IntegrationBenchmark(VerificationPayloadMixin, BaseBenchmar
     def __init__(self):
         super().__init__()
         self.runner = OptimizedVLLMV1Integration()
+        # Profiling wrappers should teardown vLLM workers instead of hard-exiting.
+        self.profile_require_teardown = True
+        # vLLM kernels execute in worker subprocesses, so parent NVTX include
+        # filters can hide all kernels from NCU capture.
+        self.disable_ncu_nvtx_filter = True
+        # Keep NCU replay scoped to kernel to avoid repeated full application
+        # replays that can exceed benchmark timeout budgets.
+        self.preferred_ncu_replay_mode = "kernel"
         self._metrics: Dict[str, Any] = {}
         self.output: Optional[torch.Tensor] = None
         self._last_token_ids: Optional[torch.Tensor] = None
@@ -315,7 +353,6 @@ class OptimizedVLLMV1IntegrationBenchmark(VerificationPayloadMixin, BaseBenchmar
             raise RuntimeError("Runner did not return token_ids for verification")
         self._last_token_ids = torch.as_tensor(token_ids, dtype=torch.int32)
         self.output = self._last_token_ids
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self._last_token_ids is None:

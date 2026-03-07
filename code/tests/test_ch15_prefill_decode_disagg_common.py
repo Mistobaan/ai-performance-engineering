@@ -1,0 +1,77 @@
+"""Smoke tests for the shared Chapter 15 prefill/decode disaggregation wrappers."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+from core.benchmark.hot_path_checks import (
+    check_benchmark_fn_antipatterns,
+    check_benchmark_fn_sync_calls,
+)
+from core.harness.benchmark_harness import BaseBenchmark
+
+
+def _load_module(module_path: Path):
+    spec = importlib.util.spec_from_file_location(module_path.stem, module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "expected_multi_gpu", "expected_allowed"),
+    [
+        ("ch15/baseline_prefill_decode_disagg.py", False, ("host_transfer",)),
+        ("ch15/optimized_prefill_decode_disagg.py", False, ()),
+        ("ch15/baseline_prefill_decode_disagg_multigpu.py", True, ("host_transfer",)),
+        ("ch15/optimized_prefill_decode_disagg_multigpu.py", True, ()),
+    ],
+)
+def test_prefill_decode_disagg_wrappers_attach_metadata(
+    relative_path: str,
+    expected_multi_gpu: bool,
+    expected_allowed: tuple[str, ...],
+) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    module_path = repo_root / relative_path
+    module = _load_module(module_path)
+
+    bench = module.get_benchmark()
+
+    assert isinstance(bench, BaseBenchmark)
+    assert getattr(bench, "_module_file_override", None) == str(module_path)
+    assert getattr(bench, "_factory_name_override", None) == "get_benchmark"
+    assert bool(getattr(bench, "multi_gpu_required", False)) is expected_multi_gpu
+    assert tuple(getattr(bench, "allowed_benchmark_fn_antipatterns", ())) == expected_allowed
+    assert bool(bench.get_config().multi_gpu_required) is expected_multi_gpu
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "expected_allowed"),
+    [
+        ("ch15/baseline_prefill_decode_disagg.py", ("host_transfer",)),
+        ("ch15/optimized_prefill_decode_disagg.py", ()),
+        ("ch15/baseline_prefill_decode_disagg_multigpu.py", ("host_transfer",)),
+        ("ch15/optimized_prefill_decode_disagg_multigpu.py", ()),
+    ],
+)
+def test_prefill_decode_disagg_common_hot_path_checks_stay_clean(
+    relative_path: str,
+    expected_allowed: tuple[str, ...],
+) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    module = _load_module(repo_root / relative_path)
+    bench = module.get_benchmark()
+
+    sync_ok, sync_warnings = check_benchmark_fn_sync_calls(bench.benchmark_fn)
+    antipattern_ok, antipattern_warnings = check_benchmark_fn_antipatterns(
+        bench.benchmark_fn,
+        allowed_codes=expected_allowed,
+    )
+
+    assert sync_ok, sync_warnings
+    assert antipattern_ok, antipattern_warnings

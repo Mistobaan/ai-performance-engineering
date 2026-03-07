@@ -80,7 +80,6 @@ class OptimizedGemmBenchmark(VerificationPayloadMixin, BaseBenchmark):
         
         with self._nvtx_range("optimized_gemm"):
             result = op(self.left, self.right)
-        self._synchronize()
         
         self.output = result
 

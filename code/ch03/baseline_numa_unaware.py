@@ -57,7 +57,6 @@ class BaselineNUMAUnawareBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.device_buffer.copy_(self.host_tensor, non_blocking=False)
             # Simple compute to overlap with in optimized version
             self.output = torch.sum(self.device_buffer).unsqueeze(0)
-            self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

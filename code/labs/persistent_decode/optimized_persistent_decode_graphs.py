@@ -61,6 +61,7 @@ class OptimizedPersistentDecodeGraphsBenchmark(VerificationPayloadMixin, BaseBen
         self.graph_mode = graph_mode or GraphMode.FULL_AND_PIECEWISE
         self.max_capture_seq = max_capture_seq or self.seq_len
         self._history: dict[str, list[float]] = {}
+        self._pending_iteration: dict[str, object] | None = None
         self.register_workload_metadata(tokens_per_iteration=tokens_per_iteration())
         self.output: torch.Tensor | None = None
 
@@ -149,12 +150,13 @@ class OptimizedPersistentDecodeGraphsBenchmark(VerificationPayloadMixin, BaseBen
                 start.record()
                 self.full_graph.replay()
                 end.record()
-            torch.cuda.synchronize()
-            total_ms = start.elapsed_time(end)
-            self._history.setdefault("ttft_ms", []).append(total_ms)
-            self._history.setdefault("decode_ms", []).append(total_ms)
-            self._history.setdefault("per_token_ms", []).append(total_ms / max(1, self.seq_len))
-            self._history.setdefault("graph_path", []).append("full_graph")
+            self._pending_iteration = {
+                "path": "full_graph",
+                "start": start,
+                "prefill_end": end,
+                "decode_start": start,
+                "decode_end": end,
+            }
             self.output = self.inputs.out[:1, : min(8, self.inputs.out.shape[1])]
             return
 
@@ -174,14 +176,36 @@ class OptimizedPersistentDecodeGraphsBenchmark(VerificationPayloadMixin, BaseBen
             start_decode.record()
             self.decode_graph.replay()
             end_decode.record()
-            torch.cuda.synchronize()
-            ttft_ms = start_prefill.elapsed_time(end_prefill)
-            decode_ms = start_decode.elapsed_time(end_decode)
-            self._history.setdefault("ttft_ms", []).append(ttft_ms)
-            self._history.setdefault("decode_ms", []).append(decode_ms)
-            self._history.setdefault("per_token_ms", []).append(decode_ms / max(1, self.seq_len))
-            self._history.setdefault("graph_path", []).append("piecewise_graph")
+            self._pending_iteration = {
+                "path": "piecewise_graph",
+                "start": start_prefill,
+                "prefill_end": end_prefill,
+                "decode_start": start_decode,
+                "decode_end": end_decode,
+            }
         self.output = self.inputs.out[:1, : min(8, self.inputs.out.shape[1])]
+
+    def finalize_iteration_metrics(self) -> dict[str, list[float]] | None:
+        if not self._pending_iteration:
+            return None
+
+        start = self._pending_iteration["start"]
+        prefill_end = self._pending_iteration["prefill_end"]
+        decode_start = self._pending_iteration["decode_start"]
+        decode_end = self._pending_iteration["decode_end"]
+        graph_path = str(self._pending_iteration["path"])
+        self._pending_iteration = None
+
+        ttft_ms = float(start.elapsed_time(prefill_end))
+        decode_ms = float(decode_start.elapsed_time(decode_end))
+        self._history.setdefault("ttft_ms", []).append(ttft_ms)
+        self._history.setdefault("decode_ms", []).append(decode_ms)
+        self._history.setdefault("per_token_ms", []).append(decode_ms / max(1, self.seq_len))
+        self._history.setdefault("graph_path", []).append(graph_path)
+        return {
+            "ttft_times_ms": [ttft_ms],
+            "tpot_times_ms": [(decode_ms / max(1, self.seq_len))] * self.seq_len,
+        }
 
     def capture_verification_payload(self) -> None:
         if self.inputs is None or self.output is None:

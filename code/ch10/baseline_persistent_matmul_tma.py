@@ -122,7 +122,6 @@ class BaselinePersistentMatmulTMABenchmark(VerificationPayloadMixin, BaseBenchma
             self.block, self.block, self.block,
         )
         self.result = self.C
-        self._synchronize()
         self.output = self.result
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")

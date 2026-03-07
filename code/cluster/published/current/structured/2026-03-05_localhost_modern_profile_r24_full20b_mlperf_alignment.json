@@ -1,0 +1,38 @@
+{
+  "generated_at_utc": "2026-03-05T15:34:42.103022+00:00",
+  "inference_track": {
+    "concurrency_repeat_stability": true,
+    "concurrency_slo_goodput": true,
+    "concurrency_sweep": true,
+    "request_rate_repeat_stability": true,
+    "request_rate_slo_goodput": true,
+    "request_rate_sweep": true
+  },
+  "inference_track_ready": true,
+  "labels": [
+    "localhost"
+  ],
+  "overall_status": "aligned",
+  "primary_label": "localhost",
+  "recommendations": [
+    "Add multinode train-step evidence for distributed training alignment."
+  ],
+  "references": {
+    "future_facing_llm_set": [
+      "llama3.1_8b",
+      "llama3.1_405b",
+      "gpt_oss_20b"
+    ],
+    "inference_track": "MLPerf Inference Datacenter (LLM-style serving: throughput + TTFT/TPOT tails)",
+    "training_track": "MLPerf Training (LLM-style train-step + distributed collective behavior)"
+  },
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "training_track": {
+    "allreduce_stability": true,
+    "alltoall_moe_coverage": true,
+    "multinode_train_step": false,
+    "nccl_collectives_single_or_multi": true,
+    "train_step_workload": true
+  },
+  "training_track_ready": true
+}

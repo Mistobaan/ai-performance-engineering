@@ -22,6 +22,10 @@ third_party/te_sm100a_env.sh
 .env
 .env.local
 .env.bak
+.venv/
+.venv*/
+.tmp_pdfqa/
+.tmp_pdf*/
 report.html
 mcp_tools_test_report.md
 core/artifacts/ 

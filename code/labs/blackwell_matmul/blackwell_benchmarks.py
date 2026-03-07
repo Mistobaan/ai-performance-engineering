@@ -116,7 +116,6 @@ class GraceBlackwellMatmulBenchmark(VerificationPayloadMixin, BaseBenchmark):
         assert self._lhs is not None and self._rhs is not None
         with self._nvtx_range(self._label):
             self._output = self._runner(self._lhs, self._rhs)
-        torch.cuda.synchronize(self.device)
 
     def capture_verification_payload(self) -> None:
         if self._lhs is None or self._rhs is None or self._output is None:

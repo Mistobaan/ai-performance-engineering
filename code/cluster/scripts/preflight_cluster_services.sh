@@ -23,6 +23,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 
 RUN_ID=""
 HOSTS=""
@@ -57,7 +59,9 @@ if [[ "${#HOST_ARR[@]}" -eq 0 ]]; then
   exit 2
 fi
 
-OUT_STRUCT="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+
+OUT_STRUCT="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_STRUCT"
 OUT_JSON="${OUT_STRUCT}/${RUN_ID}_preflight_services.json"
 IMEX_N_OUT="${OUT_STRUCT}/${RUN_ID}_imex_ctl_N.txt"

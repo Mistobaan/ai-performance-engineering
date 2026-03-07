@@ -7,22 +7,17 @@ for context building while keeping decode latency low.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from core.harness.benchmark_harness import (  # noqa: E402
     BaseBenchmark,
     BenchmarkConfig,
     WorkloadMetadata,
 )
+from core.benchmark.cuda_event_timing import elapsed_ms, elapsed_ms_list
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.profiling.nvtx_helper import get_nvtx_enabled, nvtx_range  # noqa: E402
 
@@ -82,6 +77,8 @@ class OptimizedDisaggregatedBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.output: Optional[torch.Tensor] = None
         self.parameter_count: int = 0
         self._verification_payload = None
+        self._pending_ttft_pair: Optional[tuple[torch.cuda.Event, torch.cuda.Event]] = None
+        self._pending_tpot_pairs: list[tuple[torch.cuda.Event, torch.cuda.Event]] = []
 
     def setup(self) -> None:
         torch.manual_seed(42)
@@ -108,34 +105,54 @@ class OptimizedDisaggregatedBenchmark(VerificationPayloadMixin, BaseBenchmark):
         enable_nvtx = get_nvtx_enabled(self.get_config())
         with nvtx_range("optimized_disaggregated_multigpu.prefill_decode", enable=enable_nvtx):
             with torch.no_grad():
-                request_start = self._record_start()
-
-                torch.cuda.synchronize(self.device)
+                request_start = torch.cuda.Event(enable_timing=True)
+                prefill_end = torch.cuda.Event(enable_timing=True)
+                request_start.record()
+                default_stream = torch.cuda.current_stream(device=self.device)
                 with torch.cuda.stream(self.prefill_stream):
+                    self.prefill_stream.wait_stream(default_stream)
                     kv_cache = self.model.prefill(self.prompt)
                     self._prefill_done.record(self.prefill_stream)
-                torch.cuda.synchronize(self.device)
-                ttft_ms = self._record_stop(request_start)
+                    prefill_end.record()
 
                 token_output = kv_cache
-                tpot_times_ms: list[float] = []
+                token_event_pairs: list[tuple[torch.cuda.Event, torch.cuda.Event]] = []
                 for _ in range(self.decode_seq):
-                    token_start = self._record_start()
+                    token_start = torch.cuda.Event(enable_timing=True)
+                    token_end = torch.cuda.Event(enable_timing=True)
                     with torch.cuda.stream(self.decode_stream):
+                        token_start.record(self.decode_stream)
                         self.decode_stream.wait_event(self._prefill_done)
                         token_output = self.model.decode(token_output[:, -1:, :], num_tokens=1)
-                    torch.cuda.synchronize(self.device)
-                    tpot_times_ms.append(self._record_stop(token_start))
+                        token_end.record()
+                    token_event_pairs.append((token_start, token_end))
 
                 self.output = token_output
-                self._history["ttft"].append(ttft_ms)
-                self._history["tpot"].extend(tpot_times_ms)
-                return {
-                    "ttft_times_ms": [ttft_ms],
-                    "tpot_times_ms": tpot_times_ms,
-                }
+                self._pending_ttft_pair = (request_start, prefill_end)
+                self._pending_tpot_pairs = token_event_pairs
+                return {}
+
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, list[float]]]:
+        if self._pending_ttft_pair is None:
+            return None
+        ttft_ms = elapsed_ms(self._pending_ttft_pair)
+        tpot_times_ms = elapsed_ms_list(self._pending_tpot_pairs)
+        self._pending_ttft_pair = None
+        self._pending_tpot_pairs = []
+        self._history["ttft"].append(ttft_ms)
+        self._history["tpot"].extend(tpot_times_ms)
+        self._ttft_ms = ttft_ms
+        self._tpot_ms = float(sum(tpot_times_ms) / len(tpot_times_ms)) if tpot_times_ms else 0.0
+        self.total_tokens = float(self.decode_seq)
+        self.total_requests = float(self.batch_size)
+        self.max_batch_size = float(self.batch_size)
+        return {
+            "ttft_times_ms": [ttft_ms],
+            "tpot_times_ms": tpot_times_ms,
+        }
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         if self.prompt is None or self.output is None:
             raise RuntimeError("setup() and benchmark_fn() must be called before capture_verification_payload()")
         dtype = self.output.dtype
@@ -175,6 +192,7 @@ class OptimizedDisaggregatedBenchmark(VerificationPayloadMixin, BaseBenchmark):
         return self._workload
 
     def get_custom_metrics(self) -> Optional[dict]:
+        self.finalize_iteration_metrics()
         """Return domain-specific metrics using standardized helper."""
         from core.benchmark.metrics import compute_inference_metrics
         return compute_inference_metrics(
@@ -187,6 +205,7 @@ class OptimizedDisaggregatedBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
 
     def validate_result(self) -> Optional[str]:
+        self.finalize_iteration_metrics()
         if self.model is None or self.prompt is None:
             return "Model/inputs not initialized"
         if not self._history["ttft"]:

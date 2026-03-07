@@ -27,13 +27,15 @@ from metrics_config import (
     resolve_overrides,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 PYTHON = sys.executable
 DEFAULT_TIMEOUT = 900  # seconds
 
 # Add repo root to path for imports
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+from core.utils.python_entrypoints import build_python_entry_command, build_repo_python_env
 
 CUDA_BIN_DIRS = [
     "/usr/local/cuda-13.0/bin",
@@ -83,7 +85,10 @@ def example_run_command(example: Example, repo_root: Path) -> List[str]:
     if example.run_command:
         base_command = list(example.run_command)
     elif example.kind is ExampleKind.PYTHON:
-        base_command = [sys.executable, str(example.resolved_path(repo_root))]
+        base_command = build_python_entry_command(
+            module_name=example.module_name,
+            script_path=None if example.module_name else example.resolved_path(repo_root),
+        )
     elif example.kind is ExampleKind.CUDA:
         base_command = [str(example.resolved_path(repo_root))]
     elif example.kind is ExampleKind.SHELL:
@@ -443,7 +448,7 @@ def base_env(example: Example) -> Dict[str, str]:
         env.setdefault("TORCH_COMPILE_DISABLE", "1")
     # Always enable Python fault handler for stack traces on crashes
     env.setdefault("PYTHONFAULTHANDLER", "1")
-    return env
+    return build_repo_python_env(REPO_ROOT, base_env=env)
 
 
 def _find_command(cmd: str) -> Optional[str]:

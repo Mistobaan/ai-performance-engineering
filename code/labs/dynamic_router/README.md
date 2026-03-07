@@ -35,9 +35,9 @@ python -c "import importlib, importlib.metadata as md, torch, vllm; importlib.im
 ```
 If this fails with `undefined symbol` from `vllm/_C.abi3.so`, the host has a torch/vLLM ABI mismatch.
 Use the pinned benchmark stack:
-- `torch==2.10.0.dev20251213+cu130`
-- `vllm==0.15.0+cu130`
-- `flashinfer-python==0.6.2`
+- `torch==2.9.1+cu130`
+- `vllm==0.16.0`
+- `flashinfer-python==0.6.3`
 
 ## Validation Checklist
 - `python labs/dynamic_router/driver.py --mode baseline` vs `--mode optimized` shows lower TTFT variance and higher TPOT for the optimized policy.

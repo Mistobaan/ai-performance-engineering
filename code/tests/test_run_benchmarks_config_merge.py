@@ -12,7 +12,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from core.benchmark.defaults import BenchmarkDefaults
 from core.harness.benchmark_harness import BenchmarkConfig, LaunchVia
-from core.harness.run_benchmarks import _compute_locked_fields, _merge_benchmark_config
+from core.harness.run_benchmarks import (
+    _compute_locked_fields,
+    _merge_benchmark_config,
+    _resolve_expectation_validation_policy,
+)
 
 
 @dataclass
@@ -212,3 +216,42 @@ def test_merge_enforces_policy_invariants() -> None:
 
     assert merged.timeout_multiplier == base.timeout_multiplier
     assert merged.enforce_environment_validation == base.enforce_environment_validation
+
+
+def test_expectation_policy_strict_without_write_flags_is_preview_only() -> None:
+    validation_enabled, writes_enabled = _resolve_expectation_validation_policy(
+        validity_profile="strict",
+        update_expectations=False,
+        accept_regressions=False,
+        allow_mixed_provenance=False,
+        allow_portable_expectations_update=False,
+    )
+
+    assert validation_enabled is True
+    assert writes_enabled is False
+
+
+def test_expectation_policy_strict_with_update_flag_enables_writes() -> None:
+    validation_enabled, writes_enabled = _resolve_expectation_validation_policy(
+        validity_profile="strict",
+        update_expectations=True,
+        accept_regressions=False,
+        allow_mixed_provenance=False,
+        allow_portable_expectations_update=False,
+    )
+
+    assert validation_enabled is True
+    assert writes_enabled is True
+
+
+def test_expectation_policy_portable_requires_explicit_override_for_validation() -> None:
+    validation_enabled, writes_enabled = _resolve_expectation_validation_policy(
+        validity_profile="portable",
+        update_expectations=True,
+        accept_regressions=False,
+        allow_mixed_provenance=False,
+        allow_portable_expectations_update=False,
+    )
+
+    assert validation_enabled is False
+    assert writes_enabled is False

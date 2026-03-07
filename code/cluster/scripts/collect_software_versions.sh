@@ -32,6 +32,9 @@ if [[ -z "$OUTPUT" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
 if [[ -z "$VENV_PY" ]]; then
   VENV_PY="${ROOT_DIR}/env/venv/bin/python"
 fi

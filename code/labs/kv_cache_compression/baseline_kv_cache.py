@@ -142,7 +142,6 @@ class BaselineKVCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
             for decode in self.decode_inputs:
                 _ = self.model(decode, self.cache, offset)
                 offset += decode.shape[1]
-        torch.cuda.synchronize()
         # Capture a slice of the cache as verification output
         if self.cache is not None:
             k_slice = self.cache.cache_k[:, : min(1, self.cache.cache_k.shape[1]), :1, : min(8, self.cache.cache_k.shape[-1])]

@@ -115,7 +115,6 @@ class OptimizedMemoryProfilingBenchmark(VerificationPayloadMixin, BaseBenchmark)
             # Store output for verification
             with torch.no_grad():
                 self.output = self.model(self.inputs).detach().clone()
-        self._synchronize()
         if self.inputs is None or self.targets is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

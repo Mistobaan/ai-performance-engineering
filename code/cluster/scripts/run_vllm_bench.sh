@@ -26,8 +26,14 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-OUT_STRUCT="${ROOT_DIR}/results/structured"
-OUT_RAW="${ROOT_DIR}/results/raw"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_STRUCT="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+OUT_RAW="${CLUSTER_RAW_DIR_EFFECTIVE}"
 VENV_PY="${ROOT_DIR}/env/venv/bin/python"
 VLLM_BIN="${ROOT_DIR}/env/venv/bin/vllm"
 

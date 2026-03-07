@@ -168,7 +168,6 @@ class OptimizedOverlapDdpBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.optimizer.step()
             self.optimizer.zero_grad()
         self.output = output.detach()
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.data is None or self.target is None or self.output is None:

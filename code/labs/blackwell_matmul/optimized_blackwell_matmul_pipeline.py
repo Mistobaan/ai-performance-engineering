@@ -53,10 +53,8 @@ class PipelineGraceBlackwellBenchmark(GraceBlackwellMatmulBenchmark):
         )
         self.required_capabilities = {}
 
-
-
-def get_benchmark(size: int = 2048) -> GraceBlackwellMatmulBenchmark:
-    return PipelineGraceBlackwellBenchmark(size=size)
+def get_benchmark() -> GraceBlackwellMatmulBenchmark:
+    return PipelineGraceBlackwellBenchmark()
 
 
 if __name__ == "__main__":

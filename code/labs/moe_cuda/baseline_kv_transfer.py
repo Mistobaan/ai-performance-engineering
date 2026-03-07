@@ -78,7 +78,6 @@ class BaselineKVTransferBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 out = torch.matmul(chunk, self.weight)
                 self.workspace[i].copy_(out)
                 self.kv_dest[i].copy_(self.workspace[i])
-        self._synchronize()
         # Verification: capture first chunk output (common across optimized variants)
         self.output = self.kv_dest[0, :1, : min(8, self.hidden_size)].detach().float().clone()
         if self.output is None:

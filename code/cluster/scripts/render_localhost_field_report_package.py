@@ -23,6 +23,13 @@ def load_json(path: Path) -> dict[str, Any]:
         return json.load(f)
 
 
+def load_json_optional(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def read_csv_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         raise FileNotFoundError(f"missing required artifact: {path}")
@@ -43,6 +50,24 @@ def fmt_float(value: float, digits: int = 3) -> str:
 
 def md_link(rel_path: str) -> str:
     return f"[{rel_path}]({rel_path})"
+
+
+def _resolve_run_dir(cluster_root: Path, run_id: str, raw_run_dir: str | None) -> Path:
+    return Path(raw_run_dir).resolve() if raw_run_dir else (cluster_root / "runs" / run_id)
+
+
+def _artifact_ref(run_dir: Path, target: str, subdir: str | None, name: str) -> tuple[str, Path]:
+    path = (run_dir / subdir / name) if subdir else (run_dir / name)
+    if target == "published":
+        prefix = "published/current"
+        link = f"{prefix}/{subdir}/{name}" if subdir else f"{prefix}/{name}"
+    else:
+        link = f"../{subdir}/{name}" if subdir else f"../{name}"
+    return link, path
+
+
+def _run_local_report_path(run_dir: Path, filename: str) -> Path:
+    return run_dir / "reports" / filename
 
 
 def parse_gpu_count(meta_payload: dict[str, Any]) -> int:
@@ -93,6 +118,14 @@ def pick_timeline_rows(steps: list[dict[str, Any]]) -> list[dict[str, str]]:
 
 
 def summarize_quick_friction(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {
+            "status": "not_run",
+            "failed": [],
+            "passed": [],
+            "expected_failed": [],
+            "unexpected_failed": [],
+        }
     failed = payload.get("failed_checks") or []
     passed = payload.get("passed_checks") or []
     expected_failed = payload.get("expected_failed_checks") or []
@@ -107,6 +140,13 @@ def summarize_quick_friction(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def summarize_monitoring(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {
+            "status": "not_run",
+            "control_plane": "not_run",
+            "gpu_telemetry": "not_run",
+            "system_signals": "not_run",
+        }
     categories = payload.get("categories") or {}
     return {
         "status": str(payload.get("status") or "error"),
@@ -164,49 +204,51 @@ def tail_latency_issue_status(vllm_rows: list[dict[str, Any]]) -> str:
     return "Not observed in this localhost canary sweep"
 
 
-def render_report(args: argparse.Namespace) -> str:
+def render_report(args: argparse.Namespace, *, target: str = "run_local") -> str:
     run_id = args.run_id
     label = args.label
+    run_dir = args.run_dir
 
-    manifest_rel = f"results/structured/{run_id}_manifest.json"
-    suite_rel = f"results/structured/{run_id}_suite_steps.json"
-    meta_rel = f"results/structured/{run_id}_{label}_meta.json"
-    hang_rel = f"results/structured/{run_id}_{label}_hang_triage_readiness.json"
-    quick_rel = f"results/structured/{run_id}_{label}_quick_friction.json"
-    mon_rel = f"results/structured/{run_id}_{label}_monitoring_expectations.json"
-    op_dash_rel = f"results/structured/{run_id}_operator_checks_dashboard.json"
-    conn_rel = f"results/structured/{run_id}_torchrun_connectivity_probe.json"
-    nccl_env_rel = f"results/structured/{run_id}_nccl_env_sensitivity.json"
-    nccl_rel = f"results/structured/{run_id}_node1_nccl.json"
-    vllm_csv_rel = f"results/structured/{run_id}_{label}_vllm_serve_sweep.csv"
-    vllm_jsonl_rel = f"results/structured/{run_id}_{label}_vllm_serve_sweep.jsonl"
-    gemm_rel = f"results/structured/{run_id}_{label}_gemm_gpu_sanity.csv"
-    fio_rel = f"results/structured/{run_id}_{label}_fio.json"
-    preflight_rel = f"results/structured/{run_id}_preflight_services.json"
-    nvlink_rel = f"results/structured/{run_id}_{label}_meta_nvlink_topology.json"
+    manifest_rel, manifest_path = _artifact_ref(run_dir, target, None, "manifest.json")
+    suite_rel, suite_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_suite_steps.json")
+    meta_rel, meta_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_meta.json")
+    hang_rel, hang_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_hang_triage_readiness.json")
+    quick_rel, quick_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_quick_friction.json")
+    mon_rel, mon_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_monitoring_expectations.json")
+    op_dash_rel, op_dash_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_operator_checks_dashboard.json")
+    conn_rel, conn_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_torchrun_connectivity_probe.json")
+    nccl_env_rel, nccl_env_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_nccl_env_sensitivity.json")
+    nccl_rel, nccl_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_node1_nccl.json")
+    vllm_csv_rel, vllm_csv_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_vllm_serve_sweep.csv")
+    vllm_jsonl_rel, _ = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_vllm_serve_sweep.jsonl")
+    gemm_rel, _ = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_gemm_gpu_sanity.csv")
+    fio_rel, fio_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_fio.json")
+    preflight_rel, preflight_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_preflight_services.json")
+    nvlink_rel, nvlink_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_meta_nvlink_topology.json")
+    node_parity_rel, _ = _artifact_ref(run_dir, target, "structured", f"{run_id}_node_parity_summary.json")
 
-    nccl_fig_rel = f"docs/figures/{run_id}_node1_nccl_bw_vs_msg.png"
-    nccl_scale_fig_rel = f"docs/figures/{run_id}_node1_nccl_scaling_efficiency.png"
-    vllm_tok_fig_rel = f"docs/figures/{run_id}_{label}_vllm_serve_total_tok_s_vs_concurrency.png"
-    vllm_ttft_fig_rel = f"docs/figures/{run_id}_{label}_vllm_serve_ttft_vs_concurrency.png"
-    env_fig_rel = f"docs/figures/{run_id}_nccl_env_sensitivity.png"
-    operator_fig_rel = f"docs/figures/{run_id}_operator_checks_dashboard.png"
-    story_fig_rel = f"docs/figures/{run_id}_cluster_story_dashboard.png"
-    nvlink_fig_rel = f"docs/figures/{run_id}_{label}_meta_nvlink_topology.png"
+    nccl_fig_rel, nccl_fig_path = _artifact_ref(run_dir, target, "figures", f"{run_id}_node1_nccl_bw_vs_msg.png")
+    nccl_scale_fig_rel, _ = _artifact_ref(run_dir, target, "figures", f"{run_id}_node1_nccl_scaling_efficiency.png")
+    vllm_tok_fig_rel, _ = _artifact_ref(run_dir, target, "figures", f"{run_id}_{label}_vllm_serve_total_tok_s_vs_concurrency.png")
+    vllm_ttft_fig_rel, _ = _artifact_ref(run_dir, target, "figures", f"{run_id}_{label}_vllm_serve_ttft_vs_concurrency.png")
+    env_fig_rel, _ = _artifact_ref(run_dir, target, "figures", f"{run_id}_nccl_env_sensitivity.png")
+    operator_fig_rel, operator_fig_path = _artifact_ref(run_dir, target, "figures", f"{run_id}_operator_checks_dashboard.png")
+    story_fig_rel, _ = _artifact_ref(run_dir, target, "figures", f"{run_id}_cluster_story_dashboard.png")
+    nvlink_fig_rel, _ = _artifact_ref(run_dir, target, "figures", f"{run_id}_{label}_meta_nvlink_topology.png")
 
-    root = args.root
-    manifest = load_json(root / manifest_rel)
-    steps = load_json(root / suite_rel)
-    meta = load_json(root / meta_rel)
-    hang = load_json(root / hang_rel)
-    quick = load_json(root / quick_rel)
-    mon = load_json(root / mon_rel)
-    conn = load_json(root / conn_rel)
-    nccl_env = load_json(root / nccl_env_rel)
-    nccl = load_json(root / nccl_rel)
-    preflight = load_json(root / preflight_rel)
-    nvlink = load_json(root / nvlink_rel)
-    vllm_rows = summarize_vllm_rows(read_csv_rows(root / vllm_csv_rel))
+    manifest = load_json(manifest_path)
+    steps = load_json(suite_path)
+    meta = load_json(meta_path)
+    hang = load_json(hang_path)
+    quick = load_json_optional(quick_path)
+    mon = load_json_optional(mon_path)
+    operator_dashboard = load_json_optional(op_dash_path)
+    conn = load_json(conn_path)
+    nccl_env = load_json(nccl_env_path)
+    nccl = load_json(nccl_path)
+    preflight = load_json(preflight_path)
+    nvlink = load_json(nvlink_path)
+    vllm_rows = summarize_vllm_rows(read_csv_rows(vllm_csv_path))
 
     ok_steps, total_steps, failed_steps = parse_suite_summary(steps)
     gpu_count = parse_gpu_count(meta)
@@ -230,6 +272,8 @@ def render_report(args: argparse.Namespace) -> str:
             break
 
     now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    has_operator_checks = quick is not None or mon is not None or operator_dashboard is not None
+    has_operator_fig = operator_fig_path.exists()
 
     lines: list[str] = []
     lines.append("# Cluster Perf Field Report (Localhost, 1 Node)")
@@ -264,7 +308,14 @@ def render_report(args: argparse.Namespace) -> str:
     lines.append(f"| Suite status | `{ok_steps}/{total_steps}` steps green; `validate_required_artifacts={validate_rc}` |")
     lines.append(f"| Networking headline | NCCL single-node peak algbw `{fmt_float(nccl_peak_algbw, 1)} GB/s` ({nccl_peak_size} bytes); connectivity probe `{fmt_float(payload_algbw, 3)} GB/s` payload algbw |")
     lines.append(f"| Inference headline | vLLM total throughput `{fmt_float(first_vllm['total_tok_s'], 3)} tok/s` (c={first_vllm['concurrency']}) -> `{fmt_float(last_vllm['total_tok_s'], 3)} tok/s` (c={last_vllm['concurrency']}); p99 TTFT `{fmt_float(first_vllm['p99_ttft_ms'], 3)} ms` -> `{fmt_float(last_vllm['p99_ttft_ms'], 3)} ms` |")
-    lines.append(f"| Operator checks | quick_friction `{qf['status']}` (pass={len(qf['passed'])}, failed={len(qf['failed'])}, expected={len(qf['expected_failed'])}, unexpected={len(qf['unexpected_failed'])}), monitoring_expectations `{mon_sum['status']}` |")
+    operator_summary = (
+        f"quick_friction `{qf['status']}` (pass={len(qf['passed'])}, failed={len(qf['failed'])}, "
+        f"expected={len(qf['expected_failed'])}, unexpected={len(qf['unexpected_failed'])}), "
+        f"monitoring_expectations `{mon_sum['status']}`"
+    )
+    if not has_operator_checks:
+        operator_summary = "not run in this preset"
+    lines.append(f"| Operator checks | {operator_summary} |")
     lines.append("| Key weird/new | Single-node NCCL env sweep can show `busbw=0.0` by definition (rank=1), while algbw is still strong. |")
     lines.append("")
 
@@ -277,8 +328,8 @@ def render_report(args: argparse.Namespace) -> str:
     lines.append(f"| Canonical manifest | {md_link(manifest_rel)} |")
     lines.append(f"| Canonical suite steps | {md_link(suite_rel)} |")
     lines.append(f"| Meta snapshot | {md_link(meta_rel)} |")
-    lines.append(f"| Node parity summary | {md_link(f'results/structured/{run_id}_node_parity_summary.json')} |")
-    lines.append(f"| Operator checks dashboard | {md_link(op_dash_rel)} |")
+    lines.append(f"| Node parity summary | {md_link(node_parity_rel)} |")
+    lines.append(f"| Operator checks dashboard | {md_link(op_dash_rel) if operator_dashboard else 'not generated in this preset'} |")
     lines.append("")
 
     lines.append("## Required Reliability Gates (Canonical Run)")
@@ -298,13 +349,24 @@ def render_report(args: argparse.Namespace) -> str:
     lines.append("| --- | --- | --- | --- |")
     qf_diag = f"pass={len(qf['passed'])}, failed={len(qf['failed'])}, expected_failed={','.join(qf['expected_failed']) or 'none'}, unexpected_failed={','.join(qf['unexpected_failed']) or 'none'}"
     mon_diag = f"control_plane={mon_sum['control_plane']}, gpu_telemetry={mon_sum['gpu_telemetry']}, system_signals={mon_sum['system_signals']}"
-    lines.append(f"| quick_friction | `{qf['status']}` | {qf_diag} | {md_link(quick_rel)} |")
-    lines.append(f"| monitoring_expectations | `{mon_sum['status']}` | {mon_diag} | {md_link(mon_rel)} |")
-    lines.append(f"| operator dashboard | generated | consolidated status for quick-friction + monitoring expectations | {md_link(op_dash_rel)} |")
+    lines.append(f"| quick_friction | `{qf['status']}` | {qf_diag if quick else 'not run in this preset'} | {md_link(quick_rel) if quick else 'not generated'} |")
+    lines.append(f"| monitoring_expectations | `{mon_sum['status']}` | {mon_diag if mon else 'not run in this preset'} | {md_link(mon_rel) if mon else 'not generated'} |")
+    lines.append(f"| operator dashboard | {'generated' if operator_dashboard else 'not generated'} | consolidated status for quick-friction + monitoring expectations | {md_link(op_dash_rel) if operator_dashboard else 'not generated'} |")
     lines.append("")
-    lines.append(f"<p><a href=\"{operator_fig_rel}\"><img src=\"{operator_fig_rel}\" alt=\"Operator checks dashboard localhost\" width=\"920\"/></a></p>")
-    lines.append("")
-    lines.append(f"Data: {md_link(quick_rel)}, {md_link(mon_rel)}, {md_link(op_dash_rel)}")
+    if has_operator_fig:
+        lines.append(f"<p><a href=\"{operator_fig_rel}\"><img src=\"{operator_fig_rel}\" alt=\"Operator checks dashboard localhost\" width=\"920\"/></a></p>")
+        lines.append("")
+    if has_operator_checks:
+        operator_data = []
+        if quick:
+            operator_data.append(md_link(quick_rel))
+        if mon:
+            operator_data.append(md_link(mon_rel))
+        if operator_dashboard:
+            operator_data.append(md_link(op_dash_rel))
+        lines.append(f"Data: {', '.join(operator_data)}")
+    else:
+        lines.append("Data: operator-friction and monitoring artifacts were not requested in this preset run.")
     lines.append("")
 
     lines.append("## Cluster Story (First Contact)")
@@ -325,19 +387,22 @@ def render_report(args: argparse.Namespace) -> str:
     lines.append(f"| Preflight services | strict service checks pass | prior flake path removed (`systemctl show`-based unit check) | avoids false-negative invalidations | {md_link(preflight_rel)} |")
     lines.append(f"| NVLink topology parsing | topology summary generated | parser now handles single-GPU header formats robustly | keeps topology evidence reproducible on localhost | {md_link(nvlink_rel)} |")
     lines.append(f"| NCCL env sweep | all profiles `ok` | `busbw=0.0` in rank-1 mode looks odd but is expected | prevents false network conclusions on 1-GPU runs | {md_link(nccl_env_rel)} |")
-    lines.append(f"| Operator friction | full quick-friction battery executed | expected failures captured explicitly (`{','.join(qf['expected_failed']) or 'none'}`) | preserves operator visibility without false-red localhost status | {md_link(quick_rel)} |")
-    lines.append(f"| Monitoring mode | gpu/system checks run | control-plane checks can be `not_applicable` without kubeconfig | clarifies expected non-K8s behavior | {md_link(mon_rel)} |")
+    lines.append(f"| Operator friction | {'full quick-friction battery executed' if quick else 'not run in this preset'} | expected failures captured explicitly (`{','.join(qf['expected_failed']) or 'none'}` if present) | preserves operator visibility without false-red localhost status | {md_link(quick_rel) if quick else md_link(suite_rel)} |")
+    lines.append(f"| Monitoring mode | {'gpu/system checks run' if mon else 'not run in this preset'} | control-plane checks can be `not_applicable` without kubeconfig | clarifies expected non-K8s behavior | {md_link(mon_rel) if mon else md_link(suite_rel)} |")
     lines.append("")
     lines.append("### Deep-Dive Findings")
     lines.append("| Finding | Baseline anchor | Reinforcement insight | Evidence |")
     lines.append("| --- | --- | --- | --- |")
     lines.append(f"| 1 | Preflight services | service gate remains strict while eliminating pipeline flake behavior | {md_link(preflight_rel)} |")
     lines.append(f"| 2 | NVLink topology parsing | single-node topology visual now lands in canonical package consistently | {md_link(nvlink_rel)} |")
-    lines.append(f"| 3 | Operator friction classification | expected misses are tracked separately from unexpected failures | {md_link(quick_rel)} |")
+    lines.append(f"| 3 | Operator friction classification | expected misses are tracked separately from unexpected failures when operator checks are enabled | {md_link(quick_rel) if quick else md_link(suite_rel)} |")
     lines.append("")
     lines.append(f"<p><a href=\"{story_fig_rel}\"><img src=\"{story_fig_rel}\" alt=\"Weird and normal baseline dashboard localhost\" width=\"920\"/></a></p>")
     lines.append("")
-    lines.append(f"Data: {md_link(preflight_rel)}, {md_link(nvlink_rel)}, {md_link(op_dash_rel)}")
+    deep_dive_data = [md_link(preflight_rel), md_link(nvlink_rel)]
+    if operator_dashboard:
+        deep_dive_data.append(md_link(op_dash_rel))
+    lines.append(f"Data: {', '.join(deep_dive_data)}")
     lines.append("")
 
     lines.append("## Benchmark A (Networking Story)")
@@ -390,7 +455,7 @@ def render_report(args: argparse.Namespace) -> str:
     lines.append("| --- | --- | --- | --- |")
     lines.append(f"| `preflight_services` false negatives | pipeline-based unit detection could produce flaky non-zero under strict shell options | use `systemctl show -p LoadState` for deterministic service presence checks | clean preflight status in {md_link(preflight_rel)} and step rc=0 in {md_link(suite_rel)} |")
     lines.append(f"| NVLink parser robustness | topology parser assumptions missed some single-GPU header patterns | robust tokenization and header parsing | topology summary/figure generated: {md_link(nvlink_rel)} and {md_link(nvlink_fig_rel)} |")
-    lines.append(f"| Quick-friction false-red localhost | missing optional internet/operator tools should be visible but classifiable | added expected-failure classification (`expected_failed_checks`) and auto localhost allowlist | quick-friction artifact shows expected vs unexpected failures: {md_link(quick_rel)} |")
+    lines.append(f"| Quick-friction false-red localhost | missing optional internet/operator tools should be visible but classifiable | added expected-failure classification (`expected_failed_checks`) and auto localhost allowlist | " + (f"quick-friction artifact shows expected vs unexpected failures: {md_link(quick_rel)}" if quick else f"operator-check path is optional in this preset: {md_link(suite_rel)}") + " |")
     lines.append("")
 
     lines.append("## Report Completeness Delta (vs prior condensed revision)")
@@ -432,16 +497,22 @@ def render_report(args: argparse.Namespace) -> str:
     lines.append("| Step | Command |")
     lines.append("| --- | --- |")
     lines.append(
-        "| Run localhost canonical full package | `sg docker -c \"cluster/scripts/run_cluster_eval_suite.sh --run-id "
+        "| Run localhost common system eval | `python -m cli.aisp cluster common-eval --preset core-system --run-id "
         + run_id
         + " --hosts localhost --labels "
         + label
         + " --ssh-user $(id -un) --primary-label "
         + label
-        + " --skip-bootstrap-nodes --disable-fp4 --health-suite off --skip-vllm-multinode --model openai-community/gpt2 --tp 1 --isl 128 --osl 64 --concurrency-range '1 2' --fio-runtime 15 --skip-nvbandwidth\"` |"
+        + " --timeout 7200 --extra-arg --skip-bootstrap-nodes --extra-arg --disable-fp4 --extra-arg --health-suite --extra-arg off --extra-arg --skip-vllm-multinode --extra-arg --model --extra-arg openai-community/gpt2 --extra-arg --tp --extra-arg 1 --extra-arg --isl --extra-arg 128 --extra-arg --osl --extra-arg 64 --extra-arg --concurrency-range --extra-arg '1 2' --extra-arg --vllm-request-rate-range --extra-arg '1 2' --extra-arg --vllm-request-rate-max-concurrency --extra-arg 4 --extra-arg --vllm-request-rate-num-prompts --extra-arg 80 --extra-arg --fio-runtime --extra-arg 15 --extra-arg --nvbandwidth-quick` |"
     )
     lines.append(
-        "| Validate localhost report package | `cluster/scripts/validate_field_report_requirements.sh --report cluster/field-report-localhost.md --notes cluster/field-report-localhost-notes.md --canonical-run-id "
+        "| Validate localhost report package | `cluster/scripts/validate_field_report_requirements.sh --report "
+        + (
+            (f"cluster/runs/{run_id}/reports/field-report-localhost.md --notes cluster/runs/{run_id}/reports/field-report-localhost-notes.md")
+            if target == "run_local"
+            else "cluster/field-report-localhost.md --notes cluster/field-report-localhost-notes.md"
+        )
+        + " --canonical-run-id "
         + run_id
         + "` |"
     )
@@ -452,9 +523,12 @@ def render_report(args: argparse.Namespace) -> str:
     lines.append("| --- | --- |")
     lines.append(f"| Manifest + suite | {md_link(manifest_rel)}, {md_link(suite_rel)} |")
     lines.append(f"| Reliability gates | {md_link(hang_rel)}, {md_link(conn_rel)}, {md_link(nccl_env_rel)} |")
-    lines.append(f"| Operator checks | {md_link(quick_rel)}, {md_link(mon_rel)}, {md_link(op_dash_rel)} |")
+    lines.append(f"| Operator checks | " + (f"{md_link(quick_rel)}, {md_link(mon_rel)}, {md_link(op_dash_rel)}" if has_operator_checks else md_link(suite_rel)) + " |")
     lines.append(f"| Core benchmarks | {md_link(nccl_rel)}, {md_link(vllm_csv_rel)}, {md_link(gemm_rel)}, {md_link(fio_rel)} |")
-    lines.append(f"| Figures | {md_link(story_fig_rel)}, {md_link(operator_fig_rel)}, {md_link(nccl_fig_rel)}, {md_link(vllm_tok_fig_rel)} |")
+    figure_links = [md_link(story_fig_rel), md_link(nccl_fig_rel), md_link(vllm_tok_fig_rel)]
+    if has_operator_fig:
+        figure_links.insert(1, md_link(operator_fig_rel))
+    lines.append(f"| Figures | {', '.join(figure_links)} |")
     lines.append("")
 
     lines.append("## Appendix (Coverage vs Case-Study Goals)")
@@ -476,21 +550,27 @@ def render_report(args: argparse.Namespace) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_notes(args: argparse.Namespace) -> str:
+def render_notes(args: argparse.Namespace, *, target: str = "run_local") -> str:
     run_id = args.run_id
     label = args.label
+    run_dir = args.run_dir
 
-    quick_rel = f"results/structured/{run_id}_{label}_quick_friction.json"
-    mon_rel = f"results/structured/{run_id}_{label}_monitoring_expectations.json"
-    op_dash_rel = f"results/structured/{run_id}_operator_checks_dashboard.json"
-    operator_fig_rel = f"docs/figures/{run_id}_operator_checks_dashboard.png"
-    manifest_rel = f"results/structured/{run_id}_manifest.json"
-    suite_rel = f"results/structured/{run_id}_suite_steps.json"
-    hang_rel = f"results/structured/{run_id}_{label}_hang_triage_readiness.json"
-    conn_rel = f"results/structured/{run_id}_torchrun_connectivity_probe.json"
-    nccl_env_rel = f"results/structured/{run_id}_nccl_env_sensitivity.json"
-    fio_rel = f"results/structured/{run_id}_{label}_fio.json"
-    vllm_csv_rel = f"results/structured/{run_id}_{label}_vllm_serve_sweep.csv"
+    quick_rel, quick_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_quick_friction.json")
+    mon_rel, mon_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_monitoring_expectations.json")
+    op_dash_rel, op_dash_path = _artifact_ref(run_dir, target, "structured", f"{run_id}_operator_checks_dashboard.json")
+    operator_fig_rel, operator_fig_path = _artifact_ref(run_dir, target, "figures", f"{run_id}_operator_checks_dashboard.png")
+    manifest_rel, _ = _artifact_ref(run_dir, target, None, "manifest.json")
+    suite_rel, _ = _artifact_ref(run_dir, target, "structured", f"{run_id}_suite_steps.json")
+    hang_rel, _ = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_hang_triage_readiness.json")
+    conn_rel, _ = _artifact_ref(run_dir, target, "structured", f"{run_id}_torchrun_connectivity_probe.json")
+    nccl_env_rel, _ = _artifact_ref(run_dir, target, "structured", f"{run_id}_nccl_env_sensitivity.json")
+    fio_rel, _ = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_fio.json")
+    vllm_csv_rel, _ = _artifact_ref(run_dir, target, "structured", f"{run_id}_{label}_vllm_serve_sweep.csv")
+    story_fig_rel, _ = _artifact_ref(run_dir, target, "figures", f"{run_id}_cluster_story_dashboard.png")
+    quick_exists = quick_path.exists()
+    mon_exists = mon_path.exists()
+    operator_dashboard_exists = op_dash_path.exists()
+    operator_fig_exists = operator_fig_path.exists()
 
     now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -517,7 +597,7 @@ def render_notes(args: argparse.Namespace) -> str:
     lines.append(f"| Canonical run | `{run_id}` |")
     lines.append(f"| Manifest | {md_link(manifest_rel)} |")
     lines.append(f"| Suite steps | {md_link(suite_rel)} |")
-    lines.append(f"| Operator dashboard | {md_link(op_dash_rel)} |")
+    lines.append(f"| Operator dashboard | {md_link(op_dash_rel) if operator_dashboard_exists else 'not generated in this preset'} |")
     lines.append("")
 
     lines.append("## Required Reliability Gates")
@@ -531,10 +611,10 @@ def render_notes(args: argparse.Namespace) -> str:
     lines.append("## Operator Friction + Monitoring")
     lines.append("| Check | Status | Evidence |")
     lines.append("| --- | --- | --- |")
-    lines.append(f"| quick_friction | see artifact | {md_link(quick_rel)} |")
-    lines.append(f"| monitoring_expectations | see artifact | {md_link(mon_rel)} |")
-    lines.append(f"| operator checks dashboard (json) | generated | {md_link(op_dash_rel)} |")
-    lines.append(f"| operator checks dashboard (fig) | generated | {md_link(operator_fig_rel)} |")
+    lines.append(f"| quick_friction | {'see artifact' if quick_exists else 'not run'} | {md_link(quick_rel) if quick_exists else md_link(suite_rel)} |")
+    lines.append(f"| monitoring_expectations | {'see artifact' if mon_exists else 'not run'} | {md_link(mon_rel) if mon_exists else md_link(suite_rel)} |")
+    lines.append(f"| operator checks dashboard (json) | {'generated' if operator_dashboard_exists else 'not generated'} | {md_link(op_dash_rel) if operator_dashboard_exists else md_link(suite_rel)} |")
+    lines.append(f"| operator checks dashboard (fig) | {'generated' if operator_fig_exists else 'not generated'} | {md_link(operator_fig_rel) if operator_fig_exists else md_link(suite_rel)} |")
     lines.append("")
 
     lines.append("## Required Issue Ledger")
@@ -552,28 +632,28 @@ def render_notes(args: argparse.Namespace) -> str:
     lines.append("| --- | --- | --- | --- |")
     lines.append("| preflight false negatives | pipeline-based service probing could be flaky under strict shell behavior | switch to deterministic `systemctl show -p LoadState` checks | clean preflight in canonical suite steps |")
     lines.append("| NVLink topology parse fragility | header parsing assumptions were too strict | parser robustness for single-GPU/non-tab layouts | topology summary + figure generated in canonical package |")
-    lines.append("| quick-friction red-state noise on localhost | optional external tools may be absent by design | expected-failure classification (`expected_failed_checks` vs `unexpected_failed_checks`) | quick_friction artifact includes both lists |")
+    lines.append("| quick-friction red-state noise on localhost | optional external tools may be absent by design | expected-failure classification (`expected_failed_checks` vs `unexpected_failed_checks`) | operator checks are either evidenced directly or marked as skipped in this preset |")
     lines.append("")
 
     lines.append("## Evidence Matrix")
     lines.append("| Claim | Evidence | Verdict |")
     lines.append("| --- | --- | --- |")
     lines.append(f"| Localhost suite is clean | {md_link(suite_rel)} | Backed |")
-    lines.append(f"| Operator checks are included | {md_link(quick_rel)}, {md_link(mon_rel)}, {md_link(op_dash_rel)} | Backed |")
-    lines.append(f"| Visual package is present | {md_link(operator_fig_rel)} | Backed |")
+    lines.append(f"| Operator checks are {'included' if quick_exists or mon_exists or operator_dashboard_exists else 'optional and skipped in this preset'} | " + (f"{md_link(quick_rel)}, {md_link(mon_rel)}, {md_link(op_dash_rel)}" if quick_exists or mon_exists or operator_dashboard_exists else md_link(suite_rel)) + " | Backed |")
+    lines.append(f"| Visual package is present | " + (md_link(operator_fig_rel) if operator_fig_exists else md_link(story_fig_rel)) + " | Backed |")
     lines.append("")
 
     lines.append("## Repro Entry Point")
     lines.append("| Step | Command |")
     lines.append("| --- | --- |")
     lines.append(
-        "| Re-run localhost canonical package | `sg docker -c \"cluster/scripts/run_cluster_eval_suite.sh --run-id "
+        "| Re-run localhost canonical package | `python -m cli.aisp cluster common-eval --preset core-system --run-id "
         + run_id
         + " --hosts localhost --labels "
         + label
         + " --ssh-user $(id -un) --primary-label "
         + label
-        + " --skip-bootstrap-nodes --disable-fp4 --health-suite off --skip-vllm-multinode --model openai-community/gpt2 --tp 1 --isl 128 --osl 64 --concurrency-range '1 2' --fio-runtime 15 --skip-nvbandwidth\"` |"
+        + " --timeout 7200 --extra-arg --skip-bootstrap-nodes --extra-arg --disable-fp4 --extra-arg --health-suite --extra-arg off --extra-arg --skip-vllm-multinode --extra-arg --model --extra-arg openai-community/gpt2 --extra-arg --tp --extra-arg 1 --extra-arg --isl --extra-arg 128 --extra-arg --osl --extra-arg 64 --extra-arg --concurrency-range --extra-arg '1 2' --extra-arg --vllm-request-rate-range --extra-arg '1 2' --extra-arg --vllm-request-rate-max-concurrency --extra-arg 4 --extra-arg --vllm-request-rate-num-prompts --extra-arg 80 --extra-arg --fio-runtime --extra-arg 15 --extra-arg --nvbandwidth-quick` |"
     )
 
     return "\n".join(lines) + "\n"
@@ -583,29 +663,42 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Render localhost field-report package from a canonical run ID.")
     parser.add_argument("--run-id", required=True, help="Canonical run ID (example: 2026-02-24_localhost_fullsuite_r4)")
     parser.add_argument("--label", default="localhost", help="Host label used in structured artifact names (default: localhost)")
-    parser.add_argument("--report", default="cluster/field-report-localhost.md", help="Output report markdown path")
-    parser.add_argument("--notes", default="cluster/field-report-localhost-notes.md", help="Output notes markdown path")
-    parser.add_argument("--root", default="cluster", help="Cluster root directory (default: cluster)")
+    parser.add_argument("--report", default="", help="Run-local report markdown path (default: <run_dir>/reports/field-report-localhost.md)")
+    parser.add_argument("--notes", default="", help="Run-local notes markdown path (default: <run_dir>/reports/field-report-localhost-notes.md)")
+    parser.add_argument("--publish-report", default="", help="Optional published report markdown path")
+    parser.add_argument("--publish-notes", default="", help="Optional published notes markdown path")
+    parser.add_argument("--root", default=None, help="Cluster root directory (default: auto-detect from script location)")
+    parser.add_argument("--run-dir", default="", help="Canonical run directory (default: <cluster_root>/runs/<run_id>)")
     args = parser.parse_args()
 
-    root = Path(args.root).resolve()
+    root = Path(args.root).resolve() if args.root else Path(__file__).resolve().parents[1]
     args.root = root
+    args.run_dir = _resolve_run_dir(root, args.run_id, args.run_dir or None)
 
-    report_text = render_report(args)
-    notes_text = render_notes(args)
+    report_path = Path(args.report).resolve() if args.report else _run_local_report_path(args.run_dir, "field-report-localhost.md")
+    notes_path = Path(args.notes).resolve() if args.notes else _run_local_report_path(args.run_dir, "field-report-localhost-notes.md")
 
-    report_path = Path(args.report)
-    if not report_path.is_absolute():
-        report_path = (Path.cwd() / report_path).resolve()
-    notes_path = Path(args.notes)
-    if not notes_path.is_absolute():
-        notes_path = (Path.cwd() / notes_path).resolve()
+    report_text = render_report(args, target="run_local")
+    notes_text = render_notes(args, target="run_local")
 
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    notes_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report_text, encoding="utf-8")
     notes_path.write_text(notes_text, encoding="utf-8")
 
     print(f"Wrote {report_path}")
     print(f"Wrote {notes_path}")
+
+    if args.publish_report:
+        publish_report_path = Path(args.publish_report).resolve()
+        publish_report_path.parent.mkdir(parents=True, exist_ok=True)
+        publish_report_path.write_text(render_report(args, target="published"), encoding="utf-8")
+        print(f"Wrote {publish_report_path}")
+    if args.publish_notes:
+        publish_notes_path = Path(args.publish_notes).resolve()
+        publish_notes_path.parent.mkdir(parents=True, exist_ok=True)
+        publish_notes_path.write_text(render_notes(args, target="published"), encoding="utf-8")
+        print(f"Wrote {publish_notes_path}")
     return 0
 
 

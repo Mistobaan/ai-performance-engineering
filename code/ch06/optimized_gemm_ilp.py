@@ -60,7 +60,6 @@ class OptimizedILPBenchmark(VerificationPayloadMixin, BaseBenchmark):
             for _ in range(self.repeats):
                 self._extension.unrolled_ilp(dst, src)
                 src, dst = dst, (buf1 if dst is buf0 else buf0)
-            self._synchronize()
 
         self.output = src[:1024].detach().clone()
         if self.output is None:

@@ -87,8 +87,9 @@ class OptimizedNvlinkTopologyAwareBenchmark(VerificationPayloadMixin, BaseBenchm
             for stream, (src_id, dst_id), src, dst in zip(self.streams, self.pairs, self.src, self.dst):
                 with torch.cuda.device(dst_id), torch.cuda.stream(stream):
                     dst.copy_(src, non_blocking=True)
-            for stream in self.streams:
-                stream.synchronize()
+            for stream, (_, dst_id) in zip(self.streams, self.pairs):
+                with torch.cuda.device(dst_id):
+                    torch.cuda.current_stream(dst_id).wait_stream(stream)
         self.output = self.dst[0]
 
     def capture_verification_payload(self) -> None:

@@ -135,7 +135,6 @@ class BaselineGraphBreakControlFlowBenchmark(VerificationPayloadMixin, BaseBench
         with torch.no_grad(), self._nvtx_range("baseline_graph_break_control_flow"):
             self._last_b = b
             self.output = self.compiled_model(self.a, b)
-        self._synchronize()
         if self.output is None or self._last_b is None:
             raise RuntimeError("benchmark_fn() must produce output")
 

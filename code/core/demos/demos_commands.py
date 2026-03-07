@@ -29,6 +29,12 @@ except ImportError:  # pragma: no cover - Typer is optional for docs builds
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+from core.utils.python_entrypoints import (
+    build_python_entry_command,
+    build_repo_python_env,
+    build_torchrun_entry_command,
+)
+
 
 class LaunchVia(str, Enum):
     PYTHON = "python"
@@ -41,6 +47,7 @@ class DemoSpec:
     script_path: Path
     description: str
     launch_via: LaunchVia
+    module_name: Optional[str] = None
 
 
 DEMOS: Dict[str, DemoSpec] = {
@@ -73,24 +80,28 @@ DEMOS: Dict[str, DemoSpec] = {
         script_path=REPO_ROOT / "ch11" / "stream_overlap_demo.py",
         description="Chapter 11 CUDA stream overlap demo (non-benchmark).",
         launch_via=LaunchVia.PYTHON,
+        module_name="ch11.stream_overlap_demo",
     ),
     "ch11-stream-priority": DemoSpec(
         name="ch11-stream-priority",
         script_path=REPO_ROOT / "ch11" / "stream_priority_demo.py",
         description="Chapter 11 CUDA stream priority demo (non-benchmark).",
         launch_via=LaunchVia.PYTHON,
+        module_name="ch11.stream_priority_demo",
     ),
     "ch11-memory-async": DemoSpec(
         name="ch11-memory-async",
         script_path=REPO_ROOT / "ch11" / "memory_async_demo.py",
         description="Chapter 11 async copy/compute overlap demo (non-benchmark).",
         launch_via=LaunchVia.PYTHON,
+        module_name="ch11.memory_async_demo",
     ),
     "ch11-event-timing": DemoSpec(
         name="ch11-event-timing",
         script_path=REPO_ROOT / "ch11" / "event_timing_demo.py",
         description="Chapter 11 CUDA event timing demo (non-benchmark).",
         launch_via=LaunchVia.PYTHON,
+        module_name="ch11.event_timing_demo",
     ),
     "ch11-streams-overlap-cuda": DemoSpec(
         name="ch11-streams-overlap-cuda",
@@ -115,18 +126,21 @@ DEMOS: Dict[str, DemoSpec] = {
         script_path=REPO_ROOT / "ch12" / "graph_capture_demo.py",
         description="Chapter 12 CUDA graph capture demo (non-benchmark).",
         launch_via=LaunchVia.PYTHON,
+        module_name="ch12.graph_capture_demo",
     ),
     "ch12-graph-replay": DemoSpec(
         name="ch12-graph-replay",
         script_path=REPO_ROOT / "ch12" / "graph_replay_benchmark.py",
         description="Chapter 12 CUDA graph replay microbenchmark demo (non-benchmark).",
         launch_via=LaunchVia.PYTHON,
+        module_name="ch12.graph_replay_benchmark",
     ),
     "ch12-instantiation-overhead": DemoSpec(
         name="ch12-instantiation-overhead",
         script_path=REPO_ROOT / "ch12" / "instantiation_overhead_demo.py",
         description="Chapter 12 CUDA graph instantiation overhead demo (non-benchmark).",
         launch_via=LaunchVia.PYTHON,
+        module_name="ch12.instantiation_overhead_demo",
     ),
     "ch02-memory-transfer-pcie": DemoSpec(
         name="ch02-memory-transfer-pcie",
@@ -169,30 +183,35 @@ DEMOS: Dict[str, DemoSpec] = {
         script_path=REPO_ROOT / "ch15" / "tensor_parallel_demo.py",
         description="Chapter 15 tensor-parallel demo (torchrun required).",
         launch_via=LaunchVia.TORCHRUN,
+        module_name="ch15.tensor_parallel_demo",
     ),
     "ch15-pipeline-parallel": DemoSpec(
         name="ch15-pipeline-parallel",
         script_path=REPO_ROOT / "ch15" / "pipeline_parallel_demo.py",
         description="Chapter 15 pipeline-parallel demo (torchrun required).",
         launch_via=LaunchVia.TORCHRUN,
+        module_name="ch15.pipeline_parallel_demo",
     ),
     "ch15-expert-parallel": DemoSpec(
         name="ch15-expert-parallel",
         script_path=REPO_ROOT / "ch15" / "expert_parallel_demo.py",
         description="Chapter 15 expert-parallel demo (torchrun optional; local mode supported).",
         launch_via=LaunchVia.PYTHON,
+        module_name="ch15.expert_parallel_demo",
     ),
     "ch15-context-parallel": DemoSpec(
         name="ch15-context-parallel",
         script_path=REPO_ROOT / "ch15" / "context_parallel_demo.py",
         description="Chapter 15 context-parallel demo (torchrun required).",
         launch_via=LaunchVia.TORCHRUN,
+        module_name="ch15.context_parallel_demo",
     ),
     "ch15-speculative-decode": DemoSpec(
         name="ch15-speculative-decode",
         script_path=REPO_ROOT / "ch15" / "speculative_decode_demo.py",
         description="Chapter 15 speculative decoding demo runner (non-benchmark).",
         launch_via=LaunchVia.PYTHON,
+        module_name="ch15.speculative_decode_demo",
     ),
     "ch18-v1-engine-loop": DemoSpec(
         name="ch18-v1-engine-loop",
@@ -239,12 +258,17 @@ def _run_demo(
 
     requested_launch = (launch_via or "").strip().lower()
     resolved_launch = (launch_via or spec.launch_via.value).strip().lower()
+    env = build_repo_python_env(REPO_ROOT)
 
     if spec.launch_via == LaunchVia.TORCHRUN and requested_launch == LaunchVia.PYTHON.value:
         raise ValueError(f"Demo '{demo}' requires torchrun; cannot run with --launch-via=python.")
 
     if resolved_launch == LaunchVia.PYTHON.value:
-        cmd = [sys.executable, str(spec.script_path), *(demo_args or [])]
+        cmd = build_python_entry_command(
+            module_name=spec.module_name,
+            script_path=None if spec.module_name else spec.script_path,
+            argv=demo_args or [],
+        )
     elif resolved_launch == LaunchVia.TORCHRUN.value:
         torchrun_path = shutil.which("torchrun")
         if torchrun_path is None:
@@ -257,26 +281,23 @@ def _run_demo(
         if int(nproc_per_node) <= 0:
             raise ValueError(f"--nproc-per-node must be >= 1, got {nproc_per_node}")
 
-        cmd = [
+        if nnodes is not None and int(nnodes) <= 0:
+            raise ValueError(f"--nnodes must be >= 1, got {nnodes}")
+        cmd = build_torchrun_entry_command(
             torchrun_path,
-            "--nproc_per_node",
-            str(int(nproc_per_node)),
-        ]
-        if nnodes is not None:
-            if int(nnodes) <= 0:
-                raise ValueError(f"--nnodes must be >= 1, got {nnodes}")
-            cmd.extend(["--nnodes", str(int(nnodes))])
-        if rdzv_backend is not None:
-            cmd.extend(["--rdzv_backend", str(rdzv_backend)])
-        if rdzv_endpoint is not None:
-            cmd.extend(["--rdzv_endpoint", str(rdzv_endpoint)])
-
-        cmd.extend([str(spec.script_path), *(demo_args or [])])
+            module_name=spec.module_name,
+            script_path=None if spec.module_name else spec.script_path,
+            argv=demo_args or [],
+            nproc_per_node=int(nproc_per_node),
+            nnodes=nnodes,
+            rdzv_backend=rdzv_backend,
+            rdzv_endpoint=rdzv_endpoint,
+        )
     else:
         raise ValueError(
             f"Invalid --launch-via '{launch_via}'. Expected '{LaunchVia.PYTHON.value}' or '{LaunchVia.TORCHRUN.value}'."
         )
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, env=env)
     return int(result.returncode)
 
 

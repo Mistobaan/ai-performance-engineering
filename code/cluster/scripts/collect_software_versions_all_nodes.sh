@@ -25,7 +25,8 @@ SSH_USER="ubuntu"
 SSH_KEY="${SSH_KEY:-}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-OUT_DIR="${ROOT_DIR}/results/structured"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 SCRIPT_PATH="${ROOT_DIR}/scripts/collect_software_versions.sh"
 
 while [[ $# -gt 0 ]]; do
@@ -46,6 +47,8 @@ if [[ -z "$HOSTS" ]]; then
   exit 2
 fi
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_DIR"
 
 SSH_OPTS=(

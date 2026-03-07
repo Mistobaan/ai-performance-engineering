@@ -9,6 +9,7 @@ Usage:
 Runs fio storage benchmarks on each host and writes:
   results/structured/<run_id>_<label>_fio.json
   results/structured/<run_id>_<label>_fio.csv
+  results/structured/<run_id>_<label>_fio_stability.json
 
 Options:
   --run-id <id>          RUN_ID prefix (default: YYYY-MM-DD)
@@ -21,6 +22,7 @@ Options:
   --test-dir <path>      fio test directory (default: /tmp)
   --file-size <size>     fio size per job (default: 8G)
   --runtime <sec>        fio runtime seconds (default: 60)
+  --repeats <n>          fio repetitions per host (default: 1)
   --numjobs <n>          fio numjobs (default: 4)
   --iodepth <n>          fio iodepth for random tests (default: 64)
   --bs-seq <size>        fio block size for seq tests (default: 1M)
@@ -29,6 +31,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 HOSTS=""
 LABELS=""
@@ -39,6 +43,7 @@ REMOTE_ROOT="${REMOTE_ROOT:-$ROOT_DIR}"
 TEST_DIR="${TEST_DIR:-/tmp}"
 FILE_SIZE="${FILE_SIZE:-8G}"
 RUNTIME="${RUNTIME:-60}"
+REPEATS="${REPEATS:-1}"
 NUMJOBS="${NUMJOBS:-4}"
 IODEPTH="${IODEPTH:-64}"
 BS_SEQ="${BS_SEQ:-1M}"
@@ -55,6 +60,7 @@ while [[ $# -gt 0 ]]; do
     --test-dir) TEST_DIR="$2"; shift 2 ;;
     --file-size) FILE_SIZE="$2"; shift 2 ;;
     --runtime) RUNTIME="$2"; shift 2 ;;
+    --repeats) REPEATS="$2"; shift 2 ;;
     --numjobs) NUMJOBS="$2"; shift 2 ;;
     --iodepth) IODEPTH="$2"; shift 2 ;;
     --bs-seq) BS_SEQ="$2"; shift 2 ;;
@@ -69,6 +75,18 @@ if [[ -z "$HOSTS" ]]; then
   usage >&2
   exit 2
 fi
+if ! [[ "$REPEATS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --repeats must be a positive integer (got: ${REPEATS})" >&2
+  exit 2
+fi
+
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+LOCAL_STRUCTURED_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+LOCAL_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+REMOTE_STRUCTURED_DIR="$(cluster_structured_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+REMOTE_RAW_DIR="$(cluster_raw_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+REMOTE_ARTIFACT_ENV="$(cluster_artifact_env_prefix_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+mkdir -p "${LOCAL_STRUCTURED_DIR}" "${LOCAL_RAW_DIR}"
 
 IFS=',' read -r -a HOST_ARR <<<"$HOSTS"
 IFS=',' read -r -a LABEL_ARR <<<"$LABELS"
@@ -116,13 +134,14 @@ for idx in "${!HOST_ARR[@]}"; do
     label="$(sanitize_label "$host")"
   fi
 
-  out_json="results/structured/${RUN_ID}_${label}_fio.json"
-  out_csv="results/structured/${RUN_ID}_${label}_fio.csv"
-  out_raw_dir="results/raw/${RUN_ID}_${label}_fio"
+  out_json_remote="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_fio.json"
+  out_csv_remote="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_fio.csv"
+  out_stability_remote="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_fio_stability.json"
+  out_raw_dir_remote="${REMOTE_RAW_DIR}/${RUN_ID}_${label}_fio"
 
   echo "========================================"
   echo "fio: host=${host} label=${label}"
-  echo "Outputs: ${out_json}, ${out_csv}"
+  echo "Outputs: ${out_json_remote}, ${out_csv_remote}, ${out_stability_remote}"
   echo "========================================"
 
   bench_args=(
@@ -132,13 +151,14 @@ for idx in "${!HOST_ARR[@]}"; do
     --test-dir "${TEST_DIR}"
     --file-size "${FILE_SIZE}"
     --runtime "${RUNTIME}"
+    --repeats "${REPEATS}"
     --numjobs "${NUMJOBS}"
     --iodepth "${IODEPTH}"
     --bs-seq "${BS_SEQ}"
     --bs-rand "${BS_RAND}"
   )
   bench_str="$(printf '%q ' "${bench_args[@]}")"
-  remote_cmd="cd $(printf '%q' "${REMOTE_ROOT}") && ${bench_str}"
+  remote_cmd="cd $(printf '%q' "${REMOTE_ROOT}") && ${REMOTE_ARTIFACT_ENV} ${bench_str}"
 
   if [[ "$host" == "localhost" || "$host" == "$(hostname)" ]]; then
     bash -lc "$remote_cmd"
@@ -147,16 +167,18 @@ for idx in "${!HOST_ARR[@]}"; do
   fi
 
   if [[ "$host" != "localhost" && "$host" != "$(hostname)" ]]; then
-    mkdir -p "${ROOT_DIR}/results/structured" "${ROOT_DIR}/results/raw"
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_json}" "${ROOT_DIR}/results/structured/" || {
-      echo "WARNING: failed to fetch ${out_json} from ${host}" >&2
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_json_remote}" "${LOCAL_STRUCTURED_DIR}/" || {
+      echo "WARNING: failed to fetch ${out_json_remote} from ${host}" >&2
     }
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_csv}" "${ROOT_DIR}/results/structured/" || {
-      echo "WARNING: failed to fetch ${out_csv} from ${host}" >&2
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_csv_remote}" "${LOCAL_STRUCTURED_DIR}/" || {
+      echo "WARNING: failed to fetch ${out_csv_remote} from ${host}" >&2
     }
-    rm -rf "${ROOT_DIR}/${out_raw_dir}"
-    scp -r "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_raw_dir}" "${ROOT_DIR}/results/raw/" || {
-      echo "WARNING: failed to fetch ${out_raw_dir} from ${host}" >&2
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_stability_remote}" "${LOCAL_STRUCTURED_DIR}/" || {
+      echo "WARNING: failed to fetch ${out_stability_remote} from ${host}" >&2
+    }
+    rm -rf "${LOCAL_RAW_DIR}/${RUN_ID}_${label}_fio"
+    scp -r "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_raw_dir_remote}" "${LOCAL_RAW_DIR}/" || {
+      echo "WARNING: failed to fetch ${out_raw_dir_remote} from ${host}" >&2
     }
   fi
 done

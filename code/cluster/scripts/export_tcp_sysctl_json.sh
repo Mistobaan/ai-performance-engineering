@@ -2,7 +2,9 @@
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-STRUCT_DIR="${BASE_DIR}/results/structured"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${BASE_DIR}/scripts/lib_artifact_dirs.sh"
+STRUCT_DIR="${CLUSTER_RESULTS_STRUCTURED_DIR:-${BASE_DIR}/results/structured}"
 RUN_ID="${RUN_ID:-}"
 
 usage() {

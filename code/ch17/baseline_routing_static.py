@@ -93,7 +93,6 @@ class BaselineRoutingStaticBenchmark(VerificationPayloadMixin, BaseBenchmark):
             if self._verify_input is not None:
                 with torch.no_grad():
                     self.output = self.model(self._verify_input).detach().float().clone()
-        self._synchronize()
         if self.output is None or self._verify_input is None:
             raise RuntimeError("benchmark_fn() must produce output")
         dtype = self.output.dtype

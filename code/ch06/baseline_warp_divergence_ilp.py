@@ -59,7 +59,6 @@ class BaselineWarpDivergenceILPBenchmark(VerificationPayloadMixin, BaseBenchmark
                 result[~mask] = negative
 
                 mask_source = 0.92 * mask_source + 0.08 * torch.roll(result, shifts=iteration + 1, dims=0)
-                self._synchronize()
 
             self.output = result
             self.routing_logits = mask_source

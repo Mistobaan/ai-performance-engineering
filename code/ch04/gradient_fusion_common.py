@@ -6,6 +6,7 @@ from typing import Optional
 
 import torch
 
+from core.benchmark.wrapper_utils import attach_benchmark_metadata
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from ch04.verification_payload_mixin import VerificationPayloadMixin
 
@@ -67,7 +68,6 @@ class GradientFusionBenchmark(VerificationPayloadMixin, BaseBenchmark):
             for tensor in self.tensors:
                 accum = accum + tensor.sum()
             self.output = accum
-        torch.cuda.synchronize(self.device)
 
     def capture_verification_payload(self) -> None:
         if self._verify_input is None or self.output is None:
@@ -102,10 +102,3 @@ class GradientFusionBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def get_workload_metadata(self) -> Optional[WorkloadMetadata]:
         return self._workload
-
-
-def attach_benchmark_metadata(bench: BaseBenchmark, module_file: str) -> BaseBenchmark:
-    """Ensure subprocess runner calls get_benchmark() for parameterized benchmarks."""
-    bench._module_file_override = module_file
-    bench._factory_name_override = "get_benchmark"
-    return bench

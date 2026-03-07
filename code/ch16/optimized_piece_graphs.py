@@ -6,16 +6,10 @@ The baseline captures the full model monolithically.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata

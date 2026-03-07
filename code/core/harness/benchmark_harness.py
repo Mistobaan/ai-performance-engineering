@@ -793,6 +793,26 @@ class BenchmarkConfig:
     
     detect_setup_precomputation: bool = field(default_factory=lambda: _get_default_value("detect_setup_precomputation", True))
     """Hash inputs before/after setup() to detect pre-computation during setup."""
+
+    detect_benchmark_fn_sync: bool = field(
+        default_factory=lambda: _get_default_value("detect_benchmark_fn_sync", True)
+    )
+    """Statically inspect benchmark_fn() for explicit CUDA synchronization calls."""
+
+    benchmark_fn_sync_policy: str = field(
+        default_factory=lambda: _get_default_value("benchmark_fn_sync_policy", "warn")
+    )
+    """Policy for explicit synchronization inside benchmark_fn(): ignore, warn, or error."""
+
+    detect_benchmark_fn_antipatterns: bool = field(
+        default_factory=lambda: _get_default_value("detect_benchmark_fn_antipatterns", True)
+    )
+    """Statically inspect benchmark_fn() for hot-path performance anti-patterns."""
+
+    benchmark_fn_antipattern_policy: str = field(
+        default_factory=lambda: _get_default_value("benchmark_fn_antipattern_policy", "warn")
+    )
+    """Policy for hot-path anti-patterns inside benchmark_fn(): ignore, warn, or error."""
     
     monitor_gpu_state: bool = field(default_factory=lambda: _get_default_value("monitor_gpu_state", True))
     """Monitor GPU temperature, frequency, and power during benchmark."""
@@ -1123,7 +1143,8 @@ class WorkloadMetadata:
 class TorchrunLaunchSpec:
     """Declarative description of a torchrun invocation."""
 
-    script_path: Path
+    script_path: Optional[Path] = None
+    module_name: Optional[str] = None
     script_args: List[str] = field(default_factory=list)
     env: Dict[str, str] = field(default_factory=dict)
     parse_rank0_only: bool = True
@@ -1461,6 +1482,16 @@ class BaseBenchmark:
 
     def _infer_workload_metadata(self) -> Optional[WorkloadMetadata]:
         """Workload inference is disabled; benchmarks must register explicitly."""
+        return None
+
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, List[float]]]:
+        """Optional post-sync hook for per-iteration metrics.
+
+        The harness calls this immediately after it has synchronized the device
+        for a timed iteration. Benchmarks can use it to turn deferred CUDA
+        events recorded in ``benchmark_fn()`` into numeric metrics without
+        introducing host-side synchronization into the timed hot path.
+        """
         return None
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
@@ -1910,10 +1941,19 @@ class BenchmarkHarness:
             benchmark_module = inspect.getmodule(benchmark) or inspect.getmodule(benchmark.__class__)
             module_path = Path(getattr(benchmark_module, "__file__", "")).resolve()
             spec = TorchrunLaunchSpec(script_path=module_path)
-        print(f"[harness] torchrun spec script={spec.script_path} args={spec.script_args}", flush=True)
+        print(
+            f"[harness] torchrun spec script={spec.script_path} module={spec.module_name} args={spec.script_args}",
+            flush=True,
+        )
 
-        if not spec or not Path(spec.script_path).exists():
-            raise RuntimeError("SKIPPED: Torchrun launch requested but no valid script_path was provided.")
+        script_path = Path(spec.script_path).resolve() if spec and spec.script_path is not None else None
+        module_name = spec.module_name if spec else None
+        if bool(script_path) == bool(module_name):
+            raise RuntimeError(
+                "SKIPPED: Torchrun launch requires exactly one of script_path or module_name."
+            )
+        if script_path is not None and not script_path.exists():
+            raise RuntimeError("SKIPPED: Torchrun launch requested but script_path does not exist.")
 
         world_size_hint = self._world_size_hint(config)
         multi_gpu_required = bool(spec.multi_gpu_required or getattr(config, "multi_gpu_required", False))
@@ -2012,11 +2052,13 @@ class BenchmarkHarness:
             raise RuntimeError("Missing expected torch seed for torchrun enforcement")
 
         wrapper_args: List[str] = [
-            "--aisp-target-script",
-            str(Path(spec.script_path).resolve()),
             "--aisp-expected-torch-seed",
             str(int(expected_torch_seed)),
         ]
+        if script_path is not None:
+            wrapper_args[0:0] = ["--aisp-target-script", str(script_path)]
+        else:
+            wrapper_args[0:0] = ["--aisp-target-module", str(module_name)]
         if getattr(config, "deterministic", False):
             wrapper_args.append("--aisp-deterministic")
 
@@ -4198,7 +4240,8 @@ class BenchmarkHarness:
             reset_cuda_memory_pool, capture_gpu_state, gc_disabled,
             clear_compile_cache, force_tensor_evaluation, validate_environment,
             capture_precision_policy_state, check_precision_policy_consistency,
-            MemoryAllocationTracker, get_active_streams
+            MemoryAllocationTracker, get_active_streams,
+            check_benchmark_fn_antipatterns, check_benchmark_fn_sync_calls,
         )
         
         # 0. Validate environment and log device enumeration
@@ -4227,6 +4270,52 @@ class BenchmarkHarness:
         
         # 2. Clear torch.compile cache for consistent compilation state
         # NOTE: compile caches are cleared before setup/warmup in BenchmarkHarness.benchmark().
+
+        # 2b. Inspect benchmark_fn source for explicit synchronization in the hot path.
+        if benchmark_obj is not None and getattr(config, "detect_benchmark_fn_sync", True):
+            allowed_antipatterns = getattr(
+                benchmark_obj,
+                "allowed_benchmark_fn_antipatterns",
+                (),
+            )
+            sync_ok, sync_findings = check_benchmark_fn_sync_calls(
+                fn,
+                allowed_codes=allowed_antipatterns,
+            )
+            if not sync_ok:
+                policy = str(getattr(config, "benchmark_fn_sync_policy", "warn")).strip().lower()
+                message = (
+                    "BENCHMARK_FN SYNC WARNING: explicit synchronization detected in benchmark_fn(). "
+                    "This usually inflates harness timings and blocks CUDA graph capture.\n- "
+                    + "\n- ".join(sync_findings)
+                )
+                if policy == "error":
+                    raise RuntimeError(message)
+                if policy == "warn":
+                    import warnings as warn_module
+
+                    warn_module.warn(message, RuntimeWarning)
+
+        if benchmark_obj is not None and getattr(config, "detect_benchmark_fn_antipatterns", True):
+            antipattern_ok, antipattern_findings = check_benchmark_fn_antipatterns(
+                fn,
+                allowed_codes=allowed_antipatterns,
+            )
+            if not antipattern_ok:
+                policy = str(
+                    getattr(config, "benchmark_fn_antipattern_policy", "warn")
+                ).strip().lower()
+                message = (
+                    "BENCHMARK_FN ANTI-PATTERN WARNING: benchmark_fn() contains hot-path work "
+                    "that will distort timings or hide the real kernel cost.\n- "
+                    + "\n- ".join(antipattern_findings)
+                )
+                if policy == "error":
+                    raise RuntimeError(message)
+                if policy == "warn":
+                    import warnings as warn_module
+
+                    warn_module.warn(message, RuntimeWarning)
 
         # 3. Capture GPU state before benchmark (for consistency check)
         gpu_state_before = None
@@ -4385,6 +4474,18 @@ class BenchmarkHarness:
                     if reported is not None:
                         elapsed_ms = reported
                 times_ms.append(elapsed_ms)
+
+                if benchmark_obj is not None:
+                    finalize_iteration = getattr(benchmark_obj, "finalize_iteration_metrics", None)
+                    if callable(finalize_iteration):
+                        finalized = finalize_iteration()
+                        if finalized is not None:
+                            if result is None:
+                                result = finalized
+                            elif isinstance(result, dict):
+                                merged = dict(result)
+                                merged.update(finalized)
+                                result = merged
                 
                 # Check if function returned inference timing data (only if not graph replay)
                 if result is not None and isinstance(result, dict):

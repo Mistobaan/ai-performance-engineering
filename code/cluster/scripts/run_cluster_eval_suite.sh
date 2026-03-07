@@ -22,24 +22,26 @@ Runs a reusable "field report" eval suite:
   13) Optional FP4 checks: DeepGEMM FP8xFP4 smoke + grouped GEMM (all nodes)
   14) Optional high-impact extras (ml-engineering parity):
      MAMF, all-reduce stability, all-reduce latency comp,
-     all_gather_object control-plane comparison, NCCL algo comparison
+     all_gather_object control-plane comparison, NCCL all-to-all, NCCL algo comparison
   15) Optional: CPU<->GPU C2C memcpy benchmark (local)
   16) Optional: NUMA memory-bandwidth probe (all nodes)
   17) Optional: end-to-end transformer train-step benchmark (single-node + multi-node)
   18) Optional: checkpoint-like I/O benchmark (all nodes)
   19) Storage: fio (all nodes)
   20) Optional: nvbandwidth bundle (all nodes; auto-on for multi-node runs)
-  21) Plots (includes NVLink topology) + SLO-aware vLLM goodput analysis + scorecard + manifest refresh + artifact validation
+  21) Plots (includes NVLink topology) + SLO-aware vLLM goodput analysis + scorecard + MLPerf-alignment summary + manifest refresh + artifact validation
 
 Notes:
   - GPU benchmarks are strict: they FAIL if GPU clock lock cannot be acquired.
   - Preflight is strict: it FAILS if `nvidia-persistenced`, `nvidia-dcgm`, or
     (multi-node) IMEX domain health is not ready.
-  - Step execution metadata is written to
-    `results/structured/<run_id>_suite_steps.json`.
+  - Step execution metadata is written under
+    `runs/<run_id>/structured/<run_id>_suite_steps.json`.
   - For multi-node runs, explicitly pin OOB and NCCL socket interfaces.
 
 Options:
+  --resume                  Resume from existing `suite_steps` for this run id;
+                            completed steps (exit_code=0) are skipped.
   --run-id <id>            Base RUN_ID prefix (default: YYYY-MM-DD)
   --hosts <h1,h2,...>      Comma-separated host list (required)
   --labels <l1,l2,...>     Optional labels (must match host count)
@@ -61,6 +63,8 @@ Options:
   --nccl-env-max-bytes <size>   NCCL env sensitivity max bytes (default: 64M)
   --nccl-env-warmup <n>         NCCL env sensitivity warmup iterations (default: 5)
   --nccl-env-iters <n>          NCCL env sensitivity measured iterations (default: 20)
+  --run-nccl-env-sensitivity    Force-enable NCCL env sensitivity sweep (default: on)
+  --skip-nccl-env-sensitivity   Skip NCCL env sensitivity sweep
 
   --run-quick-friction          Run quick friction battery on all nodes (default: on)
   --skip-quick-friction         Skip quick friction battery
@@ -74,7 +78,7 @@ Options:
   --quick-friction-hf-local-dir-base <path>  Base temp dir for HF download check (default: /tmp)
   --quick-friction-allow-failed-checks <csv>  Classify these quick-friction check failures as expected (default: auto for localhost, none otherwise)
 
-  --render-localhost-report      Force rendering `cluster/field-report-localhost.md` + notes when localhost package is detected
+  --render-localhost-report      Force rendering run-local localhost reports plus published `cluster/field-report-localhost.md` + notes when localhost package is detected
   --skip-render-localhost-report Disable localhost field-report package rendering
 
   --run-monitoring-expectations      Run monitoring expectations snapshot on all nodes (default: on)
@@ -91,11 +95,18 @@ Options:
   --isl <n>                vLLM input seq len (default: 1024)
   --osl <n>                vLLM output seq len (default: 1024)
   --concurrency-range "…"  vLLM concurrencies (default: "32 64 128 256 512")
+  --vllm-repeats <n>       Number of vLLM concurrency sweep repetitions (default: 1)
+  --vllm-max-points-per-run <n>
+                           Resume-segmentation budget for vLLM sweep points per invocation.
+                           0 runs all points in one invocation (default: 0).
   --run-vllm-request-rate-sweep    Run single-node vLLM request-rate sweep (default: off)
   --skip-vllm-request-rate-sweep   Skip single-node vLLM request-rate sweep
   --vllm-request-rate-range "..."  Request-rate sweep values (default: "1 2 4 8 16")
+  --vllm-request-rate-repeats <n>  Number of vLLM request-rate sweep repetitions (default: 1)
   --vllm-request-rate-max-concurrency <n>  Max concurrency cap for request-rate sweep (default: 256)
   --vllm-request-rate-num-prompts <n>      Prompts per request-rate point (default: max_concurrency*20)
+  --vllm-max-conc-cv-p95-pct <pct>         Optional fail threshold for concurrency sweep tok/s CV p95
+  --vllm-max-rate-cv-p95-pct <pct>         Optional fail threshold for request-rate sweep tok/s CV p95
   --port <port>            vLLM server port (default: 8888)
   --vllm-slo-p99-ttft-ms <ms>  SLO threshold for vLLM p99 TTFT (default: 2000)
   --vllm-slo-p99-tpot-ms <ms>  SLO threshold for vLLM p99 TPOT (default: 200)
@@ -141,18 +152,20 @@ Options:
   --bootstrap-install-python-deps  Ensure env/venv + Python deps during bootstrap (default: on)
   --bootstrap-skip-python-deps     Skip python dep install during bootstrap
   --bootstrap-host-parity-image <ref>  Source image for host-only parity install
-                                        (default: cfregly/cluster_perf_orig_parity:latest)
+                                        (default: cluster_perf_orig_parity:latest)
   --bootstrap-torch-index-url <url>  Legacy fallback torch index (default: https://pypi.ngc.nvidia.com)
   --bootstrap-torch-version <ver>    Expected torch version after bootstrap parity install
                                      (default: 2.10.0a0+a36e1d39eb.nv26.01.42222806)
 
   --fio-test-dir <path>    fio directory (default: /tmp)
   --fio-runtime <sec>      fio runtime per test (default: 30)
+  --fio-repeats <n>        fio repetitions per host (default: 1)
+  --fio-max-seq-bw-cv-pct <pct>  Optional fail threshold for fio seq read/write BW CV
   --run-nvbandwidth        Force-enable nvbandwidth bundle (all nodes)
   --skip-nvbandwidth       Force-disable nvbandwidth bundle
   --nvbandwidth-runtime <host|container>  nvbandwidth runtime (default: host)
   --nvbandwidth-image <image>             nvbandwidth image for runtime=container
-                                          (default: cfregly/cluster_perf_orig_parity:latest)
+                                          (default: cluster_perf_orig_parity:latest)
   --nvbandwidth-bin <path>                nvbandwidth executable for runtime=host (default: nvbandwidth)
   --nvbandwidth-quick      Use reduced nvbandwidth testcase subset
 
@@ -176,6 +189,7 @@ Options:
   --mamf-concurrent        Run MAMF on all GPUs concurrently (straggler focus)
 
   --enable-allreduce-stability  Run all-reduce jitter/stability profile (default: off)
+  --disable-allreduce-stability Force-disable all-reduce jitter/stability (overrides modern profile)
   --allreduce-payload-gib <f>   Stability payload GiB (default: 2.0)
   --allreduce-iters <n>         Stability iterations (default: 200)
   --allreduce-warmup <n>        Stability warmup iterations (default: 20)
@@ -189,9 +203,42 @@ Options:
   --enable-allgather-control-plane  Run all_gather_object vs tensor collectives benchmark (default: off)
   --allgather-control-iters <n>      Control-plane benchmark iterations (default: 2000)
   --allgather-control-warmup <n>     Control-plane benchmark warmup iterations (default: 200)
+  --enable-nccl-alltoall         Run NCCL alltoall_perf benchmark (default: off)
+  --disable-nccl-alltoall        Force-disable NCCL alltoall_perf (overrides modern profile)
+  --nccl-alltoall-min-bytes <size>  NCCL alltoall min bytes (default: 1M)
+  --nccl-alltoall-max-bytes <size>  NCCL alltoall max bytes (default: 64M)
+  --nccl-alltoall-warmup <n>        NCCL alltoall warmup iterations (default: 5)
+  --nccl-alltoall-iters <n>         NCCL alltoall measured iterations (default: 20)
 
   --enable-nccl-algo-comparison  Run NCCL Ring/Tree/NVLS/auto comparison (default: off)
+  --disable-nccl-algo-comparison Force-disable NCCL algo comparison (overrides modern profile)
   --nccl-algos <list>            NCCL algorithms for comparison (default: Ring,Tree,NVLS,auto)
+  --modern-llm-profile           Enable a modern high-signal LLM profile:
+                                 request-rate sweep on, nvbandwidth on,
+                                 allreduce stability on, NCCL all-to-all on, NCCL algo comparison on,
+                                 allreduce latency-comp on, allgather control-plane on,
+                                 torchrun train-step on,
+                                 strict canonical completeness gating on,
+                                 vLLM/fio repeats promoted to at least 3
+
+  --gpu-hourly-cost-usd <usd>    Optional single-GPU hourly cost for scorecard cost-per-1M-token metrics
+  --coverage-baseline-run-id <id>
+                                  Optional baseline run ID to emit coverage/scorecard delta artifact
+  --strict-multinode-readiness   Enforce fail-fast multi-node readiness invariants when hosts>1 (default: on)
+  --no-strict-multinode-readiness
+                                  Allow warning/skip behavior for missing multi-node prerequisites
+  --multinode-readiness-check-only
+                                  Validate multi-node readiness + emit readiness artifact, then exit (no workloads)
+  --strict-canonical-completeness  Require semantic completeness thresholds for canonical output artifacts
+  --no-strict-canonical-completeness
+                                  Disable semantic completeness thresholds (artifacts still validated)
+  --canonical-min-coverage-pct <pct>
+                                  Minimum subsystem coverage score when strict completeness is enabled (default: 100)
+  --canonical-min-advanced-coverage-pct <pct>
+                                  Minimum advanced coverage score when strict completeness is enabled (default: 85)
+  --partial-resume-max-attempts <n>
+                                  Max auto-resume attempts for rc=75 resumable steps within one suite invocation (default: 64)
+  --disable-auto-partial-resume  Disable automatic in-process retry for rc=75 resumable steps
 
   --check-ib-sharp         Optional multi-node check: SHARP userspace + forced NCCL CollNet all-reduce
                            (runs scripts/check_ib_sharp.sh; default: off)
@@ -240,12 +287,62 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CODE_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"
 if [[ ! -f "${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh" ]]; then
   echo "ERROR: missing stack profile helper: ${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh" >&2
   exit 1
 fi
 # shellcheck source=scripts/cluster_perf_stack_profiles.sh
 source "${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh"
+
+QUEUE_RUNNER_LOCK_PATH="${AISP_CLUSTER_SUITE_QUEUE_LOCK_PATH:-${CODE_ROOT}/artifacts/parallel_runs/queue.runner.lock}"
+QUEUE_RUNNER_LOCK_TIMEOUT_SEC="${AISP_CLUSTER_SUITE_QUEUE_LOCK_TIMEOUT_SEC:-0}"
+QUEUE_RUNNER_LOCK_FD=""
+QUEUE_RUNNER_LOCK_HELD=0
+
+acquire_queue_runner_lock() {
+  local lock_dir timeout_sec
+  timeout_sec="${QUEUE_RUNNER_LOCK_TIMEOUT_SEC}"
+  if ! [[ "$timeout_sec" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: AISP_CLUSTER_SUITE_QUEUE_LOCK_TIMEOUT_SEC must be a non-negative integer (got: ${timeout_sec})" >&2
+    exit 2
+  fi
+  if ! command -v flock >/dev/null 2>&1; then
+    echo "ERROR: flock is required for strict suite/benchmark mutual exclusion." >&2
+    exit 1
+  fi
+  lock_dir="$(dirname "${QUEUE_RUNNER_LOCK_PATH}")"
+  mkdir -p "$lock_dir"
+  touch "${QUEUE_RUNNER_LOCK_PATH}"
+  exec {QUEUE_RUNNER_LOCK_FD}>"${QUEUE_RUNNER_LOCK_PATH}"
+  if [[ "$timeout_sec" -eq 0 ]]; then
+    if ! flock -n "$QUEUE_RUNNER_LOCK_FD"; then
+      echo "ERROR: queue lock busy at ${QUEUE_RUNNER_LOCK_PATH}; refusing overlapping run." >&2
+      echo "Remediation: stop active bench/profile workloads, then rerun cluster eval suite." >&2
+      exit 1
+    fi
+  else
+    if ! flock -w "$timeout_sec" "$QUEUE_RUNNER_LOCK_FD"; then
+      echo "ERROR: timed out after ${timeout_sec}s waiting for queue lock ${QUEUE_RUNNER_LOCK_PATH}." >&2
+      echo "Remediation: stop active bench/profile workloads, then rerun cluster eval suite." >&2
+      exit 1
+    fi
+  fi
+  QUEUE_RUNNER_LOCK_HELD=1
+  export AISP_CLUSTER_SUITE_QUEUE_LOCK_HELD=1
+  printf '{"owner":"run_cluster_eval_suite.sh","pid":%s,"ts":"%s"}\n' "$$" "$(date -Iseconds)" >"${QUEUE_RUNNER_LOCK_PATH}" || true
+}
+
+release_queue_runner_lock() {
+  if [[ "$QUEUE_RUNNER_LOCK_HELD" -ne 1 || -z "${QUEUE_RUNNER_LOCK_FD}" ]]; then
+    return 0
+  fi
+  flock -u "$QUEUE_RUNNER_LOCK_FD" || true
+  eval "exec ${QUEUE_RUNNER_LOCK_FD}>&-"
+  QUEUE_RUNNER_LOCK_HELD=0
+  QUEUE_RUNNER_LOCK_FD=""
+  unset AISP_CLUSTER_SUITE_QUEUE_LOCK_HELD || true
+}
 
 RUN_ID="$(date +%Y-%m-%d)"
 HOSTS=""
@@ -268,6 +365,7 @@ NCCL_ENV_MIN_BYTES="1M"
 NCCL_ENV_MAX_BYTES="64M"
 NCCL_ENV_WARMUP="5"
 NCCL_ENV_ITERS="20"
+RUN_NCCL_ENV_SENSITIVITY=1
 
 RUN_QUICK_FRICTION=1
 QUICK_FRICTION_STRICT=0
@@ -293,13 +391,18 @@ TP=""
 ISL="1024"
 OSL="1024"
 CONCURRENCY_RANGE="32 64 128 256 512"
+VLLM_REPEATS="1"
+VLLM_MAX_POINTS_PER_RUN="0"
 PORT="8888"
 VLLM_SLO_P99_TTFT_MS="2000"
 VLLM_SLO_P99_TPOT_MS="200"
 RUN_VLLM_REQUEST_RATE_SWEEP=0
 VLLM_REQUEST_RATE_RANGE="1 2 4 8 16"
+VLLM_REQUEST_RATE_REPEATS="1"
 VLLM_REQUEST_RATE_MAX_CONCURRENCY="256"
 VLLM_REQUEST_RATE_NUM_PROMPTS=""
+VLLM_MAX_CONC_CV_P95_PCT=""
+VLLM_MAX_RATE_CV_P95_PCT=""
 RUN_VLLM_MULTINODE_MODE="auto"
 RUN_VLLM_MULTINODE=0
 VLLM_MULTINODE_CONCURRENCY="64"
@@ -331,7 +434,7 @@ BOOTSTRAP_NODES=1
 BOOTSTRAP_INSTALL_SYSTEM_PACKAGES=1
 BOOTSTRAP_SYNC_CODE=1
 BOOTSTRAP_INSTALL_PYTHON_DEPS=1
-BOOTSTRAP_HOST_PARITY_IMAGE="${BOOTSTRAP_HOST_PARITY_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+BOOTSTRAP_HOST_PARITY_IMAGE="${BOOTSTRAP_HOST_PARITY_IMAGE:-cluster_perf_orig_parity:latest}"
 BOOTSTRAP_TORCH_INDEX_URL="https://pypi.ngc.nvidia.com"
 BOOTSTRAP_TORCH_VERSION="2.10.0a0+a36e1d39eb.nv26.01.42222806"
 
@@ -339,10 +442,12 @@ RENDER_LOCALHOST_REPORT_MODE="auto"
 
 FIO_TEST_DIR="/tmp"
 FIO_RUNTIME="30"
+FIO_REPEATS="1"
+FIO_MAX_SEQ_BW_CV_PCT=""
 RUN_NVBANDWIDTH_MODE="auto"
 RUN_NVBANDWIDTH=0
 NVBANDWIDTH_RUNTIME="host"
-NVBANDWIDTH_IMAGE="cfregly/cluster_perf_orig_parity:latest"
+NVBANDWIDTH_IMAGE="cluster_perf_orig_parity:latest"
 NVBANDWIDTH_BIN="nvbandwidth"
 NVBANDWIDTH_QUICK=0
 RUN_GPU_STREAM_MODE="on"
@@ -416,11 +521,35 @@ ALLREDUCE_LATENCY_WARMUP="1"
 ENABLE_ALLGATHER_CONTROL_PLANE=0
 ALLGATHER_CONTROL_ITERS="2000"
 ALLGATHER_CONTROL_WARMUP="200"
+ENABLE_NCCL_ALLTOALL=0
+NCCL_ALLTOALL_MIN_BYTES="1M"
+NCCL_ALLTOALL_MAX_BYTES="64M"
+NCCL_ALLTOALL_WARMUP="5"
+NCCL_ALLTOALL_ITERS="20"
 ENABLE_NCCL_ALGO_COMPARISON=0
 NCCL_ALGOS="Ring,Tree,NVLS,auto"
+MODERN_LLM_PROFILE=0
+GPU_HOURLY_COST_USD=""
+COVERAGE_BASELINE_RUN_ID=""
+STRICT_MULTINODE_READINESS=1
+MULTINODE_READINESS_CHECK_ONLY=0
+STRICT_CANONICAL_COMPLETENESS=0
+CANONICAL_MIN_COVERAGE_PCT="100"
+CANONICAL_MIN_ADVANCED_COVERAGE_PCT="85"
+AUTO_RESUME_PARTIAL_STEPS=1
+PARTIAL_RESUME_MAX_ATTEMPTS="64"
+RESUME_RUN=0
+FORCE_DISABLE_ALLREDUCE_STABILITY=0
+FORCE_DISABLE_NCCL_ALLTOALL=0
+FORCE_DISABLE_NCCL_ALGO_COMPARISON=0
+RUN_TRAIN_STEP_EXPLICIT=0
+VLLM_REPEATS_EXPLICIT=0
+VLLM_REQUEST_RATE_REPEATS_EXPLICIT=0
+FIO_REPEATS_EXPLICIT=0
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
+    --resume) RESUME_RUN=1; shift ;;
     --run-id) RUN_ID="$2"; shift 2 ;;
     --hosts) HOSTS="$2"; shift 2 ;;
     --labels) LABELS="$2"; shift 2 ;;
@@ -440,6 +569,8 @@ while [[ $# -gt 0 ]]; do
     --nccl-env-max-bytes) NCCL_ENV_MAX_BYTES="$2"; shift 2 ;;
     --nccl-env-warmup) NCCL_ENV_WARMUP="$2"; shift 2 ;;
     --nccl-env-iters) NCCL_ENV_ITERS="$2"; shift 2 ;;
+    --run-nccl-env-sensitivity) RUN_NCCL_ENV_SENSITIVITY=1; shift ;;
+    --skip-nccl-env-sensitivity) RUN_NCCL_ENV_SENSITIVITY=0; shift ;;
 
     --run-quick-friction) RUN_QUICK_FRICTION=1; shift ;;
     --skip-quick-friction) RUN_QUICK_FRICTION=0; shift ;;
@@ -469,11 +600,16 @@ while [[ $# -gt 0 ]]; do
     --isl) ISL="$2"; shift 2 ;;
     --osl) OSL="$2"; shift 2 ;;
     --concurrency-range) CONCURRENCY_RANGE="$2"; shift 2 ;;
+    --vllm-repeats) VLLM_REPEATS="$2"; VLLM_REPEATS_EXPLICIT=1; shift 2 ;;
+    --vllm-max-points-per-run) VLLM_MAX_POINTS_PER_RUN="$2"; shift 2 ;;
     --run-vllm-request-rate-sweep) RUN_VLLM_REQUEST_RATE_SWEEP=1; shift ;;
     --skip-vllm-request-rate-sweep) RUN_VLLM_REQUEST_RATE_SWEEP=0; shift ;;
     --vllm-request-rate-range) VLLM_REQUEST_RATE_RANGE="$2"; shift 2 ;;
+    --vllm-request-rate-repeats) VLLM_REQUEST_RATE_REPEATS="$2"; VLLM_REQUEST_RATE_REPEATS_EXPLICIT=1; shift 2 ;;
     --vllm-request-rate-max-concurrency) VLLM_REQUEST_RATE_MAX_CONCURRENCY="$2"; shift 2 ;;
     --vllm-request-rate-num-prompts) VLLM_REQUEST_RATE_NUM_PROMPTS="$2"; shift 2 ;;
+    --vllm-max-conc-cv-p95-pct) VLLM_MAX_CONC_CV_P95_PCT="$2"; shift 2 ;;
+    --vllm-max-rate-cv-p95-pct) VLLM_MAX_RATE_CV_P95_PCT="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --vllm-slo-p99-ttft-ms) VLLM_SLO_P99_TTFT_MS="$2"; shift 2 ;;
     --vllm-slo-p99-tpot-ms) VLLM_SLO_P99_TPOT_MS="$2"; shift 2 ;;
@@ -518,6 +654,8 @@ while [[ $# -gt 0 ]]; do
 
     --fio-test-dir) FIO_TEST_DIR="$2"; shift 2 ;;
     --fio-runtime) FIO_RUNTIME="$2"; shift 2 ;;
+    --fio-repeats) FIO_REPEATS="$2"; FIO_REPEATS_EXPLICIT=1; shift 2 ;;
+    --fio-max-seq-bw-cv-pct) FIO_MAX_SEQ_BW_CV_PCT="$2"; shift 2 ;;
     --run-nvbandwidth) RUN_NVBANDWIDTH_MODE="on"; shift ;;
     --skip-nvbandwidth) RUN_NVBANDWIDTH_MODE="off"; shift ;;
     --nvbandwidth-runtime) NVBANDWIDTH_RUNTIME="$2"; shift 2 ;;
@@ -541,6 +679,7 @@ while [[ $# -gt 0 ]]; do
     --mamf-mode) MAMF_MODE="$2"; shift 2 ;;
     --mamf-concurrent) MAMF_CONCURRENT=1; shift ;;
     --enable-allreduce-stability) ENABLE_ALLREDUCE_STABILITY=1; shift ;;
+    --disable-allreduce-stability) ENABLE_ALLREDUCE_STABILITY=0; FORCE_DISABLE_ALLREDUCE_STABILITY=1; shift ;;
     --allreduce-payload-gib) ALLREDUCE_PAYLOAD_GIB="$2"; shift 2 ;;
     --allreduce-iters) ALLREDUCE_ITERS="$2"; shift 2 ;;
     --allreduce-warmup) ALLREDUCE_WARMUP="$2"; shift 2 ;;
@@ -552,8 +691,27 @@ while [[ $# -gt 0 ]]; do
     --enable-allgather-control-plane) ENABLE_ALLGATHER_CONTROL_PLANE=1; shift ;;
     --allgather-control-iters) ALLGATHER_CONTROL_ITERS="$2"; shift 2 ;;
     --allgather-control-warmup) ALLGATHER_CONTROL_WARMUP="$2"; shift 2 ;;
+    --enable-nccl-alltoall) ENABLE_NCCL_ALLTOALL=1; shift ;;
+    --disable-nccl-alltoall) ENABLE_NCCL_ALLTOALL=0; FORCE_DISABLE_NCCL_ALLTOALL=1; shift ;;
+    --nccl-alltoall-min-bytes) NCCL_ALLTOALL_MIN_BYTES="$2"; shift 2 ;;
+    --nccl-alltoall-max-bytes) NCCL_ALLTOALL_MAX_BYTES="$2"; shift 2 ;;
+    --nccl-alltoall-warmup) NCCL_ALLTOALL_WARMUP="$2"; shift 2 ;;
+    --nccl-alltoall-iters) NCCL_ALLTOALL_ITERS="$2"; shift 2 ;;
     --enable-nccl-algo-comparison) ENABLE_NCCL_ALGO_COMPARISON=1; shift ;;
+    --disable-nccl-algo-comparison) ENABLE_NCCL_ALGO_COMPARISON=0; FORCE_DISABLE_NCCL_ALGO_COMPARISON=1; shift ;;
     --nccl-algos) NCCL_ALGOS="$2"; shift 2 ;;
+    --modern-llm-profile) MODERN_LLM_PROFILE=1; shift ;;
+    --gpu-hourly-cost-usd) GPU_HOURLY_COST_USD="$2"; shift 2 ;;
+    --coverage-baseline-run-id) COVERAGE_BASELINE_RUN_ID="$2"; shift 2 ;;
+    --strict-multinode-readiness) STRICT_MULTINODE_READINESS=1; shift ;;
+    --no-strict-multinode-readiness) STRICT_MULTINODE_READINESS=0; shift ;;
+    --multinode-readiness-check-only) MULTINODE_READINESS_CHECK_ONLY=1; shift ;;
+    --strict-canonical-completeness) STRICT_CANONICAL_COMPLETENESS=1; shift ;;
+    --no-strict-canonical-completeness) STRICT_CANONICAL_COMPLETENESS=0; shift ;;
+    --canonical-min-coverage-pct) CANONICAL_MIN_COVERAGE_PCT="$2"; shift 2 ;;
+    --canonical-min-advanced-coverage-pct) CANONICAL_MIN_ADVANCED_COVERAGE_PCT="$2"; shift 2 ;;
+    --partial-resume-max-attempts) PARTIAL_RESUME_MAX_ATTEMPTS="$2"; shift 2 ;;
+    --disable-auto-partial-resume) AUTO_RESUME_PARTIAL_STEPS=0; shift ;;
     --check-ib-sharp) CHECK_IB_SHARP=1; shift ;;
     --ib-sharp-attempt-start-sharp-am) IB_SHARP_ATTEMPT_START_SHARP_AM=1; shift ;;
     --ib-sharp-am-host) IB_SHARP_AM_HOST="$2"; shift 2 ;;
@@ -574,7 +732,7 @@ while [[ $# -gt 0 ]]; do
     --numa-nodes) NUMA_NODES="$2"; shift 2 ;;
     --numa-cpu-node) NUMA_CPU_NODE="$2"; shift 2 ;;
 
-    --run-train-step) RUN_TRAIN_STEP=1; shift ;;
+    --run-train-step) RUN_TRAIN_STEP=1; RUN_TRAIN_STEP_EXPLICIT=1; shift ;;
     --train-step-single-node) TRAIN_STEP_SINGLE_NODE=1; shift ;;
     --train-step-multi-node) TRAIN_STEP_MULTI_NODE=1; shift ;;
     --train-master-port) TRAIN_MASTER_PORT="$2"; shift 2 ;;
@@ -603,7 +761,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Defensive defaults: keep bootstrap torch args defined even if unset in caller env.
-BOOTSTRAP_HOST_PARITY_IMAGE="${BOOTSTRAP_HOST_PARITY_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+BOOTSTRAP_HOST_PARITY_IMAGE="${BOOTSTRAP_HOST_PARITY_IMAGE:-cluster_perf_orig_parity:latest}"
 BOOTSTRAP_TORCH_INDEX_URL="${BOOTSTRAP_TORCH_INDEX_URL:-https://pypi.ngc.nvidia.com}"
 BOOTSTRAP_TORCH_VERSION="${BOOTSTRAP_TORCH_VERSION:-2.10.0a0+a36e1d39eb.nv26.01.42222806}"
 
@@ -612,6 +770,20 @@ if [[ -z "$HOSTS" ]]; then
   usage >&2
   exit 2
 fi
+
+RUN_DIR="${ROOT_DIR}/runs/${RUN_ID}"
+STRUCTURED_DIR="${RUN_DIR}/structured"
+RAW_DIR="${RUN_DIR}/raw"
+FIGURES_DIR="${RUN_DIR}/figures"
+REPORTS_DIR="${RUN_DIR}/reports"
+MANIFEST_PATH="${RUN_DIR}/manifest.json"
+
+mkdir -p "${STRUCTURED_DIR}" "${RAW_DIR}" "${FIGURES_DIR}" "${REPORTS_DIR}"
+export CLUSTER_RUN_DIR="${RUN_DIR}"
+export CLUSTER_RESULTS_STRUCTURED_DIR="${STRUCTURED_DIR}"
+export CLUSTER_RESULTS_RAW_DIR="${RAW_DIR}"
+export CLUSTER_FIGURES_DIR="${FIGURES_DIR}"
+export CLUSTER_REPORTS_DIR="${REPORTS_DIR}"
 
 if [[ -n "$NCCL_NVLS_ENABLE" && "$NCCL_NVLS_ENABLE" != "0" && "$NCCL_NVLS_ENABLE" != "1" && "$NCCL_NVLS_ENABLE" != "2" ]]; then
   echo "ERROR: --nccl-nvls-enable must be 0, 1, or 2 (got: ${NCCL_NVLS_ENABLE})" >&2
@@ -685,8 +857,24 @@ then
   echo "ERROR: --vllm-slo-p99-ttft-ms and --vllm-slo-p99-tpot-ms must be positive numbers" >&2
   exit 2
 fi
+if ! [[ "$VLLM_REPEATS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --vllm-repeats must be a positive integer (got: ${VLLM_REPEATS})" >&2
+  exit 2
+fi
+if ! [[ "$VLLM_MAX_POINTS_PER_RUN" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --vllm-max-points-per-run must be a non-negative integer (got: ${VLLM_MAX_POINTS_PER_RUN})" >&2
+  exit 2
+fi
 if ! [[ "$RUN_VLLM_REQUEST_RATE_SWEEP" =~ ^[01]$ ]]; then
   echo "ERROR: invalid request-rate sweep toggle: ${RUN_VLLM_REQUEST_RATE_SWEEP}" >&2
+  exit 2
+fi
+if ! [[ "$RUN_NCCL_ENV_SENSITIVITY" =~ ^[01]$ ]]; then
+  echo "ERROR: invalid NCCL env sensitivity toggle: ${RUN_NCCL_ENV_SENSITIVITY}" >&2
+  exit 2
+fi
+if ! [[ "$VLLM_REQUEST_RATE_REPEATS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --vllm-request-rate-repeats must be a positive integer (got: ${VLLM_REQUEST_RATE_REPEATS})" >&2
   exit 2
 fi
 if ! [[ "$VLLM_REQUEST_RATE_MAX_CONCURRENCY" =~ ^[1-9][0-9]*$ ]]; then
@@ -802,6 +990,145 @@ if ! [[ "$MONITORING_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: --monitoring-timeout-sec must be a positive integer (got: ${MONITORING_TIMEOUT_SEC})" >&2
   exit 2
 fi
+if ! [[ "$FIO_REPEATS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --fio-repeats must be a positive integer (got: ${FIO_REPEATS})" >&2
+  exit 2
+fi
+if [[ -n "$VLLM_MAX_CONC_CV_P95_PCT" ]]; then
+  if ! python3 - "$VLLM_MAX_CONC_CV_P95_PCT" <<'PY'
+import sys
+v = float(sys.argv[1])
+if v <= 0:
+    raise SystemExit(1)
+PY
+  then
+    echo "ERROR: --vllm-max-conc-cv-p95-pct must be a positive number (got: ${VLLM_MAX_CONC_CV_P95_PCT})" >&2
+    exit 2
+  fi
+fi
+if [[ -n "$VLLM_MAX_RATE_CV_P95_PCT" ]]; then
+  if ! python3 - "$VLLM_MAX_RATE_CV_P95_PCT" <<'PY'
+import sys
+v = float(sys.argv[1])
+if v <= 0:
+    raise SystemExit(1)
+PY
+  then
+    echo "ERROR: --vllm-max-rate-cv-p95-pct must be a positive number (got: ${VLLM_MAX_RATE_CV_P95_PCT})" >&2
+    exit 2
+  fi
+fi
+if [[ -n "$FIO_MAX_SEQ_BW_CV_PCT" ]]; then
+  if ! python3 - "$FIO_MAX_SEQ_BW_CV_PCT" <<'PY'
+import sys
+v = float(sys.argv[1])
+if v <= 0:
+    raise SystemExit(1)
+PY
+  then
+    echo "ERROR: --fio-max-seq-bw-cv-pct must be a positive number (got: ${FIO_MAX_SEQ_BW_CV_PCT})" >&2
+    exit 2
+  fi
+fi
+if [[ -n "$GPU_HOURLY_COST_USD" ]]; then
+  if ! python3 - "$GPU_HOURLY_COST_USD" <<'PY'
+import sys
+v = float(sys.argv[1])
+if v <= 0:
+    raise SystemExit(1)
+PY
+  then
+    echo "ERROR: --gpu-hourly-cost-usd must be a positive number (got: ${GPU_HOURLY_COST_USD})" >&2
+    exit 2
+  fi
+fi
+if ! [[ "$CANONICAL_MIN_COVERAGE_PCT" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --canonical-min-coverage-pct must be an integer in [0,100] (got: ${CANONICAL_MIN_COVERAGE_PCT})" >&2
+  exit 2
+fi
+if ! [[ "$CANONICAL_MIN_ADVANCED_COVERAGE_PCT" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --canonical-min-advanced-coverage-pct must be an integer in [0,100] (got: ${CANONICAL_MIN_ADVANCED_COVERAGE_PCT})" >&2
+  exit 2
+fi
+if (( CANONICAL_MIN_COVERAGE_PCT < 0 || CANONICAL_MIN_COVERAGE_PCT > 100 )); then
+  echo "ERROR: --canonical-min-coverage-pct must be in [0,100] (got: ${CANONICAL_MIN_COVERAGE_PCT})" >&2
+  exit 2
+fi
+if (( CANONICAL_MIN_ADVANCED_COVERAGE_PCT < 0 || CANONICAL_MIN_ADVANCED_COVERAGE_PCT > 100 )); then
+  echo "ERROR: --canonical-min-advanced-coverage-pct must be in [0,100] (got: ${CANONICAL_MIN_ADVANCED_COVERAGE_PCT})" >&2
+  exit 2
+fi
+if ! [[ "$PARTIAL_RESUME_MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --partial-resume-max-attempts must be a positive integer (got: ${PARTIAL_RESUME_MAX_ATTEMPTS})" >&2
+  exit 2
+fi
+
+if [[ "$MODERN_LLM_PROFILE" -eq 1 ]]; then
+  RUN_VLLM_REQUEST_RATE_SWEEP=1
+  RUN_NVBANDWIDTH_MODE="on"
+  ENABLE_ALLREDUCE_STABILITY=1
+  ENABLE_ALLREDUCE_LATENCY_COMP=1
+  ENABLE_ALLGATHER_CONTROL_PLANE=1
+  ENABLE_NCCL_ALLTOALL=1
+  ENABLE_NCCL_ALGO_COMPARISON=1
+  if (( RUN_TRAIN_STEP_EXPLICIT == 0 )); then
+    RUN_TRAIN_STEP=1
+  fi
+  STRICT_CANONICAL_COMPLETENESS=1
+  if [[ -z "${VLLM_GPU_MEMORY_UTILIZATION:-}" ]]; then
+    export VLLM_GPU_MEMORY_UTILIZATION="0.8"
+  fi
+  if [[ -z "${VLLM_SERVER_READY_TIMEOUT:-}" ]]; then
+    export VLLM_SERVER_READY_TIMEOUT="1800"
+  fi
+  if (( VLLM_REPEATS_EXPLICIT == 0 )) && (( VLLM_REPEATS < 3 )); then
+    VLLM_REPEATS="3"
+  fi
+  if (( VLLM_REQUEST_RATE_REPEATS_EXPLICIT == 0 )) && (( VLLM_REQUEST_RATE_REPEATS < 3 )); then
+    VLLM_REQUEST_RATE_REPEATS="3"
+  fi
+  if (( FIO_REPEATS_EXPLICIT == 0 )) && (( FIO_REPEATS < 3 )); then
+    FIO_REPEATS="3"
+  fi
+  if [[ -z "$VLLM_MAX_CONC_CV_P95_PCT" ]]; then
+    VLLM_MAX_CONC_CV_P95_PCT="15"
+  fi
+  if [[ -z "$VLLM_MAX_RATE_CV_P95_PCT" ]]; then
+    VLLM_MAX_RATE_CV_P95_PCT="10"
+  fi
+  if [[ -z "$FIO_MAX_SEQ_BW_CV_PCT" ]]; then
+    FIO_MAX_SEQ_BW_CV_PCT="12"
+  fi
+fi
+
+if (( FORCE_DISABLE_ALLREDUCE_STABILITY == 1 )); then
+  ENABLE_ALLREDUCE_STABILITY=0
+fi
+if (( FORCE_DISABLE_NCCL_ALLTOALL == 1 )); then
+  ENABLE_NCCL_ALLTOALL=0
+fi
+if (( FORCE_DISABLE_NCCL_ALGO_COMPARISON == 1 )); then
+  ENABLE_NCCL_ALGO_COMPARISON=0
+fi
+
+if [[ "$RUN_VLLM_REQUEST_RATE_SWEEP" -eq 1 ]]; then
+  if [[ -z "${VLLM_REQUEST_RATE_RANGE// }" ]]; then
+    echo "ERROR: --vllm-request-rate-range resolved to an empty list while request-rate sweep is enabled" >&2
+    exit 2
+  fi
+  for rate in $VLLM_REQUEST_RATE_RANGE; do
+    if ! python3 - "$rate" <<'PY'
+import sys
+val = float(sys.argv[1])
+if val <= 0:
+    raise SystemExit(1)
+PY
+    then
+      echo "ERROR: --vllm-request-rate-range contains non-positive value '${rate}'" >&2
+      exit 2
+    fi
+  done
+fi
 
 if [[ "$FP4_RUNTIME" != "host" && "$FP4_RUNTIME" != "container" ]]; then
   echo "ERROR: --fp4-runtime must be host or container (got: ${FP4_RUNTIME})" >&2
@@ -841,12 +1168,42 @@ if ! [[ "$ALLGATHER_CONTROL_WARMUP" =~ ^[0-9]+$ ]]; then
   echo "ERROR: --allgather-control-warmup must be >= 0 (got: ${ALLGATHER_CONTROL_WARMUP})" >&2
   exit 2
 fi
+if ! [[ "$NCCL_ALLTOALL_WARMUP" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --nccl-alltoall-warmup must be >= 0 (got: ${NCCL_ALLTOALL_WARMUP})" >&2
+  exit 2
+fi
+if ! [[ "$NCCL_ALLTOALL_ITERS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --nccl-alltoall-iters must be a positive integer (got: ${NCCL_ALLTOALL_ITERS})" >&2
+  exit 2
+fi
 
 IFS=',' read -r -a HOST_ARR <<<"$HOSTS"
 IFS=',' read -r -a LABEL_ARR <<<"$LABELS"
 if [[ -n "$LABELS" && "${#LABEL_ARR[@]}" -ne "${#HOST_ARR[@]}" ]]; then
   echo "ERROR: --labels count must match --hosts count" >&2
   exit 2
+fi
+for i in "${!HOST_ARR[@]}"; do
+  HOST_ARR[$i]="$(echo "${HOST_ARR[$i]}" | xargs)"
+  if [[ -z "${HOST_ARR[$i]}" ]]; then
+    echo "ERROR: --hosts contains an empty host entry" >&2
+    exit 2
+  fi
+done
+if [[ -n "$LABELS" ]]; then
+  declare -A SEEN_LABELS=()
+  for i in "${!LABEL_ARR[@]}"; do
+    LABEL_ARR[$i]="$(echo "${LABEL_ARR[$i]}" | xargs)"
+    if [[ -z "${LABEL_ARR[$i]}" ]]; then
+      echo "ERROR: --labels contains an empty label entry" >&2
+      exit 2
+    fi
+    if [[ -n "${SEEN_LABELS[${LABEL_ARR[$i]}]:-}" ]]; then
+      echo "ERROR: --labels entries must be unique; duplicate '${LABEL_ARR[$i]}'" >&2
+      exit 2
+    fi
+    SEEN_LABELS["${LABEL_ARR[$i]}"]=1
+  done
 fi
 
 is_local_host_name() {
@@ -912,13 +1269,156 @@ if [[ -z "$SOCKET_IFNAME" ]]; then
   SOCKET_IFNAME="$OOB_IF"
 fi
 
+emit_multinode_readiness_artifact() {
+  local status="$1"
+  shift || true
+  local out_path="${STRUCTURED_DIR}/${RUN_ID}_multinode_readiness.json"
+  mkdir -p "${STRUCTURED_DIR}"
+  python3 - "$out_path" "$RUN_ID" "$HOSTS" "$LABELS" "$STRICT_MULTINODE_READINESS" "$MODERN_LLM_PROFILE" "$RUN_VLLM_MULTINODE" "$RUN_TRAIN_STEP" "$TRAIN_STEP_MULTI_NODE" "${OOB_IF:-}" "${SOCKET_IFNAME:-}" "${NCCL_IB_HCA:-}" "$status" "$@" <<'PY'
+import datetime as dt
+import json
+import sys
+from pathlib import Path
+
+out_path = Path(sys.argv[1])
+run_id = sys.argv[2]
+hosts_raw = sys.argv[3]
+labels_raw = sys.argv[4]
+strict = bool(int(sys.argv[5]))
+modern = bool(int(sys.argv[6]))
+run_vllm_multinode = bool(int(sys.argv[7]))
+run_train_step = bool(int(sys.argv[8]))
+train_step_multi_node = bool(int(sys.argv[9]))
+oob_if = sys.argv[10]
+socket_ifname = sys.argv[11]
+nccl_ib_hca = sys.argv[12]
+status = sys.argv[13]
+messages = [m for m in sys.argv[14:] if m]
+
+hosts = [h.strip() for h in hosts_raw.split(",") if h.strip()]
+labels = [l.strip() for l in labels_raw.split(",") if l.strip()]
+
+payload = {
+    "run_id": run_id,
+    "generated_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+    "status": status,
+    "ready": status == "ok",
+    "strict_multinode_readiness": strict,
+    "inputs": {
+        "hosts": hosts,
+        "labels": labels,
+        "host_count": len(hosts),
+        "label_count": len(labels),
+        "modern_llm_profile": modern,
+        "run_vllm_multinode": run_vllm_multinode,
+        "run_train_step": run_train_step,
+        "train_step_multi_node": train_step_multi_node,
+        "oob_if": oob_if or None,
+        "socket_ifname": socket_ifname or None,
+        "nccl_ib_hca": nccl_ib_hca or None,
+    },
+    "messages": messages,
+    "checks": {
+        "labels_explicit": bool(labels_raw.strip()),
+        "interface_binding_explicit": bool((socket_ifname or "").strip()),
+        "modern_profile_has_multinode_vllm": (not modern) or run_vllm_multinode,
+        "train_step_has_multinode_enabled": (not run_train_step) or train_step_multi_node,
+        "vllm_multinode_host_shape_valid": (not run_vllm_multinode) or len(hosts) == 2,
+    },
+}
+out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+MULTINODE_STRICT_VIOLATIONS=()
+MULTINODE_ADVISORIES=()
+MULTINODE_HARD_ERRORS=()
+
+if [[ "${#HOST_ARR[@]}" -gt 1 ]]; then
+  if [[ -z "${LABELS// }" ]]; then
+    MULTINODE_STRICT_VIOLATIONS+=("explicit --labels is required for multi-node canonical runs")
+  fi
+  if [[ -z "${SOCKET_IFNAME// }" ]]; then
+    MULTINODE_STRICT_VIOLATIONS+=("explicit interface binding is required; pass --oob-if or --socket-ifname")
+  fi
+  if [[ "$MODERN_LLM_PROFILE" -eq 1 && "$RUN_VLLM_MULTINODE" -ne 1 ]]; then
+    MULTINODE_STRICT_VIOLATIONS+=("modern profile requires multinode vLLM enabled in multi-node scope")
+  fi
+  if [[ "$RUN_TRAIN_STEP" -eq 1 && "$TRAIN_STEP_MULTI_NODE" -ne 1 ]]; then
+    MULTINODE_STRICT_VIOLATIONS+=("train-step is enabled but --train-step-multi-node is disabled")
+  fi
+  if [[ "$RUN_VLLM_MULTINODE" -eq 1 && "${#HOST_ARR[@]}" -ne 2 ]]; then
+    MULTINODE_HARD_ERRORS+=("multinode vLLM currently supports exactly 2 hosts (leader,worker); got ${#HOST_ARR[@]}")
+  fi
+  if [[ -z "${SSH_KEY// }" ]]; then
+    MULTINODE_ADVISORIES+=("ssh key path is unset; pass --ssh-key for deterministic remote launch identity")
+  fi
+fi
+
+if [[ "${#MULTINODE_HARD_ERRORS[@]}" -gt 0 ]]; then
+  emit_multinode_readiness_artifact "error" "${MULTINODE_HARD_ERRORS[@]}"
+  for msg in "${MULTINODE_HARD_ERRORS[@]}"; do
+    echo "ERROR: ${msg}" >&2
+  done
+  exit 2
+fi
+
+if [[ "${#HOST_ARR[@]}" -gt 1 ]]; then
+  if [[ "$STRICT_MULTINODE_READINESS" -eq 1 && "${#MULTINODE_STRICT_VIOLATIONS[@]}" -gt 0 ]]; then
+    emit_multinode_readiness_artifact "error" "${MULTINODE_STRICT_VIOLATIONS[@]}"
+    for msg in "${MULTINODE_STRICT_VIOLATIONS[@]}"; do
+      echo "ERROR: strict multi-node readiness violation: ${msg}" >&2
+    done
+    exit 2
+  fi
+
+  if [[ "$STRICT_MULTINODE_READINESS" -eq 1 ]]; then
+    if [[ "${#MULTINODE_ADVISORIES[@]}" -gt 0 ]]; then
+      emit_multinode_readiness_artifact "ok" "${MULTINODE_ADVISORIES[@]}"
+    else
+      emit_multinode_readiness_artifact "ok"
+    fi
+  else
+    # Preserve non-strict behavior, but keep the readiness contract visible in structured output.
+    MULTINODE_ADVISORIES+=("${MULTINODE_STRICT_VIOLATIONS[@]}")
+    if [[ "${#MULTINODE_ADVISORIES[@]}" -gt 0 ]]; then
+      emit_multinode_readiness_artifact "advisory" "${MULTINODE_ADVISORIES[@]}"
+    else
+      emit_multinode_readiness_artifact "ok"
+    fi
+  fi
+elif [[ "$MULTINODE_READINESS_CHECK_ONLY" -eq 1 ]]; then
+  emit_multinode_readiness_artifact "not_applicable" "single-host scope: multi-node readiness checks are not applicable"
+fi
+
+if [[ "$MULTINODE_READINESS_CHECK_ONLY" -eq 1 ]]; then
+  if [[ "${#HOST_ARR[@]}" -gt 1 ]]; then
+    echo "Multi-node readiness check completed (no workloads executed)." >&2
+  else
+    echo "Readiness check-only requested in single-host scope; emitted not_applicable readiness artifact." >&2
+  fi
+  exit 0
+fi
+
 fail=0
 
-SUITE_LOG_DIR="${ROOT_DIR}/results/raw/${RUN_ID}_suite"
-SUITE_STEPS_JSON="${ROOT_DIR}/results/structured/${RUN_ID}_suite_steps.json"
+SUITE_LOG_DIR="${RAW_DIR}/${RUN_ID}_suite"
+SUITE_STEPS_JSON="${STRUCTURED_DIR}/${RUN_ID}_suite_steps.json"
+acquire_queue_runner_lock
 mkdir -p "$SUITE_LOG_DIR"
-mkdir -p "${ROOT_DIR}/results/structured"
-printf "[]\n" >"${SUITE_STEPS_JSON}"
+mkdir -p "${STRUCTURED_DIR}"
+if [[ "$RESUME_RUN" -eq 1 && -f "${SUITE_STEPS_JSON}" ]]; then
+  echo "Resuming suite with existing step ledger: ${SUITE_STEPS_JSON}"
+else
+  printf "[]\n" >"${SUITE_STEPS_JSON}"
+fi
+
+CURRENT_STEP_NAME=""
+CURRENT_STEP_START=""
+CURRENT_STEP_LOG_PATH=""
+CURRENT_STEP_CMD=""
+CURRENT_STEP_RECORDED=1
+SUITE_FORCED_EXIT_CODE=""
 
 record_suite_step() {
   local json_path="$1"
@@ -959,32 +1459,165 @@ with open(path, "w", encoding="utf-8") as f:
 PY
 }
 
+suite_step_completed_ok() {
+  local json_path="$1"
+  local name="$2"
+  python3 - "$json_path" "$name" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+name = sys.argv[2]
+if not path.exists():
+    raise SystemExit(1)
+try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(1)
+if not isinstance(payload, list):
+    raise SystemExit(1)
+for row in payload:
+    if not isinstance(row, dict):
+        continue
+    if row.get("name") != name:
+        continue
+    try:
+        rc = int(row.get("exit_code"))
+    except Exception:
+        continue
+    if rc == 0:
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+record_inflight_step() {
+  local rc="$1"
+  local end=""
+  if [[ -z "$CURRENT_STEP_NAME" || "$CURRENT_STEP_RECORDED" -ne 0 ]]; then
+    return 0
+  fi
+  end="$(date -Iseconds)"
+  if ! record_suite_step "${SUITE_STEPS_JSON}" "${CURRENT_STEP_NAME}" "${CURRENT_STEP_START}" "${end}" "${rc}" "${CURRENT_STEP_LOG_PATH}" "${CURRENT_STEP_CMD}"; then
+    echo "WARNING: failed to append interrupted step metadata for ${CURRENT_STEP_NAME}" >&2
+  fi
+  CURRENT_STEP_RECORDED=1
+  echo "<== [${end}] END ${CURRENT_STEP_NAME} rc=${rc} (interrupted)"
+}
+
+on_suite_signal() {
+  local signame="$1"
+  local rc="$2"
+  SUITE_FORCED_EXIT_CODE="$rc"
+  echo "ERROR: received signal ${signame}; exiting suite with rc=${rc}" >&2
+  exit "$rc"
+}
+
+on_suite_exit() {
+  local rc=$?
+  if [[ -n "$SUITE_FORCED_EXIT_CODE" ]]; then
+    rc="$SUITE_FORCED_EXIT_CODE"
+  fi
+  if [[ -n "$CURRENT_STEP_NAME" && "$CURRENT_STEP_RECORDED" -eq 0 ]]; then
+    echo "WARNING: suite exiting with in-flight step '${CURRENT_STEP_NAME}'; recording interrupted status rc=${rc}" >&2
+    record_inflight_step "$rc"
+  fi
+  release_queue_runner_lock
+}
+
+trap on_suite_exit EXIT
+trap 'on_suite_signal INT 130' INT
+trap 'on_suite_signal TERM 143' TERM
+trap 'on_suite_signal HUP 129' HUP
+
 run_step() {
   local name="$1"
   shift
   local start end rc log_path cmd_str
+  local resume_attempt=0
+  if [[ "$RESUME_RUN" -eq 1 ]] && suite_step_completed_ok "${SUITE_STEPS_JSON}" "${name}"; then
+    echo "==> [$(date -Iseconds)] SKIP ${name} (already completed)"
+    return 0
+  fi
   log_path="${SUITE_LOG_DIR}/${name}.log"
   cmd_str="$(printf '%q ' "$@")"
   cmd_str="${cmd_str% }"
-  start="$(date -Iseconds)"
-  echo "==> [${start}] START ${name}"
-  echo "    cmd: ${cmd_str}"
-  echo "    log: ${log_path}"
-  set +e
-  "$@" >"$log_path" 2>&1
-  rc=$?
-  set -e
-  end="$(date -Iseconds)"
-  if ! record_suite_step "${SUITE_STEPS_JSON}" "${name}" "${start}" "${end}" "${rc}" "${log_path}" "${cmd_str}"; then
-    echo "WARNING: failed to append step metadata for ${name}" >&2
+  while true; do
+    start="$(date -Iseconds)"
+    CURRENT_STEP_NAME="$name"
+    CURRENT_STEP_START="$start"
+    CURRENT_STEP_LOG_PATH="$log_path"
+    CURRENT_STEP_CMD="$cmd_str"
+    CURRENT_STEP_RECORDED=0
+    echo "==> [${start}] START ${name} (attempt=$((resume_attempt + 1)))"
+    echo "    cmd: ${cmd_str}"
+    echo "    log: ${log_path}"
+
+    set +e
+    if (( resume_attempt == 0 )); then
+      "$@" >"$log_path" 2>&1
+    else
+      {
+        echo ""
+        echo "=== AUTO_RESUME_ATTEMPT $((resume_attempt + 1)) @ $(date -Iseconds) ==="
+        "$@"
+      } >>"$log_path" 2>&1
+    fi
+    rc=$?
+    set -e
+
+    end="$(date -Iseconds)"
+    if ! record_suite_step "${SUITE_STEPS_JSON}" "${name}" "${start}" "${end}" "${rc}" "${log_path}" "${cmd_str}"; then
+      echo "WARNING: failed to append step metadata for ${name}" >&2
+    fi
+    CURRENT_STEP_RECORDED=1
+    CURRENT_STEP_NAME=""
+    CURRENT_STEP_START=""
+    CURRENT_STEP_LOG_PATH=""
+    CURRENT_STEP_CMD=""
+    echo "<== [${end}] END ${name} rc=${rc}"
+
+    if [[ "$rc" -eq 75 ]]; then
+      if [[ "$AUTO_RESUME_PARTIAL_STEPS" -eq 1 ]]; then
+        resume_attempt=$((resume_attempt + 1))
+        if (( resume_attempt >= PARTIAL_RESUME_MAX_ATTEMPTS )); then
+          fail=1
+          echo "ERROR: ${name} hit partial-resume limit (${PARTIAL_RESUME_MAX_ATTEMPTS}); stopping retries." >&2
+          echo "---- ${name} (last 60 lines) ----" >&2
+          tail -n 60 "$log_path" >&2 || true
+          return 1
+        fi
+        echo "INFO: ${name} reported resumable partial progress (rc=75); auto-resuming (attempt ${resume_attempt}/${PARTIAL_RESUME_MAX_ATTEMPTS})." >&2
+        echo "---- ${name} (last 60 lines) ----" >&2
+        tail -n 60 "$log_path" >&2 || true
+        sleep 2
+        continue
+      fi
+      fail=1
+      echo "INFO: ${name} reported resumable partial progress (rc=75); exit and resume to continue this step." >&2
+      echo "---- ${name} (last 60 lines) ----" >&2
+      tail -n 60 "$log_path" >&2 || true
+      exit 75
+    fi
+
+    if [[ "$rc" -ne 0 ]]; then
+      fail=1
+      echo "---- ${name} (last 60 lines) ----" >&2
+      tail -n 60 "$log_path" >&2 || true
+    fi
+    return 0
+  done
+}
+
+run_required_step() {
+  local name="$1"
+  shift
+  run_step "$name" "$@"
+  if ! suite_step_completed_ok "${SUITE_STEPS_JSON}" "${name}"; then
+    echo "ERROR: required step ${name} failed; aborting suite." >&2
+    exit 1
   fi
-  echo "<== [${end}] END ${name} rc=${rc}"
-  if [[ "$rc" -ne 0 ]]; then
-    fail=1
-    echo "---- ${name} (last 60 lines) ----" >&2
-    tail -n 60 "$log_path" >&2 || true
-  fi
-  return 0
 }
 
 sanitize_label() {
@@ -1015,17 +1648,49 @@ validate_required_artifacts() {
 
   for idx in "${!HOST_ARR[@]}"; do
     label="$(label_for_index "$idx")"
-    path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_fio.json"
-    if [[ ! -f "$path" ]]; then
-      echo "ERROR: missing required fio artifact: ${path}" >&2
-      missing=1
+    for suffix in "_fio.json" "_fio_stability.json"; do
+      path="${STRUCTURED_DIR}/${RUN_ID}_${label}${suffix}"
+      if [[ ! -f "$path" ]]; then
+        echo "ERROR: missing required fio artifact: ${path}" >&2
+        missing=1
+      fi
+    done
+    path="${STRUCTURED_DIR}/${RUN_ID}_${label}_fio_stability.json"
+    if [[ -f "$path" ]]; then
+      if ! python3 - "$path" "$FIO_MAX_SEQ_BW_CV_PCT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+summary = payload.get("summary") or {}
+repeats = int(payload.get("repeats") or 0)
+if repeats <= 0:
+    raise SystemExit("fio stability repeats is not positive")
+for key in ("seq_read_bw_cv_pct", "seq_write_bw_cv_pct"):
+    value = summary.get(key)
+    if value is None:
+        raise SystemExit(f"fio stability missing {key}")
+    if float(value) < 0:
+        raise SystemExit(f"fio stability {key} is negative")
+max_cv_arg = (sys.argv[2] or "").strip()
+if max_cv_arg:
+    max_cv = float(max_cv_arg)
+    for key in ("seq_read_bw_cv_pct", "seq_write_bw_cv_pct"):
+        if float(summary.get(key)) > max_cv:
+            raise SystemExit(f"fio stability {key}={summary.get(key)} exceeds threshold {max_cv}")
+PY
+      then
+        echo "ERROR: invalid fio stability artifact: ${path}" >&2
+        missing=1
+      fi
     fi
   done
 
   if [[ "$RUN_QUICK_FRICTION" -eq 1 ]]; then
     for idx in "${!HOST_ARR[@]}"; do
       label="$(label_for_index "$idx")"
-      path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_quick_friction.json"
+      path="${STRUCTURED_DIR}/${RUN_ID}_${label}_quick_friction.json"
       if [[ ! -f "$path" ]]; then
         echo "ERROR: missing required quick friction artifact: ${path}" >&2
         missing=1
@@ -1056,7 +1721,7 @@ PY
   if [[ "$RUN_MONITORING_EXPECTATIONS" -eq 1 ]]; then
     for idx in "${!HOST_ARR[@]}"; do
       label="$(label_for_index "$idx")"
-      path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_monitoring_expectations.json"
+      path="${STRUCTURED_DIR}/${RUN_ID}_${label}_monitoring_expectations.json"
       if [[ ! -f "$path" ]]; then
         echo "ERROR: missing required monitoring expectations artifact: ${path}" >&2
         missing=1
@@ -1089,7 +1754,7 @@ PY
 
   for idx in "${!HOST_ARR[@]}"; do
     label="$(label_for_index "$idx")"
-    path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_hang_triage_readiness.json"
+    path="${STRUCTURED_DIR}/${RUN_ID}_${label}_hang_triage_readiness.json"
     if [[ ! -f "$path" ]]; then
       echo "ERROR: missing required hang triage artifact: ${path}" >&2
       missing=1
@@ -1116,7 +1781,7 @@ PY
     fi
   done
 
-  path="${ROOT_DIR}/results/structured/${RUN_ID}_torchrun_connectivity_probe.json"
+  path="${STRUCTURED_DIR}/${RUN_ID}_torchrun_connectivity_probe.json"
   if [[ ! -f "$path" ]]; then
     echo "ERROR: missing required connectivity probe artifact: ${path}" >&2
     missing=1
@@ -1143,12 +1808,13 @@ PY
     fi
   fi
 
-  path="${ROOT_DIR}/results/structured/${RUN_ID}_nccl_env_sensitivity.json"
-  if [[ ! -f "$path" ]]; then
-    echo "ERROR: missing required NCCL env sensitivity artifact: ${path}" >&2
-    missing=1
-  else
-    if ! python3 - "$path" <<'PY'
+  if [[ "$RUN_NCCL_ENV_SENSITIVITY" -eq 1 ]]; then
+    path="${STRUCTURED_DIR}/${RUN_ID}_nccl_env_sensitivity.json"
+    if [[ ! -f "$path" ]]; then
+      echo "ERROR: missing required NCCL env sensitivity artifact: ${path}" >&2
+      missing=1
+    else
+      if ! python3 - "$path" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -1165,9 +1831,67 @@ if not profiles:
 if not any((p or {}).get("profile") == "baseline_auto" and (p or {}).get("status") == "ok" for p in profiles):
     raise SystemExit("nccl env sensitivity missing successful baseline_auto profile")
 PY
-    then
-      echo "ERROR: invalid NCCL env sensitivity artifact: ${path}" >&2
+      then
+        echo "ERROR: invalid NCCL env sensitivity artifact: ${path}" >&2
+        missing=1
+      fi
+    fi
+  fi
+
+  if [[ "$ENABLE_NCCL_ALLTOALL" -eq 1 ]]; then
+    path="${STRUCTURED_DIR}/${RUN_ID}_node1_alltoall_nccl_alltoall.json"
+    if [[ ! -f "$path" ]]; then
+      echo "ERROR: missing required NCCL all-to-all artifact: ${path}" >&2
       missing=1
+    else
+      if ! python3 - "$path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+rows = payload.get("results") or []
+if not rows:
+    raise SystemExit("NCCL all-to-all results are empty")
+total_ranks = int(payload.get("total_ranks") or 0)
+max_busbw = max(float((r or {}).get("busbw_gbps") or 0.0) for r in rows)
+max_algbw = max(float((r or {}).get("algbw_gbps") or 0.0) for r in rows)
+if total_ranks >= 2:
+    if max_busbw <= 0:
+        raise SystemExit("NCCL all-to-all busbw is non-positive for multi-rank run")
+else:
+    if max_algbw <= 0:
+        raise SystemExit("NCCL all-to-all algbw is non-positive for single-rank run")
+PY
+      then
+        echo "ERROR: invalid NCCL all-to-all artifact: ${path}" >&2
+        missing=1
+      fi
+    fi
+
+    if [[ "${#HOST_ARR[@]}" -gt 1 ]]; then
+      path="${STRUCTURED_DIR}/${RUN_ID}_2nodes_alltoall_nccl_alltoall.json"
+      if [[ ! -f "$path" ]]; then
+        echo "ERROR: missing required multi-node NCCL all-to-all artifact: ${path}" >&2
+        missing=1
+      else
+        if ! python3 - "$path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+rows = payload.get("results") or []
+if not rows:
+    raise SystemExit("multi-node NCCL all-to-all results are empty")
+if max(float((r or {}).get("busbw_gbps") or 0.0) for r in rows) <= 0:
+    raise SystemExit("multi-node NCCL all-to-all busbw is non-positive")
+PY
+        then
+          echo "ERROR: invalid multi-node NCCL all-to-all artifact: ${path}" >&2
+          missing=1
+        fi
+      fi
     fi
   fi
 
@@ -1175,13 +1899,13 @@ PY
     for idx in "${!HOST_ARR[@]}"; do
       label="$(label_for_index "$idx")"
       for suffix in "_nvbandwidth.json" "_nvbandwidth_sums.csv" "_nvbandwidth_clock_lock.json"; do
-        path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}${suffix}"
+        path="${STRUCTURED_DIR}/${RUN_ID}_${label}${suffix}"
         if [[ ! -f "$path" ]]; then
           echo "ERROR: missing required nvbandwidth artifact: ${path}" >&2
           missing=1
         fi
       done
-      path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_nvbandwidth.json"
+      path="${STRUCTURED_DIR}/${RUN_ID}_${label}_nvbandwidth.json"
       if [[ -f "$path" ]]; then
         if ! python3 - "$path" <<'PY'
 import json
@@ -1208,13 +1932,13 @@ PY
     for idx in "${!HOST_ARR[@]}"; do
       label="$(label_for_index "$idx")"
       for suffix in "_gpu_stream.json" "_gpu_stream.csv" "_gpu_stream_clock_lock.json"; do
-        path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}${suffix}"
+        path="${STRUCTURED_DIR}/${RUN_ID}_${label}${suffix}"
         if [[ ! -f "$path" ]]; then
           echo "ERROR: missing required gpu_stream artifact: ${path}" >&2
           missing=1
         fi
       done
-      path="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_gpu_stream.json"
+      path="${STRUCTURED_DIR}/${RUN_ID}_${label}_gpu_stream.json"
       if [[ -f "$path" ]]; then
         if ! python3 - "$path" <<'PY'
 import json
@@ -1238,19 +1962,74 @@ PY
     done
   fi
 
-  path="${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep.csv"
-  if [[ ! -f "$path" ]]; then
-    echo "ERROR: missing required vLLM serve sweep artifact: ${path}" >&2
-    missing=1
+  for suffix in "_vllm_serve_sweep.csv" "_vllm_serve_sweep.jsonl" "_vllm_serve_sweep_clock_lock.json" "_vllm_serve_sweep_stability.json"; do
+    path="${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}${suffix}"
+    if [[ ! -f "$path" ]]; then
+      echo "ERROR: missing required vLLM serve sweep artifact: ${path}" >&2
+      missing=1
+    fi
+  done
+  path="${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep.csv"
+  if [[ -f "$path" ]]; then
+    if ! python3 - "$path" <<'PY'
+import csv
+import sys
+from pathlib import Path
+
+rows = list(csv.DictReader(Path(sys.argv[1]).open("r", encoding="utf-8", newline="")))
+if not rows:
+    raise SystemExit("vLLM serve sweep csv has no rows")
+for idx, row in enumerate(rows, start=1):
+    completed = int(float((row.get("completed") or 0.0)))
+    failed = int(float((row.get("failed") or 0.0)))
+    total_tok = float((row.get("total_token_throughput") or 0.0))
+    if completed <= 0:
+        raise SystemExit(f"vLLM serve sweep row {idx} has completed={completed} (must be > 0)")
+    if failed > 0:
+        raise SystemExit(f"vLLM serve sweep row {idx} has failed={failed} (must be 0)")
+    if total_tok <= 0.0:
+        raise SystemExit(f"vLLM serve sweep row {idx} has total_token_throughput={total_tok} (must be > 0)")
+PY
+    then
+      echo "ERROR: invalid vLLM serve sweep csv: ${path}" >&2
+      missing=1
+    fi
+  fi
+  path="${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep_stability.json"
+  if [[ -f "$path" ]]; then
+    if ! python3 - "$path" "$VLLM_MAX_CONC_CV_P95_PCT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+summary = payload.get("summary") or {}
+points = int(summary.get("points") or 0)
+if points <= 0:
+    raise SystemExit("vLLM sweep stability has no points")
+value = summary.get("total_token_throughput_cv_pct_p95")
+if value is None:
+    raise SystemExit("vLLM sweep stability missing total_token_throughput_cv_pct_p95")
+v = float(value)
+if v < 0:
+    raise SystemExit("vLLM sweep stability CV is negative")
+max_cv_arg = (sys.argv[2] or "").strip()
+if max_cv_arg and v > float(max_cv_arg):
+    raise SystemExit(f"vLLM sweep CV p95={v} exceeds threshold {max_cv_arg}")
+PY
+    then
+      echo "ERROR: invalid vLLM serve sweep stability: ${path}" >&2
+      missing=1
+    fi
   fi
   for suffix in "_vllm_serve_slo_goodput.json" "_vllm_serve_slo_goodput.csv"; do
-    path="${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}${suffix}"
+    path="${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}${suffix}"
     if [[ ! -f "$path" ]]; then
       echo "ERROR: missing required vLLM SLO goodput artifact: ${path}" >&2
       missing=1
     fi
   done
-  path="${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_slo_goodput.json"
+  path="${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_slo_goodput.json"
   if [[ -f "$path" ]]; then
     if ! python3 - "$path" <<'PY'
 import json
@@ -1274,14 +2053,14 @@ PY
     fi
   fi
   if [[ "$RUN_VLLM_REQUEST_RATE_SWEEP" -eq 1 ]]; then
-    for suffix in "_vllm_serve_request_rate_sweep.csv" "_vllm_serve_request_rate_sweep.jsonl" "_vllm_serve_request_rate_sweep_clock_lock.json" "_vllm_request_rate_slo_goodput.json" "_vllm_request_rate_slo_goodput.csv"; do
-      path="${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}${suffix}"
+    for suffix in "_vllm_serve_request_rate_sweep.csv" "_vllm_serve_request_rate_sweep.jsonl" "_vllm_serve_request_rate_sweep_clock_lock.json" "_vllm_serve_request_rate_sweep_stability.json" "_vllm_request_rate_slo_goodput.json" "_vllm_request_rate_slo_goodput.csv"; do
+      path="${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}${suffix}"
       if [[ ! -f "$path" ]]; then
         echo "ERROR: missing required vLLM request-rate artifact: ${path}" >&2
         missing=1
       fi
     done
-    path="${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_request_rate_sweep.csv"
+    path="${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_request_rate_sweep.csv"
     if [[ -f "$path" ]]; then
       if ! python3 - "$path" <<'PY'
 import csv
@@ -1291,15 +2070,50 @@ from pathlib import Path
 rows = list(csv.DictReader(Path(sys.argv[1]).open("r", encoding="utf-8", newline="")))
 if not rows:
     raise SystemExit("request-rate sweep csv has no rows")
-if not any(float((r.get("total_token_throughput") or 0.0)) > 0 for r in rows):
-    raise SystemExit("request-rate sweep total_token_throughput has no positive values")
+for idx, row in enumerate(rows, start=1):
+    completed = int(float((row.get("completed") or 0.0)))
+    failed = int(float((row.get("failed") or 0.0)))
+    total_tok = float((row.get("total_token_throughput") or 0.0))
+    if completed <= 0:
+        raise SystemExit(f"request-rate sweep row {idx} has completed={completed} (must be > 0)")
+    if failed > 0:
+        raise SystemExit(f"request-rate sweep row {idx} has failed={failed} (must be 0)")
+    if total_tok <= 0.0:
+        raise SystemExit(f"request-rate sweep row {idx} has total_token_throughput={total_tok} (must be > 0)")
 PY
       then
         echo "ERROR: invalid vLLM request-rate sweep csv: ${path}" >&2
         missing=1
       fi
     fi
-    path="${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_request_rate_slo_goodput.json"
+    path="${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_request_rate_sweep_stability.json"
+    if [[ -f "$path" ]]; then
+      if ! python3 - "$path" "$VLLM_MAX_RATE_CV_P95_PCT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+summary = payload.get("summary") or {}
+points = int(summary.get("points") or 0)
+if points <= 0:
+    raise SystemExit("vLLM request-rate stability has no points")
+value = summary.get("total_token_throughput_cv_pct_p95")
+if value is None:
+    raise SystemExit("vLLM request-rate stability missing total_token_throughput_cv_pct_p95")
+v = float(value)
+if v < 0:
+    raise SystemExit("vLLM request-rate stability CV is negative")
+max_cv_arg = (sys.argv[2] or "").strip()
+if max_cv_arg and v > float(max_cv_arg):
+    raise SystemExit(f"vLLM request-rate CV p95={v} exceeds threshold {max_cv_arg}")
+PY
+      then
+        echo "ERROR: invalid vLLM request-rate sweep stability: ${path}" >&2
+        missing=1
+      fi
+    fi
+    path="${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_request_rate_slo_goodput.json"
     if [[ -f "$path" ]]; then
       if ! python3 - "$path" <<'PY'
 import json
@@ -1326,14 +2140,14 @@ PY
     worker_label="$(label_for_index 1)"
 
     for suffix in "_vllm_multinode_serve.json" "_vllm_multinode_serve.csv" "_vllm_multinode_serve.jsonl"; do
-      path="${ROOT_DIR}/results/structured/${RUN_ID}_${leader_label}${suffix}"
+      path="${STRUCTURED_DIR}/${RUN_ID}_${leader_label}${suffix}"
       if [[ ! -f "$path" ]]; then
         echo "ERROR: missing required multinode vLLM artifact: ${path}" >&2
         missing=1
       fi
     done
     for suffix in "_vllm_multinode_slo_goodput.json" "_vllm_multinode_slo_goodput.csv"; do
-      path="${ROOT_DIR}/results/structured/${RUN_ID}_${leader_label}${suffix}"
+      path="${STRUCTURED_DIR}/${RUN_ID}_${leader_label}${suffix}"
       if [[ ! -f "$path" ]]; then
         echo "ERROR: missing required multinode vLLM SLO goodput artifact: ${path}" >&2
         missing=1
@@ -1341,9 +2155,9 @@ PY
     done
     for suffix in "_vllm_multinode_leader_clock_lock.json" "_vllm_multinode_worker_clock_lock.json"; do
       if [[ "$suffix" == *_leader_clock_lock.json ]]; then
-        path="${ROOT_DIR}/results/structured/${RUN_ID}_${leader_label}${suffix}"
+        path="${STRUCTURED_DIR}/${RUN_ID}_${leader_label}${suffix}"
       else
-        path="${ROOT_DIR}/results/structured/${RUN_ID}_${worker_label}${suffix}"
+        path="${STRUCTURED_DIR}/${RUN_ID}_${worker_label}${suffix}"
       fi
       if [[ ! -f "$path" ]]; then
         echo "ERROR: missing required multinode vLLM lock artifact: ${path}" >&2
@@ -1351,7 +2165,7 @@ PY
       fi
     done
 
-    path="${ROOT_DIR}/results/structured/${RUN_ID}_${leader_label}_vllm_multinode_serve.json"
+    path="${STRUCTURED_DIR}/${RUN_ID}_${leader_label}_vllm_multinode_serve.json"
     if [[ -f "$path" ]]; then
       if ! python3 - "$path" <<'PY'
 import json
@@ -1382,7 +2196,7 @@ PY
       fi
     fi
 
-    path="${ROOT_DIR}/results/structured/${RUN_ID}_${leader_label}_vllm_multinode_slo_goodput.json"
+    path="${STRUCTURED_DIR}/${RUN_ID}_${leader_label}_vllm_multinode_slo_goodput.json"
     if [[ -f "$path" ]]; then
       if ! python3 - "$path" <<'PY'
 import json
@@ -1406,7 +2220,7 @@ PY
   if [[ "${#HOST_ARR[@]}" -gt 1 && "$HEALTH_SUITE_MODE" != "off" && "$HEALTH_GDR" -eq 1 ]]; then
     local -a hs_summaries=()
     shopt -s nullglob
-    hs_summaries=( "${ROOT_DIR}/results/structured/${RUN_ID}_health_suite_${HEALTH_SUITE_MODE}_"*"_cluster_health_suite_summary.json" )
+    hs_summaries=( "${STRUCTURED_DIR}/${RUN_ID}_health_suite_${HEALTH_SUITE_MODE}_"*"_cluster_health_suite_summary.json" )
     shopt -u nullglob
     if [[ "${#hs_summaries[@]}" -eq 0 ]]; then
       echo "ERROR: health suite summary missing; cannot verify effective GDR." >&2
@@ -1442,25 +2256,102 @@ PY
     fi
   fi
 
-  path="${ROOT_DIR}/results/structured/${RUN_ID}_cluster_scorecard.json"
+  path="${STRUCTURED_DIR}/${RUN_ID}_cluster_scorecard.json"
   if [[ ! -f "$path" ]]; then
     echo "ERROR: missing required scorecard artifact: ${path}" >&2
     missing=1
   fi
-  path="${ROOT_DIR}/results/structured/${RUN_ID}_cluster_scorecard.md"
+  path="${STRUCTURED_DIR}/${RUN_ID}_cluster_scorecard.md"
   if [[ ! -f "$path" ]]; then
     echo "ERROR: missing required scorecard artifact: ${path}" >&2
     missing=1
   fi
-  path="${ROOT_DIR}/results/structured/${RUN_ID}_benchmark_coverage_analysis.json"
+  path="${STRUCTURED_DIR}/${RUN_ID}_benchmark_coverage_analysis.json"
   if [[ ! -f "$path" ]]; then
     echo "ERROR: missing required benchmark coverage artifact: ${path}" >&2
     missing=1
   fi
-  path="${ROOT_DIR}/results/structured/${RUN_ID}_benchmark_coverage_analysis.md"
+  path="${STRUCTURED_DIR}/${RUN_ID}_benchmark_coverage_analysis.md"
   if [[ ! -f "$path" ]]; then
     echo "ERROR: missing required benchmark coverage artifact: ${path}" >&2
     missing=1
+  fi
+  path="${STRUCTURED_DIR}/${RUN_ID}_mlperf_alignment.json"
+  if [[ ! -f "$path" ]]; then
+    echo "ERROR: missing required MLPerf alignment artifact: ${path}" >&2
+    missing=1
+  fi
+  path="${STRUCTURED_DIR}/${RUN_ID}_mlperf_alignment.md"
+  if [[ ! -f "$path" ]]; then
+    echo "ERROR: missing required MLPerf alignment artifact: ${path}" >&2
+    missing=1
+  fi
+
+  if [[ "$STRICT_CANONICAL_COMPLETENESS" -eq 1 ]]; then
+    path="${STRUCTURED_DIR}/${RUN_ID}_benchmark_coverage_analysis.json"
+    if [[ -f "$path" ]]; then
+      if ! python3 - "$path" "$CANONICAL_MIN_COVERAGE_PCT" "$CANONICAL_MIN_ADVANCED_COVERAGE_PCT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+coverage_path = Path(sys.argv[1])
+min_cov = int(sys.argv[2])
+min_adv = int(sys.argv[3])
+payload = json.loads(coverage_path.read_text(encoding="utf-8"))
+cov = int(payload.get("coverage_score_pct") or 0)
+adv = int(payload.get("advanced_coverage_score_pct") or 0)
+missing = payload.get("missing_subsystems") or []
+if cov < min_cov:
+    raise SystemExit(f"coverage_score_pct={cov} below required {min_cov}")
+if adv < min_adv:
+    raise SystemExit(f"advanced_coverage_score_pct={adv} below required {min_adv}")
+if missing:
+    raise SystemExit(f"missing_subsystems is not empty: {missing}")
+advanced = payload.get("advanced_coverage") or {}
+required = (
+    "vllm_request_rate_sweep",
+    "vllm_concurrency_repeat_stability",
+    "vllm_request_rate_repeat_stability",
+    "fio_repeat_stability",
+    "allreduce_stability",
+    "allreduce_latency_comp",
+    "allgather_control_plane",
+    "nccl_alltoall",
+    "nccl_algo_comparison",
+    "train_step_workload",
+    "mlperf_alignment",
+)
+for key in required:
+    if not bool(advanced.get(key)):
+        raise SystemExit(f"advanced_coverage[{key}] is false")
+PY
+      then
+        echo "ERROR: canonical completeness coverage check failed (${path})" >&2
+        missing=1
+      fi
+    fi
+
+    path="${STRUCTURED_DIR}/${RUN_ID}_mlperf_alignment.json"
+    if [[ -f "$path" ]]; then
+      if ! python3 - "$path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if str(payload.get("overall_status") or "").lower() != "aligned":
+    raise SystemExit(f"mlperf alignment overall_status is not aligned: {payload.get('overall_status')}")
+if not bool(payload.get("inference_track_ready")):
+    raise SystemExit("mlperf alignment inference_track_ready is false")
+if not bool(payload.get("training_track_ready")):
+    raise SystemExit("mlperf alignment training_track_ready is false")
+PY
+      then
+        echo "ERROR: canonical completeness MLPerf alignment check failed (${path})" >&2
+        missing=1
+      fi
+    fi
   fi
 
   if [[ "$missing" -ne 0 ]]; then
@@ -1476,13 +2367,14 @@ echo "Date: $(date -Iseconds)"
 echo "RUN_ID(base): ${RUN_ID}"
 echo "HOSTS: ${HOSTS}"
 echo "SUITE_STEPS_JSON: ${SUITE_STEPS_JSON}"
+echo "QUEUE_RUNNER_LOCK: ${QUEUE_RUNNER_LOCK_PATH} (timeout_s=${QUEUE_RUNNER_LOCK_TIMEOUT_SEC})"
 if [[ -n "$LABELS" ]]; then
   echo "LABELS: ${LABELS}"
 fi
 echo "SSH_USER: ${SSH_USER}"
 echo "PRIMARY_LABEL: ${PRIMARY_LABEL}"
 echo "connectivity_probe: master_port=${CONNECTIVITY_PROBE_MASTER_PORT} barrier_iters=${CONNECTIVITY_PROBE_BARRIER_ITERS} payload_bytes=${CONNECTIVITY_PROBE_PAYLOAD_BYTES} timeout_sec=${CONNECTIVITY_PROBE_TIMEOUT_SEC}"
-echo "nccl_env_sensitivity: min=${NCCL_ENV_MIN_BYTES} max=${NCCL_ENV_MAX_BYTES} warmup=${NCCL_ENV_WARMUP} iters=${NCCL_ENV_ITERS}"
+echo "nccl_env_sensitivity: enabled=${RUN_NCCL_ENV_SENSITIVITY} min=${NCCL_ENV_MIN_BYTES} max=${NCCL_ENV_MAX_BYTES} warmup=${NCCL_ENV_WARMUP} iters=${NCCL_ENV_ITERS}"
 echo "quick_friction: enabled=${RUN_QUICK_FRICTION} strict=${QUICK_FRICTION_STRICT} checks='${QUICK_FRICTION_CHECKS}' timeout_sec=${QUICK_FRICTION_TIMEOUT_SEC} torch=${QUICK_FRICTION_TORCH_VERSION} hf_model=${QUICK_FRICTION_HF_MODEL} allow_failed='${QUICK_FRICTION_ALLOW_FAILED_CHECKS:-<none>}'"
 echo "monitoring_expectations: enabled=${RUN_MONITORING_EXPECTATIONS} strict=${MONITORING_EXPECTATIONS_STRICT} k8s_mode=${MONITORING_K8S_MODE} checks='${MONITORING_CHECKS}' sample_count=${MONITORING_SAMPLE_COUNT} dmesg_lines=${MONITORING_DMESG_LINES} timeout_sec=${MONITORING_TIMEOUT_SEC}"
 echo "render_localhost_report: mode=${RENDER_LOCALHOST_REPORT_MODE} detected_localhost=${IS_LOCALHOST_PACKAGE}"
@@ -1492,10 +2384,13 @@ if [[ "${#HOST_ARR[@]}" -gt 1 ]]; then
   echo "NCCL_IB_HCA: ${NCCL_IB_HCA:-<auto>}"
   echo "NCCL_NVLS_ENABLE: ${NCCL_NVLS_ENABLE:-<unset>}"
 fi
-echo "vLLM: model=${MODEL} tp=${TP:-<auto>} isl=${ISL} osl=${OSL} conc='${CONCURRENCY_RANGE}' port=${PORT}"
+echo "vLLM: model=${MODEL} tp=${TP:-<auto>} isl=${ISL} osl=${OSL} conc='${CONCURRENCY_RANGE}' repeats=${VLLM_REPEATS} port=${PORT}"
+echo "vLLM(env): gpu_mem_util=${VLLM_GPU_MEMORY_UTILIZATION:-<unset>} server_ready_timeout_s=${VLLM_SERVER_READY_TIMEOUT:-<unset>}"
+echo "vLLM(resume-segmentation): max_points_per_run=${VLLM_MAX_POINTS_PER_RUN}"
 echo "vLLM(SLO): p99_ttft_ms<=${VLLM_SLO_P99_TTFT_MS} p99_tpot_ms<=${VLLM_SLO_P99_TPOT_MS}"
+echo "vLLM(stability thresholds): conc_tok_cv_p95<=${VLLM_MAX_CONC_CV_P95_PCT:-<disabled>} rate_tok_cv_p95<=${VLLM_MAX_RATE_CV_P95_PCT:-<disabled>}"
 if [[ "$RUN_VLLM_REQUEST_RATE_SWEEP" -eq 1 ]]; then
-  echo "vLLM(request-rate): enabled rates='${VLLM_REQUEST_RATE_RANGE}' max_concurrency=${VLLM_REQUEST_RATE_MAX_CONCURRENCY} num_prompts=${VLLM_REQUEST_RATE_NUM_PROMPTS:-<auto>}"
+  echo "vLLM(request-rate): enabled rates='${VLLM_REQUEST_RATE_RANGE}' repeats=${VLLM_REQUEST_RATE_REPEATS} max_concurrency=${VLLM_REQUEST_RATE_MAX_CONCURRENCY} num_prompts=${VLLM_REQUEST_RATE_NUM_PROMPTS:-<auto>}"
 else
   echo "vLLM(request-rate): disabled"
 fi
@@ -1504,7 +2399,8 @@ if [[ "$RUN_VLLM_MULTINODE" -eq 1 ]]; then
 else
   echo "vLLM(multinode): disabled mode=${RUN_VLLM_MULTINODE_MODE}"
 fi
-echo "fio: test_dir=${FIO_TEST_DIR} runtime_s=${FIO_RUNTIME}"
+echo "fio: test_dir=${FIO_TEST_DIR} runtime_s=${FIO_RUNTIME} repeats=${FIO_REPEATS}"
+echo "fio(stability threshold): seq_bw_cv<=${FIO_MAX_SEQ_BW_CV_PCT:-<disabled>}"
 if [[ "$RUN_NVBANDWIDTH" -eq 1 ]]; then
   echo "nvbandwidth: enabled mode=${RUN_NVBANDWIDTH_MODE} runtime=${NVBANDWIDTH_RUNTIME} quick=${NVBANDWIDTH_QUICK}"
 else
@@ -1540,7 +2436,14 @@ echo "mamf: ${ENABLE_MAMF} (mode=${MAMF_MODE} concurrent=${MAMF_CONCURRENT})"
 echo "allreduce_stability: ${ENABLE_ALLREDUCE_STABILITY} (payload_gib=${ALLREDUCE_PAYLOAD_GIB} iters=${ALLREDUCE_ITERS} warmup=${ALLREDUCE_WARMUP})"
 echo "allreduce_latency_comp: ${ENABLE_ALLREDUCE_LATENCY_COMP} (payload_gib=${ALLREDUCE_LATENCY_PAYLOAD_GIB} chunks=${ALLREDUCE_LATENCY_CHUNKS} iters=${ALLREDUCE_LATENCY_ITERS} warmup=${ALLREDUCE_LATENCY_WARMUP})"
 echo "allgather_control_plane: ${ENABLE_ALLGATHER_CONTROL_PLANE} (iters=${ALLGATHER_CONTROL_ITERS} warmup=${ALLGATHER_CONTROL_WARMUP})"
+echo "nccl_alltoall: ${ENABLE_NCCL_ALLTOALL} (min=${NCCL_ALLTOALL_MIN_BYTES} max=${NCCL_ALLTOALL_MAX_BYTES} iters=${NCCL_ALLTOALL_ITERS} warmup=${NCCL_ALLTOALL_WARMUP})"
 echo "nccl_algo_comparison: ${ENABLE_NCCL_ALGO_COMPARISON} (algos=${NCCL_ALGOS})"
+echo "modern_llm_profile: ${MODERN_LLM_PROFILE}"
+echo "scorecard_cost_model: gpu_hourly_cost_usd=${GPU_HOURLY_COST_USD:-<unset>}"
+echo "coverage_delta: baseline_run_id=${COVERAGE_BASELINE_RUN_ID:-<unset>}"
+echo "multinode_readiness: strict=${STRICT_MULTINODE_READINESS} check_only=${MULTINODE_READINESS_CHECK_ONLY} artifact=runs/${RUN_ID}/structured/${RUN_ID}_multinode_readiness.json"
+echo "canonical_completeness: strict=${STRICT_CANONICAL_COMPLETENESS} min_coverage=${CANONICAL_MIN_COVERAGE_PCT} min_advanced=${CANONICAL_MIN_ADVANCED_COVERAGE_PCT}"
+echo "partial_resume: auto=${AUTO_RESUME_PARTIAL_STEPS} max_attempts=${PARTIAL_RESUME_MAX_ATTEMPTS}"
 echo ""
 
 common_args=(--run-id "$RUN_ID" --hosts "$HOSTS")
@@ -1576,16 +2479,16 @@ if [[ "$BOOTSTRAP_NODES" -eq 1 ]]; then
   if [[ "$BOOTSTRAP_INSTALL_PYTHON_DEPS" -eq 0 ]]; then
     bootstrap_args+=(--skip-python-deps)
   fi
-  run_step "bootstrap_nodes" "${ROOT_DIR}/scripts/bootstrap_cluster_nodes.sh" "${bootstrap_args[@]}"
+  run_required_step "bootstrap_nodes" "${ROOT_DIR}/scripts/bootstrap_cluster_nodes.sh" "${bootstrap_args[@]}"
 fi
 
 preflight_args=(--run-id "$RUN_ID" --hosts "$HOSTS" --ssh-user "$SSH_USER")
 if [[ -n "$SSH_KEY" ]]; then
   preflight_args+=(--ssh-key "$SSH_KEY")
 fi
-run_step "preflight_services" "${ROOT_DIR}/scripts/preflight_cluster_services.sh" "${preflight_args[@]}"
+run_required_step "preflight_services" "${ROOT_DIR}/scripts/preflight_cluster_services.sh" "${preflight_args[@]}"
 
-run_step "discovery" "${ROOT_DIR}/scripts/collect_discovery_and_tcp_sysctl.sh" "${common_args[@]}"
+run_required_step "discovery" "${ROOT_DIR}/scripts/collect_discovery_and_tcp_sysctl.sh" "${common_args[@]}"
 
 if [[ "$RUN_QUICK_FRICTION" -eq 1 ]]; then
   quick_friction_args=(
@@ -1646,7 +2549,7 @@ fi
 if [[ -n "$SSH_KEY" ]]; then
   triage_args+=(--ssh-key "$SSH_KEY")
 fi
-run_step "hang_triage_bundle" "${ROOT_DIR}/scripts/collect_hang_triage_bundle.sh" "${triage_args[@]}"
+run_required_step "hang_triage_bundle" "${ROOT_DIR}/scripts/collect_hang_triage_bundle.sh" "${triage_args[@]}"
 
 # Required fast distributed connectivity gate before network benchmarks.
 connectivity_args=(
@@ -1668,7 +2571,7 @@ fi
 if [[ -n "$NCCL_IB_HCA" ]]; then
   connectivity_args+=(--nccl-ib-hca "$NCCL_IB_HCA")
 fi
-run_step "connectivity_probe" "${ROOT_DIR}/scripts/run_torchrun_connectivity_probe.sh" "${connectivity_args[@]}"
+run_required_step "connectivity_probe" "${ROOT_DIR}/scripts/run_torchrun_connectivity_probe.sh" "${connectivity_args[@]}"
 
 # Benchmark A: NCCL all_reduce_perf
 run_step "nccl_single_node" "${ROOT_DIR}/scripts/run_nccl_all_reduce.sh" \
@@ -1676,8 +2579,8 @@ run_step "nccl_single_node" "${ROOT_DIR}/scripts/run_nccl_all_reduce.sh" \
   --hosts localhost \
   --label "${PRIMARY_LABEL}"
 
-single_nccl_json="${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json"
-single_nccl_raw="${ROOT_DIR}/results/raw/${RUN_ID}_node1_${PRIMARY_LABEL}_nccl_all_reduce.log"
+single_nccl_json="${STRUCTURED_DIR}/${RUN_ID}_node1_nccl.json"
+single_nccl_raw="${RAW_DIR}/${RUN_ID}_node1_${PRIMARY_LABEL}_nccl_all_reduce.log"
 if [[ ! -f "$single_nccl_json" && -f "$single_nccl_raw" ]]; then
   single_nccl_gpus="$(nvidia-smi -L | wc -l | tr -d ' ')"
   if [[ "$single_nccl_gpus" =~ ^[1-9][0-9]*$ ]]; then
@@ -1737,7 +2640,9 @@ fi
 if [[ -n "$NCCL_IB_HCA" ]]; then
   nccl_env_args+=(--nccl-ib-hca "$NCCL_IB_HCA")
 fi
-run_step "nccl_env_sensitivity" "${ROOT_DIR}/scripts/run_nccl_env_sensitivity.sh" "${nccl_env_args[@]}"
+if [[ "$RUN_NCCL_ENV_SENSITIVITY" -eq 1 ]]; then
+  run_step "nccl_env_sensitivity" "${ROOT_DIR}/scripts/run_nccl_env_sensitivity.sh" "${nccl_env_args[@]}"
+fi
 
 # Optional multi-node diagnostics
 if [[ "${#HOST_ARR[@]}" -gt 1 && "$HEALTH_SUITE_MODE" != "off" ]]; then
@@ -1812,12 +2717,13 @@ vllm_args=(
   --isl "$ISL"
   --osl "$OSL"
   --concurrency-range "$CONCURRENCY_RANGE"
+  --repeats "$VLLM_REPEATS"
   --port "$PORT"
 )
 if [[ -n "$TP" ]]; then
   vllm_args+=(--tp "$TP")
 fi
-run_step "vllm_serve_sweep" "${ROOT_DIR}/scripts/repro/run_vllm_serve_sweep_container.sh" "${vllm_args[@]}"
+run_step "vllm_serve_sweep" env "VLLM_SWEEP_MAX_POINTS_PER_RUN=${VLLM_MAX_POINTS_PER_RUN}" "${ROOT_DIR}/scripts/repro/run_vllm_serve_sweep_container.sh" "${vllm_args[@]}"
 
 if [[ "$RUN_VLLM_REQUEST_RATE_SWEEP" -eq 1 ]]; then
   vllm_rate_args=(
@@ -1827,6 +2733,7 @@ if [[ "$RUN_VLLM_REQUEST_RATE_SWEEP" -eq 1 ]]; then
     --isl "$ISL"
     --osl "$OSL"
     --request-rate-range "$VLLM_REQUEST_RATE_RANGE"
+    --repeats "$VLLM_REQUEST_RATE_REPEATS"
     --max-concurrency "$VLLM_REQUEST_RATE_MAX_CONCURRENCY"
     --port "$PORT"
   )
@@ -1836,7 +2743,7 @@ if [[ "$RUN_VLLM_REQUEST_RATE_SWEEP" -eq 1 ]]; then
   if [[ -n "$VLLM_REQUEST_RATE_NUM_PROMPTS" ]]; then
     vllm_rate_args+=(--num-prompts "$VLLM_REQUEST_RATE_NUM_PROMPTS")
   fi
-  run_step "vllm_request_rate_sweep" "${ROOT_DIR}/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh" "${vllm_rate_args[@]}"
+  run_step "vllm_request_rate_sweep" env "VLLM_SWEEP_MAX_POINTS_PER_RUN=${VLLM_MAX_POINTS_PER_RUN}" "${ROOT_DIR}/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh" "${vllm_rate_args[@]}"
 fi
 
 if [[ "$RUN_VLLM_MULTINODE" -eq 1 ]]; then
@@ -1945,6 +2852,26 @@ if [[ "$ENABLE_FP4" -eq 1 ]]; then
   if [[ "$FP4_RUNTIME" == "container" ]]; then
     fp4_args+=(--image "$FP4_IMAGE")
   fi
+  # Keep FP4 checks aligned with suite-level bootstrap policy/config.
+  if [[ "$BOOTSTRAP_NODES" -eq 1 ]]; then
+    fp4_args+=(--bootstrap-nodes)
+    if [[ "$BOOTSTRAP_INSTALL_SYSTEM_PACKAGES" -eq 0 ]]; then
+      fp4_args+=(--bootstrap-skip-system-packages)
+    fi
+    if [[ "$BOOTSTRAP_SYNC_CODE" -eq 0 ]]; then
+      fp4_args+=(--bootstrap-skip-sync-code)
+    fi
+    if [[ "$BOOTSTRAP_INSTALL_PYTHON_DEPS" -eq 0 ]]; then
+      fp4_args+=(--bootstrap-skip-python-deps)
+    fi
+  else
+    fp4_args+=(--skip-bootstrap-nodes)
+  fi
+  fp4_args+=(
+    --bootstrap-host-parity-image "$BOOTSTRAP_HOST_PARITY_IMAGE"
+    --bootstrap-torch-index-url "$BOOTSTRAP_TORCH_INDEX_URL"
+    --bootstrap-torch-version "$BOOTSTRAP_TORCH_VERSION"
+  )
   run_step "fp4_checks" "${ROOT_DIR}/scripts/run_fp4_checks_all_nodes.sh" "${fp4_args[@]}"
 fi
 
@@ -2053,6 +2980,44 @@ if [[ "$ENABLE_ALLGATHER_CONTROL_PLANE" -eq 1 ]]; then
       allgather_args+=(--nccl-ib-hca "$NCCL_IB_HCA")
     fi
     run_step "allgather_control_plane" "${ROOT_DIR}/scripts/run_allgather_control_plane.sh" "${allgather_args[@]}"
+  fi
+fi
+
+# Optional: NCCL all-to-all benchmark (single-node + multi-node).
+if [[ "$ENABLE_NCCL_ALLTOALL" -eq 1 ]]; then
+  run_step "nccl_alltoall_single_node" "${ROOT_DIR}/scripts/run_nccl_all_to_all.sh" \
+    --run-id "${RUN_ID}_node1_alltoall" \
+    --hosts localhost \
+    --label "${PRIMARY_LABEL}" \
+    --min-bytes "${NCCL_ALLTOALL_MIN_BYTES}" \
+    --max-bytes "${NCCL_ALLTOALL_MAX_BYTES}" \
+    --iters "${NCCL_ALLTOALL_ITERS}" \
+    --warmup "${NCCL_ALLTOALL_WARMUP}"
+
+  if [[ "${#HOST_ARR[@]}" -gt 1 ]]; then
+    if [[ -z "$OOB_IF" ]]; then
+      echo "WARNING: --enable-nccl-alltoall requested for multi-node but --oob-if is not set; skipping multi-node all-to-all." >&2
+      fail=1
+    else
+      alltoall_multi_args=(
+        --run-id "${RUN_ID}_2nodes_alltoall"
+        --hosts "$HOSTS"
+        --label "${PRIMARY_LABEL}node2"
+        --min-bytes "${NCCL_ALLTOALL_MIN_BYTES}"
+        --max-bytes "${NCCL_ALLTOALL_MAX_BYTES}"
+        --iters "${NCCL_ALLTOALL_ITERS}"
+        --warmup "${NCCL_ALLTOALL_WARMUP}"
+        --oob-if "$OOB_IF"
+        --socket-ifname "$SOCKET_IFNAME"
+      )
+      if [[ -n "$SSH_KEY" ]]; then
+        alltoall_multi_args+=(--ssh-key "$SSH_KEY")
+      fi
+      if [[ -n "$NCCL_IB_HCA" ]]; then
+        alltoall_multi_args+=(--nccl-ib-hca "$NCCL_IB_HCA")
+      fi
+      run_step "nccl_alltoall_multi_node" "${ROOT_DIR}/scripts/run_nccl_all_to_all.sh" "${alltoall_multi_args[@]}"
+    fi
   fi
 fi
 
@@ -2203,6 +3168,7 @@ fio_args=(
   --ssh-user "$SSH_USER"
   --test-dir "$FIO_TEST_DIR"
   --runtime "$FIO_RUNTIME"
+  --repeats "$FIO_REPEATS"
 )
 if [[ -n "$LABELS" ]]; then
   fio_args+=(--labels "$LABELS")
@@ -2238,237 +3204,256 @@ if [[ "$RUN_NVBANDWIDTH" -eq 1 ]]; then
 fi
 
 # Plotting (best-effort)
-if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json" ]]; then
+if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_node1_nccl.json" ]]; then
   run_step "plot_nccl_single_node" python3 "${ROOT_DIR}/analysis/plot_nccl.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json" \
-    --out-dir "${ROOT_DIR}/docs/figures" \
+    --input "${STRUCTURED_DIR}/${RUN_ID}_node1_nccl.json" \
+    --out-dir "${FIGURES_DIR}" \
     --run-id "${RUN_ID}_node1"
 else
-  echo "WARNING: skipping plot_nccl_single_node; missing ${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json" >&2
+  echo "WARNING: skipping plot_nccl_single_node; missing ${STRUCTURED_DIR}/${RUN_ID}_node1_nccl.json" >&2
 fi
 
-if [[ "${#HOST_ARR[@]}" -gt 1 && -f "${ROOT_DIR}/results/structured/${RUN_ID}_2nodes_nccl.json" ]]; then
+if [[ "${#HOST_ARR[@]}" -gt 1 && -f "${STRUCTURED_DIR}/${RUN_ID}_2nodes_nccl.json" ]]; then
   nccl_plot_multi_args=(
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_2nodes_nccl.json"
-    --out-dir "${ROOT_DIR}/docs/figures"
+    --input "${STRUCTURED_DIR}/${RUN_ID}_2nodes_nccl.json"
+    --out-dir "${FIGURES_DIR}"
     --run-id "${RUN_ID}_2nodes"
   )
-  if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json" ]]; then
-    nccl_plot_multi_args+=(--baseline-input "${ROOT_DIR}/results/structured/${RUN_ID}_node1_nccl.json")
+  if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_node1_nccl.json" ]]; then
+    nccl_plot_multi_args+=(--baseline-input "${STRUCTURED_DIR}/${RUN_ID}_node1_nccl.json")
   fi
   run_step "plot_nccl_multi_node" python3 "${ROOT_DIR}/analysis/plot_nccl.py" "${nccl_plot_multi_args[@]}"
 fi
 
-if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_nccl_env_sensitivity.json" ]]; then
+if [[ "$ENABLE_NCCL_ALLTOALL" -eq 1 && -f "${STRUCTURED_DIR}/${RUN_ID}_node1_alltoall_nccl_alltoall.json" ]]; then
+  run_step "plot_nccl_alltoall_single_node" python3 "${ROOT_DIR}/analysis/plot_nccl.py" \
+    --input "${STRUCTURED_DIR}/${RUN_ID}_node1_alltoall_nccl_alltoall.json" \
+    --out-dir "${FIGURES_DIR}" \
+    --run-id "${RUN_ID}_node1_alltoall"
+fi
+
+if [[ "$ENABLE_NCCL_ALLTOALL" -eq 1 && "${#HOST_ARR[@]}" -gt 1 && -f "${STRUCTURED_DIR}/${RUN_ID}_2nodes_alltoall_nccl_alltoall.json" ]]; then
+  nccl_alltoall_multi_args=(
+    --input "${STRUCTURED_DIR}/${RUN_ID}_2nodes_alltoall_nccl_alltoall.json"
+    --out-dir "${FIGURES_DIR}"
+    --run-id "${RUN_ID}_2nodes_alltoall"
+  )
+  if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_node1_alltoall_nccl_alltoall.json" ]]; then
+    nccl_alltoall_multi_args+=(--baseline-input "${STRUCTURED_DIR}/${RUN_ID}_node1_alltoall_nccl_alltoall.json")
+  fi
+  run_step "plot_nccl_alltoall_multi_node" python3 "${ROOT_DIR}/analysis/plot_nccl.py" "${nccl_alltoall_multi_args[@]}"
+fi
+
+if [[ "$RUN_NCCL_ENV_SENSITIVITY" -eq 1 && -f "${STRUCTURED_DIR}/${RUN_ID}_nccl_env_sensitivity.json" ]]; then
   run_step "plot_nccl_env_sensitivity" python3 "${ROOT_DIR}/analysis/plot_nccl_env_sensitivity.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_nccl_env_sensitivity.json" \
-    --output "${ROOT_DIR}/docs/figures/${RUN_ID}_nccl_env_sensitivity.png" \
+    --input "${STRUCTURED_DIR}/${RUN_ID}_nccl_env_sensitivity.json" \
+    --output "${FIGURES_DIR}/${RUN_ID}_nccl_env_sensitivity.png" \
     --title "NCCL Env Sensitivity ${RUN_ID}"
 fi
 
-if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep.csv" ]]; then
+if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep.csv" ]]; then
   run_step "plot_vllm_serve" python3 "${ROOT_DIR}/analysis/plot_vllm_serve_sweep.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep.csv" \
-    --out-dir "${ROOT_DIR}/docs/figures" \
+    --input "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep.csv" \
+    --out-dir "${FIGURES_DIR}" \
     --run-id "${RUN_ID}_${PRIMARY_LABEL}"
 
   run_step "analyze_vllm_slo_goodput" python3 "${ROOT_DIR}/analysis/analyze_vllm_slo_goodput.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep.csv" \
+    --input "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_sweep.csv" \
     --run-id "${RUN_ID}" \
     --label "${PRIMARY_LABEL}" \
     --slo-p99-ttft-ms "${VLLM_SLO_P99_TTFT_MS}" \
     --slo-p99-tpot-ms "${VLLM_SLO_P99_TPOT_MS}" \
-    --output-json "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_slo_goodput.json" \
-    --output-csv "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_slo_goodput.csv"
+    --output-json "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_slo_goodput.json" \
+    --output-csv "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_slo_goodput.csv"
 
   run_step "plot_vllm_slo_goodput" python3 "${ROOT_DIR}/analysis/plot_vllm_goodput_slo.py" \
-    --input-json "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_slo_goodput.json" \
-    --out-dir "${ROOT_DIR}/docs/figures" \
+    --input-json "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_slo_goodput.json" \
+    --out-dir "${FIGURES_DIR}" \
     --run-id "${RUN_ID}_${PRIMARY_LABEL}"
 fi
 
 if [[ "$RUN_VLLM_REQUEST_RATE_SWEEP" -eq 1 ]]; then
-  if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_request_rate_sweep.csv" ]]; then
+  if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_request_rate_sweep.csv" ]]; then
     run_step "analyze_vllm_request_rate_slo_goodput" python3 "${ROOT_DIR}/analysis/analyze_vllm_request_rate_slo_goodput.py" \
-      --input "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_request_rate_sweep.csv" \
+      --input "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_request_rate_sweep.csv" \
       --run-id "${RUN_ID}" \
       --label "${PRIMARY_LABEL}" \
       --slo-p99-ttft-ms "${VLLM_SLO_P99_TTFT_MS}" \
       --slo-p99-tpot-ms "${VLLM_SLO_P99_TPOT_MS}" \
-      --output-json "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_request_rate_slo_goodput.json" \
-      --output-csv "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_request_rate_slo_goodput.csv"
+      --output-json "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_request_rate_slo_goodput.json" \
+      --output-csv "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_request_rate_slo_goodput.csv"
 
     run_step "plot_vllm_request_rate_sweep" python3 "${ROOT_DIR}/analysis/plot_vllm_request_rate_sweep.py" \
-      --input "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_request_rate_sweep.csv" \
-      --out-dir "${ROOT_DIR}/docs/figures" \
+      --input "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_serve_request_rate_sweep.csv" \
+      --out-dir "${FIGURES_DIR}" \
       --run-id "${RUN_ID}_${PRIMARY_LABEL}"
 
     run_step "plot_vllm_request_rate_slo_goodput" python3 "${ROOT_DIR}/analysis/plot_vllm_request_rate_slo_goodput.py" \
-      --input-json "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_vllm_request_rate_slo_goodput.json" \
-      --out-dir "${ROOT_DIR}/docs/figures" \
+      --input-json "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_vllm_request_rate_slo_goodput.json" \
+      --out-dir "${FIGURES_DIR}" \
       --run-id "${RUN_ID}_${PRIMARY_LABEL}"
   fi
 fi
 
 if [[ "$RUN_VLLM_MULTINODE" -eq 1 ]]; then
   vllm_multi_label="$(label_for_index 0)"
-  if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_${vllm_multi_label}_vllm_multinode_serve.csv" ]]; then
+  if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_${vllm_multi_label}_vllm_multinode_serve.csv" ]]; then
     run_step "plot_vllm_serve_multinode" python3 "${ROOT_DIR}/analysis/plot_vllm_serve_sweep.py" \
-      --input "${ROOT_DIR}/results/structured/${RUN_ID}_${vllm_multi_label}_vllm_multinode_serve.csv" \
-      --out-dir "${ROOT_DIR}/docs/figures" \
+      --input "${STRUCTURED_DIR}/${RUN_ID}_${vllm_multi_label}_vllm_multinode_serve.csv" \
+      --out-dir "${FIGURES_DIR}" \
       --run-id "${RUN_ID}_${vllm_multi_label}_multinode"
 
     run_step "analyze_vllm_multinode_slo_goodput" python3 "${ROOT_DIR}/analysis/analyze_vllm_slo_goodput.py" \
-      --input "${ROOT_DIR}/results/structured/${RUN_ID}_${vllm_multi_label}_vllm_multinode_serve.csv" \
+      --input "${STRUCTURED_DIR}/${RUN_ID}_${vllm_multi_label}_vllm_multinode_serve.csv" \
       --run-id "${RUN_ID}" \
       --label "${vllm_multi_label}_multinode" \
       --slo-p99-ttft-ms "${VLLM_SLO_P99_TTFT_MS}" \
       --slo-p99-tpot-ms "${VLLM_SLO_P99_TPOT_MS}" \
-      --output-json "${ROOT_DIR}/results/structured/${RUN_ID}_${vllm_multi_label}_vllm_multinode_slo_goodput.json" \
-      --output-csv "${ROOT_DIR}/results/structured/${RUN_ID}_${vllm_multi_label}_vllm_multinode_slo_goodput.csv"
+      --output-json "${STRUCTURED_DIR}/${RUN_ID}_${vllm_multi_label}_vllm_multinode_slo_goodput.json" \
+      --output-csv "${STRUCTURED_DIR}/${RUN_ID}_${vllm_multi_label}_vllm_multinode_slo_goodput.csv"
 
     run_step "plot_vllm_multinode_slo_goodput" python3 "${ROOT_DIR}/analysis/plot_vllm_goodput_slo.py" \
-      --input-json "${ROOT_DIR}/results/structured/${RUN_ID}_${vllm_multi_label}_vllm_multinode_slo_goodput.json" \
-      --out-dir "${ROOT_DIR}/docs/figures" \
+      --input-json "${STRUCTURED_DIR}/${RUN_ID}_${vllm_multi_label}_vllm_multinode_slo_goodput.json" \
+      --out-dir "${FIGURES_DIR}" \
       --run-id "${RUN_ID}_${vllm_multi_label}_multinode"
   fi
 fi
 
 if [[ "${#HOST_ARR[@]}" -gt 1 && "$HEALTH_SUITE_MODE" != "off" ]]; then
   shopt -s nullglob
-  suite_summaries=( "${ROOT_DIR}/results/structured/${RUN_ID}_health_suite_${HEALTH_SUITE_MODE}_"*"_cluster_health_suite_summary.json" )
+  suite_summaries=( "${STRUCTURED_DIR}/${RUN_ID}_health_suite_${HEALTH_SUITE_MODE}_"*"_cluster_health_suite_summary.json" )
   shopt -u nullglob
   if [[ "${#suite_summaries[@]}" -gt 0 ]]; then
     run_step "plot_iperf3_oob" python3 "${ROOT_DIR}/analysis/plot_iperf3.py" \
       --summary "${suite_summaries[0]}" \
-      --out "${ROOT_DIR}/docs/figures/${RUN_ID}_iperf3_oob_tcp.png" \
-      --out-json "${ROOT_DIR}/results/structured/${RUN_ID}_iperf3_oob_tcp.json" \
+      --out "${FIGURES_DIR}/${RUN_ID}_iperf3_oob_tcp.png" \
+      --out-json "${STRUCTURED_DIR}/${RUN_ID}_iperf3_oob_tcp.json" \
       --skip-if-missing
   fi
 fi
 
 shopt -s nullglob
-gemm_inputs=( "${ROOT_DIR}/results/structured/${RUN_ID}_"*_gemm_gpu_sanity.csv )
+gemm_inputs=( "${STRUCTURED_DIR}/${RUN_ID}_"*_gemm_gpu_sanity.csv )
 shopt -u nullglob
 if [[ "${#gemm_inputs[@]}" -gt 0 ]]; then
   run_step "plot_gemm_sanity" python3 "${ROOT_DIR}/analysis/plot_gemm_bar.py" \
     --inputs "${gemm_inputs[@]}" \
-    --output "${ROOT_DIR}/docs/figures/${RUN_ID}_gemm_gpu_sanity.png" \
+    --output "${FIGURES_DIR}/${RUN_ID}_gemm_gpu_sanity.png" \
     --filter-m 16384
 fi
 
 if [[ "$ENABLE_MAMF" -eq 1 ]]; then
   shopt -s nullglob
-  mamf_summaries=( "${ROOT_DIR}/results/structured/${RUN_ID}_"*_mamf_summary.json )
+  mamf_summaries=( "${STRUCTURED_DIR}/${RUN_ID}_"*_mamf_summary.json )
   shopt -u nullglob
   if [[ "${#mamf_summaries[@]}" -gt 0 ]]; then
     run_step "plot_mamf" python3 "${ROOT_DIR}/analysis/plot_mamf.py" \
       --summary-inputs "${mamf_summaries[@]}" \
-      --output "${ROOT_DIR}/docs/figures/${RUN_ID}_mamf_straggler.png" \
+      --output "${FIGURES_DIR}/${RUN_ID}_mamf_straggler.png" \
       --mode straggler \
       --title "MAMF Straggler View ${RUN_ID}"
   fi
 fi
 
-if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_allreduce_stability.json" ]]; then
+if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_allreduce_stability.json" ]]; then
   run_step "plot_allreduce_stability" python3 "${ROOT_DIR}/analysis/plot_allreduce_stability.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_allreduce_stability.json" \
-    --output "${ROOT_DIR}/docs/figures/${RUN_ID}_allreduce_stability.png"
+    --input "${STRUCTURED_DIR}/${RUN_ID}_allreduce_stability.json" \
+    --output "${FIGURES_DIR}/${RUN_ID}_allreduce_stability.png"
 fi
 
-if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_allreduce_latency_comp.json" ]]; then
+if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_allreduce_latency_comp.json" ]]; then
   run_step "plot_allreduce_latency_comp" python3 "${ROOT_DIR}/analysis/plot_allreduce_latency_comp.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_allreduce_latency_comp.json" \
-    --output "${ROOT_DIR}/docs/figures/${RUN_ID}_allreduce_latency_comp.png"
+    --input "${STRUCTURED_DIR}/${RUN_ID}_allreduce_latency_comp.json" \
+    --output "${FIGURES_DIR}/${RUN_ID}_allreduce_latency_comp.png"
 fi
 
-if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_allgather_control_plane.json" ]]; then
+if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_allgather_control_plane.json" ]]; then
   run_step "plot_allgather_control_plane" python3 "${ROOT_DIR}/analysis/plot_allgather_control_plane.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_allgather_control_plane.json" \
-    --output "${ROOT_DIR}/docs/figures/${RUN_ID}_allgather_control_plane.png"
+    --input "${STRUCTURED_DIR}/${RUN_ID}_allgather_control_plane.json" \
+    --output "${FIGURES_DIR}/${RUN_ID}_allgather_control_plane.png"
 fi
 
 if [[ "$ENABLE_NCCL_ALGO_COMPARISON" -eq 1 ]]; then
   shopt -s nullglob
-  nccl_algo_inputs=( "${ROOT_DIR}/results/structured/${RUN_ID}_nccl_algo_"*.json )
+  nccl_algo_inputs=( "${STRUCTURED_DIR}/${RUN_ID}_nccl_algo_"*.json )
   shopt -u nullglob
   if [[ "${#nccl_algo_inputs[@]}" -gt 0 ]]; then
     run_step "plot_nccl_algo_comparison" python3 "${ROOT_DIR}/analysis/plot_nccl_algo_comparison.py" \
       --inputs "${nccl_algo_inputs[@]}" \
-      --output "${ROOT_DIR}/docs/figures/${RUN_ID}_nccl_algo_comparison.png" \
+      --output "${FIGURES_DIR}/${RUN_ID}_nccl_algo_comparison.png" \
       --title "NCCL Algorithm Comparison ${RUN_ID}"
   fi
 fi
 
 shopt -s nullglob
-fio_inputs=( "${ROOT_DIR}/results/structured/${RUN_ID}_"*_fio.json )
+fio_inputs=( "${STRUCTURED_DIR}/${RUN_ID}_"*_fio.json )
 shopt -u nullglob
 for fio_in in "${fio_inputs[@]}"; do
   fio_base="$(basename "$fio_in" .json)"
   run_step "plot_fio_${fio_base}" python3 "${ROOT_DIR}/analysis/plot_fio.py" \
     --input "$fio_in" \
-    --out "${ROOT_DIR}/docs/figures/${fio_base}.png"
+    --out "${FIGURES_DIR}/${fio_base}.png"
 done
 
 if [[ "$RUN_NVBANDWIDTH" -eq 1 ]]; then
   shopt -s nullglob
-  nvbw_sums_inputs=( "${ROOT_DIR}/results/structured/${RUN_ID}_"*_nvbandwidth_sums.csv )
+  nvbw_sums_inputs=( "${STRUCTURED_DIR}/${RUN_ID}_"*_nvbandwidth_sums.csv )
   shopt -u nullglob
   for nvbw_csv in "${nvbw_sums_inputs[@]}"; do
     nvbw_base="$(basename "$nvbw_csv" _sums.csv)"
     run_step "plot_nvbandwidth_${nvbw_base}" python3 "${ROOT_DIR}/analysis/plot_nvbandwidth_sums.py" \
       --input "$nvbw_csv" \
-      --out "${ROOT_DIR}/docs/figures/${nvbw_base}_sums.png" \
+      --out "${FIGURES_DIR}/${nvbw_base}_sums.png" \
       --title "nvbandwidth SUM metrics ${nvbw_base}"
   done
 fi
 
 if [[ "$RUN_GPU_STREAM" -eq 1 ]]; then
   shopt -s nullglob
-  gpu_stream_inputs=( "${ROOT_DIR}/results/structured/${RUN_ID}_"*_gpu_stream.json )
+  gpu_stream_inputs=( "${STRUCTURED_DIR}/${RUN_ID}_"*_gpu_stream.json )
   shopt -u nullglob
   for gpu_stream_json in "${gpu_stream_inputs[@]}"; do
     gpu_stream_base="$(basename "$gpu_stream_json" .json)"
     run_step "plot_gpu_stream_${gpu_stream_base}" python3 "${ROOT_DIR}/analysis/plot_gpu_stream.py" \
       --input "$gpu_stream_json" \
-      --out "${ROOT_DIR}/docs/figures/${gpu_stream_base}.png"
+      --out "${FIGURES_DIR}/${gpu_stream_base}.png"
   done
 fi
 
-if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_c2c_memcpy.json" ]]; then
+if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_c2c_memcpy.json" ]]; then
   run_step "plot_c2c_memcpy" python3 "${ROOT_DIR}/analysis/plot_c2c_memcpy.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_c2c_memcpy.json" \
-    --out-dir "${ROOT_DIR}/docs/figures" \
+    --input "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_c2c_memcpy.json" \
+    --out-dir "${FIGURES_DIR}" \
     --run-id "${RUN_ID}_${PRIMARY_LABEL}"
 fi
 
 if [[ "$RUN_NUMA_MEM_BW" -eq 1 ]]; then
   shopt -s nullglob
-  numa_inputs=( "${ROOT_DIR}/results/structured/${RUN_ID}_"*_numa_mem_bw.json )
+  numa_inputs=( "${STRUCTURED_DIR}/${RUN_ID}_"*_numa_mem_bw.json )
   shopt -u nullglob
   for inp in "${numa_inputs[@]}"; do
     base="$(basename "$inp" .json)"
     run_step "plot_numa_mem_bw_${base}" python3 "${ROOT_DIR}/analysis/plot_numa_mem_bw.py" \
       --input "$inp" \
-      --out "${ROOT_DIR}/docs/figures/${base}.png" \
+      --out "${FIGURES_DIR}/${base}.png" \
       --title "NUMA memcpy bandwidth: ${base}"
   done
 fi
 
-if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_single_node_torchrun_train_step.json" ]]; then
+if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_single_node_torchrun_train_step.json" ]]; then
   run_step "plot_train_step_single" python3 "${ROOT_DIR}/analysis/plot_torchrun_train_step.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_single_node_torchrun_train_step.json" \
-    --out "${ROOT_DIR}/docs/figures/${RUN_ID}_${PRIMARY_LABEL}_single_node_torchrun_train_step.png"
+    --input "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_single_node_torchrun_train_step.json" \
+    --out "${FIGURES_DIR}/${RUN_ID}_${PRIMARY_LABEL}_single_node_torchrun_train_step.png"
 fi
 
-if [[ -f "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_multinode_torchrun_train_step.json" ]]; then
+if [[ -f "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_multinode_torchrun_train_step.json" ]]; then
   run_step "plot_train_step_multi" python3 "${ROOT_DIR}/analysis/plot_torchrun_train_step.py" \
-    --input "${ROOT_DIR}/results/structured/${RUN_ID}_${PRIMARY_LABEL}_multinode_torchrun_train_step.json" \
-    --out "${ROOT_DIR}/docs/figures/${RUN_ID}_${PRIMARY_LABEL}_multinode_torchrun_train_step.png"
+    --input "${STRUCTURED_DIR}/${RUN_ID}_${PRIMARY_LABEL}_multinode_torchrun_train_step.json" \
+    --out "${FIGURES_DIR}/${RUN_ID}_${PRIMARY_LABEL}_multinode_torchrun_train_step.png"
 fi
 
 shopt -s nullglob
-meta_inputs=( "${ROOT_DIR}/results/structured/${RUN_ID}_"*_meta.json )
+meta_inputs=( "${STRUCTURED_DIR}/${RUN_ID}_"*_meta.json )
 shopt -u nullglob
 for meta_in in "${meta_inputs[@]}"; do
   if [[ "$meta_in" == *_cluster_meta.json ]]; then
@@ -2477,8 +3462,8 @@ for meta_in in "${meta_inputs[@]}"; do
   meta_base="$(basename "$meta_in" .json)"
   run_step "plot_nvlink_topology_${meta_base}" python3 "${ROOT_DIR}/analysis/plot_nvlink_topology.py" \
     --meta "$meta_in" \
-    --fig-out "${ROOT_DIR}/docs/figures/${meta_base}_nvlink_topology.png" \
-    --summary-out "${ROOT_DIR}/results/structured/${meta_base}_nvlink_topology.json"
+    --fig-out "${FIGURES_DIR}/${meta_base}_nvlink_topology.png" \
+    --summary-out "${STRUCTURED_DIR}/${meta_base}_nvlink_topology.json"
 done
 
 dashboard_labels=("${PRIMARY_LABEL}")
@@ -2492,10 +3477,10 @@ fi
 dashboard_node_labels_csv="$(IFS=','; echo "${dashboard_labels[*]}")"
 run_step "plot_cluster_story_dashboard" python3 "${ROOT_DIR}/analysis/plot_cluster_story_dashboard.py" \
   --run-id "${RUN_ID}" \
-  --structured-dir "${ROOT_DIR}/results/structured" \
+  --structured-dir "${STRUCTURED_DIR}" \
   --node-labels "${dashboard_node_labels_csv}" \
-  --fig-out "${ROOT_DIR}/docs/figures/${RUN_ID}_cluster_story_dashboard.png" \
-  --summary-out "${ROOT_DIR}/results/structured/${RUN_ID}_node_parity_summary.json"
+  --fig-out "${FIGURES_DIR}/${RUN_ID}_cluster_story_dashboard.png" \
+  --summary-out "${STRUCTURED_DIR}/${RUN_ID}_node_parity_summary.json"
 
 if [[ "$RUN_QUICK_FRICTION" -eq 1 || "$RUN_MONITORING_EXPECTATIONS" -eq 1 ]]; then
   operator_labels=()
@@ -2505,23 +3490,40 @@ if [[ "$RUN_QUICK_FRICTION" -eq 1 || "$RUN_MONITORING_EXPECTATIONS" -eq 1 ]]; th
   operator_node_labels_csv="$(IFS=','; echo "${operator_labels[*]}")"
   run_step "plot_operator_checks_dashboard" python3 "${ROOT_DIR}/analysis/plot_operator_checks_dashboard.py" \
     --run-id "${RUN_ID}" \
-    --structured-dir "${ROOT_DIR}/results/structured" \
+    --structured-dir "${STRUCTURED_DIR}" \
     --node-labels "${operator_node_labels_csv}" \
-    --fig-out "${ROOT_DIR}/docs/figures/${RUN_ID}_operator_checks_dashboard.png" \
-    --summary-out "${ROOT_DIR}/results/structured/${RUN_ID}_operator_checks_dashboard.json"
+    --fig-out "${FIGURES_DIR}/${RUN_ID}_operator_checks_dashboard.png" \
+    --summary-out "${STRUCTURED_DIR}/${RUN_ID}_operator_checks_dashboard.json"
 fi
 
-run_step "build_cluster_scorecard" python3 "${ROOT_DIR}/analysis/build_cluster_scorecard.py" \
+scorecard_args=(
+  --run-id "${RUN_ID}"
+  --primary-label "${PRIMARY_LABEL}"
+  --structured-dir "${STRUCTURED_DIR}"
+)
+if [[ -n "$GPU_HOURLY_COST_USD" ]]; then
+  scorecard_args+=(--gpu-hourly-cost-usd "$GPU_HOURLY_COST_USD")
+fi
+run_step "build_cluster_scorecard" python3 "${ROOT_DIR}/analysis/build_cluster_scorecard.py" "${scorecard_args[@]}"
+
+run_step "build_mlperf_alignment" python3 "${ROOT_DIR}/analysis/build_mlperf_alignment.py" \
   --run-id "${RUN_ID}" \
-  --structured-dir "${ROOT_DIR}/results/structured"
+  --structured-dir "${STRUCTURED_DIR}"
 
 run_step "analyze_benchmark_coverage" python3 "${ROOT_DIR}/analysis/analyze_benchmark_coverage.py" \
   --run-id "${RUN_ID}" \
-  --structured-dir "${ROOT_DIR}/results/structured"
+  --structured-dir "${STRUCTURED_DIR}"
+
+if [[ -n "$COVERAGE_BASELINE_RUN_ID" ]]; then
+  run_step "build_coverage_delta" python3 "${ROOT_DIR}/analysis/build_coverage_delta.py" \
+    --run-id "${RUN_ID}" \
+    --baseline-run-id "${COVERAGE_BASELINE_RUN_ID}" \
+    --structured-dir "${STRUCTURED_DIR}"
+fi
 
 run_step "validate_required_artifacts" validate_required_artifacts
 
-manifest_args=(--run-id "$RUN_ID" --hosts "$HOSTS" --include-figures)
+manifest_args=(--root "$ROOT_DIR" --run-id "$RUN_ID" --run-dir "$RUN_DIR" --hosts "$HOSTS" --include-figures)
 if [[ -n "$LABELS" ]]; then
   manifest_args+=(--labels "$LABELS")
 fi
@@ -2539,15 +3541,20 @@ if [[ "$RENDER_LOCALHOST_REPORT" -eq 1 ]]; then
   run_step "render_localhost_field_report_package" python3 "${ROOT_DIR}/scripts/render_localhost_field_report_package.py" \
     --run-id "${RUN_ID}" \
     --label "${localhost_label}" \
-    --report "${ROOT_DIR}/field-report-localhost.md" \
-    --notes "${ROOT_DIR}/field-report-localhost-notes.md"
+    --root "${ROOT_DIR}" \
+    --run-dir "${RUN_DIR}" \
+    --report "${REPORTS_DIR}/field-report-localhost.md" \
+    --notes "${REPORTS_DIR}/field-report-localhost-notes.md" \
+    --publish-report "${ROOT_DIR}/field-report-localhost.md" \
+    --publish-notes "${ROOT_DIR}/field-report-localhost-notes.md"
 fi
 
 echo ""
 echo "========================================"
 echo "Suite Complete"
 echo "========================================"
-echo "Manifest: results/structured/${RUN_ID}_manifest.json"
+echo "Run directory: runs/${RUN_ID}"
+echo "Manifest: runs/${RUN_ID}/manifest.json"
 echo "Field report template: docs/field-report-template.md"
 
 if [[ "$fail" -ne 0 ]]; then

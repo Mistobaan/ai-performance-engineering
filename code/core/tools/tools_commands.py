@@ -27,12 +27,15 @@ except ImportError:  # pragma: no cover - Typer is optional for docs builds
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+from core.utils.python_entrypoints import build_python_entry_command, build_repo_python_env
+
 
 @dataclass(frozen=True)
 class ToolSpec:
     name: str
     script_path: Path
     description: str
+    module_name: Optional[str] = None
 
 
 TOOLS: Dict[str, ToolSpec] = {
@@ -144,6 +147,7 @@ TOOLS: Dict[str, ToolSpec] = {
     "kernel-verification": ToolSpec(
         name="kernel-verification",
         script_path=REPO_ROOT / "ch20" / "kernel_verification_tool.py",
+        module_name="ch20.kernel_verification_tool",
         description="Run Chapter 20 kernel verification utility (tool; not a benchmark pair).",
     ),
     "perf-per-watt": ToolSpec(
@@ -164,6 +168,7 @@ TOOLS: Dict[str, ToolSpec] = {
     "proofwright-verify": ToolSpec(
         name="proofwright-verify",
         script_path=REPO_ROOT / "ch20" / "proofwright_verify_tool.py",
+        module_name="ch20.proofwright_verify_tool",
         description="Run Chapter 20 ProofWright verification utility (tool; not a benchmark pair).",
     ),
 }
@@ -176,8 +181,13 @@ def _run_tool(tool: str, tool_args: Optional[List[str]]) -> int:
     if not spec.script_path.exists():
         raise FileNotFoundError(f"Tool script not found at {spec.script_path}")
 
-    cmd = [sys.executable, str(spec.script_path), *(tool_args or [])]
-    result = subprocess.run(cmd)
+    cmd = build_python_entry_command(
+        module_name=spec.module_name,
+        script_path=None if spec.module_name else spec.script_path,
+        argv=tool_args or [],
+    )
+    env = build_repo_python_env(REPO_ROOT)
+    result = subprocess.run(cmd, env=env)
     return int(result.returncode)
 
 

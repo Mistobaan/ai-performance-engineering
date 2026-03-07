@@ -16,7 +16,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
+# shellcheck source=../lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 HOSTS=""
 SSH_KEY="${SSH_KEY:-}"
@@ -47,6 +48,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW_DIR"
 
 sanitize_label() {
@@ -131,4 +134,3 @@ for host in "${HOST_ARR[@]}"; do
 
   echo "Wrote ${out_path}"
 done
-

@@ -34,6 +34,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 LABEL="$(hostname)"
 
@@ -77,6 +79,22 @@ if ! [[ "$REPEATS" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
+DOCKER_CMD=(docker)
+if ! docker info >/dev/null 2>&1; then
+  if sudo -n docker info >/dev/null 2>&1; then
+    DOCKER_CMD=(sudo -n docker)
+    echo "INFO: docker socket requires elevated access; using non-interactive sudo docker."
+  else
+    echo "ERROR: unable to access docker daemon as current user, and sudo -n docker is unavailable." >&2
+    echo "Fix: grant docker group access or configure non-interactive sudo for docker." >&2
+    exit 1
+  fi
+fi
+
+docker_exec() {
+  "${DOCKER_CMD[@]}" "$@"
+}
+
 ARCH="$(uname -m)"
 if [[ -z "$CONTAINER_IMAGE" ]]; then
   if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
@@ -95,12 +113,14 @@ if [[ "$TP" -gt "$GPU_COUNT" ]]; then
   TP="$GPU_COUNT"
 fi
 
-OUT_DIR="${ROOT_DIR}/results/raw/${RUN_ID}_${LABEL}_vllm_serve_sweep"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+
+OUT_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}/${RUN_ID}_${LABEL}_vllm_serve_sweep"
 mkdir -p "$OUT_DIR"
 
 MAX_MODEL_LEN=$((ISL + OSL + 256))
 
-STRUCT_DIR="${ROOT_DIR}/results/structured"
+STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$STRUCT_DIR"
 LOCK_META_OUT="${STRUCT_DIR}/${RUN_ID}_${LABEL}_vllm_serve_sweep_clock_lock.json"
 
@@ -188,7 +208,7 @@ if [[ -n "${HF_TOKEN:-}" ]]; then
   HF_MOUNT+=(-e "HF_TOKEN=${HF_TOKEN}" -e "HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}")
 fi
 VLLM_ENV=()
-for k in VLLM_SERVE_ENFORCE_EAGER VLLM_KV_CACHE_MEMORY_BYTES VLLM_GPU_MEMORY_UTILIZATION; do
+for k in VLLM_SERVE_ENFORCE_EAGER VLLM_KV_CACHE_MEMORY_BYTES VLLM_GPU_MEMORY_UTILIZATION VLLM_SERVER_READY_TIMEOUT VLLM_SWEEP_NUM_PROMPTS_MULTIPLIER VLLM_SWEEP_MAX_POINTS_PER_RUN; do
   if [[ -n "${!k:-}" ]]; then
     VLLM_ENV+=(-e "${k}=${!k}")
   fi
@@ -214,11 +234,11 @@ echo "Repeats: $REPEATS"
 echo "Output dir: $OUT_DIR"
 echo ""
 
-if docker image inspect "$CONTAINER_IMAGE" >/dev/null 2>&1; then
+if docker_exec image inspect "$CONTAINER_IMAGE" >/dev/null 2>&1; then
   echo "Using cached container image: ${CONTAINER_IMAGE}"
 else
   echo "Pulling container (best-effort)..."
-  docker pull "$CONTAINER_IMAGE" 2>/dev/null || echo "WARNING: docker pull failed; attempting to continue with local cache"
+  docker_exec pull "$CONTAINER_IMAGE" 2>/dev/null || echo "WARNING: docker pull failed; attempting to continue with local cache"
 fi
 
 INNER="${ROOT_DIR}/scripts/repro/vllm_serve_sweep_inner.sh"
@@ -232,12 +252,81 @@ AGG_CSV="${OUT_DIR}/sweep_summary.csv"
 AGG_JSONL="${OUT_DIR}/sweep_summary.jsonl"
 AGG_SUMMARY_TXT="${OUT_DIR}/summary.txt"
 AGG_STABILITY_JSON="${OUT_DIR}/sweep_stability.json"
+PROGRESS_JSON="${STRUCT_DIR}/${RUN_ID}_${LABEL}_vllm_serve_sweep_progress.json"
 REPEAT_CSVS=()
 
 if [[ "$DETACH" -eq 1 && "$REPEATS" -gt 1 ]]; then
   echo "ERROR: --detach is only supported with --repeats 1." >&2
   exit 2
 fi
+
+write_progress_json() {
+  local status="$1"
+  local current_repeat="${2:-0}"
+  local current_csv="${3:-}"
+  python3 - "$PROGRESS_JSON" "$RUN_ID" "$LABEL" "$status" "$REPEATS" "$current_repeat" "$current_csv" "$OUT_DIR" "${CONC_ARR[@]}" <<'PY'
+import csv
+import json
+import pathlib
+import sys
+from datetime import datetime, timezone
+
+out_path, run_id, label, status, repeats_total, current_repeat, current_csv, out_dir, *points = sys.argv[1:]
+repeats_total = int(repeats_total)
+current_repeat = int(current_repeat)
+points = [str(p) for p in points]
+out_dir_path = pathlib.Path(out_dir)
+
+repeats_completed = 0
+points_completed_total = 0
+current_repeat_points_completed = 0
+last_completed_point = None
+
+for rep_dir in sorted(out_dir_path.glob("repeat_*")):
+    csv_path = rep_dir / "sweep_summary.csv"
+    if not csv_path.exists():
+        continue
+    with csv_path.open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    row_count = len(rows)
+    rep_num = int(rep_dir.name.split("_")[-1])
+    points_completed_total += row_count
+    if row_count >= len(points):
+        repeats_completed += 1
+    if rep_num == current_repeat:
+        current_repeat_points_completed = row_count
+    if rows:
+        last_row = rows[-1]
+        last_completed_point = {
+            "repeat": rep_num,
+            "concurrency": last_row.get("concurrency"),
+            "completed": int(float(last_row.get("completed", "0") or 0)),
+            "failed": int(float(last_row.get("failed", "0") or 0)),
+            "total_token_throughput": float(last_row.get("total_token_throughput", "0") or 0),
+        }
+
+payload = {
+    "run_id": run_id,
+    "label": label,
+    "mode": "vllm_serve_sweep",
+    "status": status,
+    "repeats_total": repeats_total,
+    "repeats_completed": repeats_completed,
+    "current_repeat": current_repeat,
+    "points_expected_per_repeat": len(points),
+    "point_values": points,
+    "points_completed_total": points_completed_total,
+    "current_repeat_points_completed": current_repeat_points_completed,
+    "last_completed_point": last_completed_point,
+    "raw_output_dir": str(out_dir_path),
+    "current_repeat_csv": current_csv or None,
+    "updated_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+}
+pathlib.Path(out_path).write_text(json.dumps(payload, indent=2) + "\n")
+PY
+}
+
+write_progress_json "starting" 0 ""
 
 DOCKER_ARGS=(
   --gpus all
@@ -262,28 +351,30 @@ for rep in $(seq 1 "$REPEATS"); do
   REP_DIR="${OUT_DIR}/repeat_${rep}"
   mkdir -p "$REP_DIR"
   REP_LOG="${REP_DIR}/sweep_log.txt"
+  write_progress_json "running" "$rep" "${REP_DIR}/sweep_summary.csv"
   if [[ "$DETACH" -eq 1 ]]; then
     safe_name="$(echo "vllm_sweep_${RUN_ID}_${LABEL}_r${rep}" | tr -c '[:alnum:]_.' '_' )_$(date +%s)"
     echo "Starting detached container (repeat ${rep}/${REPEATS}): ${safe_name}"
-    docker run -d --name "$safe_name" \
+    docker_exec run -d --name "$safe_name" \
       "${DOCKER_ARGS[@]}" \
       -v "$REP_DIR":/results \
       "$CONTAINER_IMAGE" \
       -lc "/sweep.sh \"$MODEL\" \"$TP\" \"$ISL\" \"$OSL\" \"$MAX_MODEL_LEN\" \"$PORT\" \"/results\" ${CONC_ARR[*]} > /results/sweep_log.txt 2>&1"
     tail -n +1 -F "$REP_LOG" &
     TAIL_PID=$!
-    rc="$(docker wait "$safe_name")"
+    rc="$(docker_exec wait "$safe_name")"
     kill "$TAIL_PID" 2>/dev/null || true
     wait "$TAIL_PID" 2>/dev/null || true
-    docker rm "$safe_name" >/dev/null 2>&1 || true
+    docker_exec rm "$safe_name" >/dev/null 2>&1 || true
     if [[ "$rc" -ne 0 ]]; then
+      write_progress_json "failed" "$rep" "${REP_DIR}/sweep_summary.csv"
       echo "ERROR: vLLM sweep container exited with code ${rc} on repeat ${rep}" >&2
       exit "$rc"
     fi
   else
     echo "=== Repeat ${rep}/${REPEATS}: vLLM concurrency sweep ==="
     set +e
-    docker run --rm \
+    docker_exec run --rm \
       "${DOCKER_ARGS[@]}" \
       -v "$REP_DIR":/results \
       "$CONTAINER_IMAGE" \
@@ -293,6 +384,7 @@ for rep in $(seq 1 "$REPEATS"); do
     rc=${PIPESTATUS[0]}
     set -e
     if [[ "$rc" -ne 0 ]]; then
+      write_progress_json "failed" "$rep" "${REP_DIR}/sweep_summary.csv"
       echo "ERROR: vLLM sweep container failed on repeat ${rep} (rc=${rc})." >&2
       if [[ -f "${REP_DIR}/server.log" ]]; then
         echo "---- ${REP_DIR}/server.log (last 120 lines) ----" >&2
@@ -303,10 +395,12 @@ for rep in $(seq 1 "$REPEATS"); do
   fi
 
   if [[ ! -f "${REP_DIR}/sweep_summary.csv" ]]; then
+    write_progress_json "failed" "$rep" "${REP_DIR}/sweep_summary.csv"
     echo "ERROR: missing repeat CSV output: ${REP_DIR}/sweep_summary.csv" >&2
     exit 1
   fi
   REPEAT_CSVS+=("${REP_DIR}/sweep_summary.csv")
+  write_progress_json "running" "$rep" "${REP_DIR}/sweep_summary.csv"
   {
     echo "========================================"
     echo "Repeat ${rep}/${REPEATS}"
@@ -316,6 +410,7 @@ for rep in $(seq 1 "$REPEATS"); do
   } >>"$LOG_PATH"
 done
 
+write_progress_json "aggregating" "$REPEATS" "${OUT_DIR}/repeat_${REPEATS}/sweep_summary.csv"
 python3 "${ROOT_DIR}/analysis/aggregate_vllm_repeat_csv.py" \
   --mode concurrency \
   --inputs "${REPEAT_CSVS[@]}" \
@@ -340,5 +435,7 @@ if [[ -f "$AGG_STABILITY_JSON" ]]; then
   cp -f "$AGG_STABILITY_JSON" "${STRUCT_DIR}/${RUN_ID}_${LABEL}_vllm_serve_sweep_stability.json"
   echo "Wrote ${STRUCT_DIR}/${RUN_ID}_${LABEL}_vllm_serve_sweep_stability.json"
 fi
+
+write_progress_json "complete" "$REPEATS" "$AGG_CSV"
 
 echo "Wrote ${LOG_PATH}"

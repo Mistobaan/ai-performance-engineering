@@ -46,6 +46,10 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 HOSTS=""
 LABEL=""
@@ -129,9 +133,11 @@ fi
 if [[ -z "$GPUS_PER_NODE" ]]; then
   GPUS_PER_NODE="$(nvidia-smi -L | wc -l | tr -d ' ')"
 fi
+source_host_runtime_env_if_present "$ROOT_DIR"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
 
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW_DIR" "$OUT_STRUCT_DIR"
 
 SCRIPT_PATH="${ROOT_DIR}/scripts/torchrun_transformer_train_step.py"
@@ -178,11 +184,31 @@ if [[ -n "$SSH_KEY" ]]; then
   SSH_OPTS+=(-i "$SSH_KEY")
 fi
 
+HOST_RUNTIME_REMOTE_PREFIX="$(host_runtime_remote_prefix "$ROOT_DIR")"
+REMOTE_ARTIFACT_ENV="$(cluster_artifact_env_prefix_for_root "$ROOT_DIR" "$RUN_ID")"
+
+is_local_host() {
+  local host="$1"
+  local h short fqdn
+  h="$(hostname)"
+  short="$(hostname -s 2>/dev/null || true)"
+  fqdn="$(hostname -f 2>/dev/null || true)"
+  [[ "$host" == "localhost" || "$host" == "127.0.0.1" || "$host" == "::1" || "$host" == "$h" || "$host" == "$short" || "$host" == "$fqdn" ]]
+}
+
 for host in "${HOST_ARR[@]}"; do
-  if ! ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "sudo -n true >/dev/null"; then
-    echo "ERROR: GPU clock locking is required, but passwordless sudo is not available on ${host}." >&2
-    echo "Fix: configure sudoers for this user so `sudo -n true` succeeds, then re-run." >&2
-    exit 3
+  if is_local_host "$host"; then
+    if ! sudo -n true >/dev/null 2>&1; then
+      echo "ERROR: GPU clock locking is required, but passwordless sudo is not available on local host ${host}." >&2
+      echo "Fix: configure sudoers for this user so `sudo -n true` succeeds, then re-run." >&2
+      exit 3
+    fi
+  else
+    if ! ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "sudo -n true >/dev/null"; then
+      echo "ERROR: GPU clock locking is required, but passwordless sudo is not available on ${host}." >&2
+      echo "Fix: configure sudoers for this user so `sudo -n true` succeeds, then re-run." >&2
+      exit 3
+    fi
   fi
 done
 
@@ -229,13 +255,28 @@ for idx in "${!HOST_ARR[@]}"; do
     --lr "$LR"
   )
 
-  echo "Launching ${host} via SSH -> ${log_path}"
+  if is_local_host "$host"; then
+    echo "Launching ${host} locally -> ${log_path}"
+  else
+    echo "Launching ${host} via SSH -> ${log_path}"
+  fi
   remote_env="${REMOTE_ENV[*]}"
   if [[ -n "$remote_env" ]]; then
-    remote_env="env ${remote_env}"
+    remote_env="env ${REMOTE_ARTIFACT_ENV} ${remote_env}"
+  else
+    remote_env="env ${REMOTE_ARTIFACT_ENV}"
   fi
-  ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "cd ${ROOT_DIR} && ${remote_env} ${cmd[*]}" 2>&1 | tee "$log_path" &
-  PIDS+=($!)
+  if is_local_host "$host"; then
+    if [[ -n "$remote_env" ]]; then
+      bash -lc "cd ${ROOT_DIR} && ${HOST_RUNTIME_REMOTE_PREFIX}${remote_env} ${cmd[*]}" 2>&1 | tee "$log_path" &
+    else
+      bash -lc "cd ${ROOT_DIR} && ${HOST_RUNTIME_REMOTE_PREFIX}${cmd[*]}" 2>&1 | tee "$log_path" &
+    fi
+    PIDS+=($!)
+  else
+    ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "cd ${ROOT_DIR} && ${HOST_RUNTIME_REMOTE_PREFIX}${remote_env} ${cmd[*]}" 2>&1 | tee "$log_path" &
+    PIDS+=($!)
+  fi
 done
 
 EXIT_CODE=0
@@ -251,4 +292,3 @@ if [[ "$EXIT_CODE" -ne 0 ]]; then
 fi
 
 echo "Wrote ${OUTPUT_JSON}"
-

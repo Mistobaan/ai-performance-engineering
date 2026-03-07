@@ -42,6 +42,7 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.sampling_config = None
         self.input_ids: Optional[torch.Tensor] = None
         self.attention_mask: Optional[torch.Tensor] = None
+        self.prompt_lengths: Optional[list[int]] = None
         self.output: Optional[torch.Tensor] = None
         tokens = float(self.prompt_len + self.max_new_tokens)
         self._workload = WorkloadMetadata(
@@ -72,6 +73,7 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
             prompt_len=self.prompt_len,
             batch_size=self.batch_size,
         )
+        self.prompt_lengths = [int(length) for length in attention_mask.sum(dim=1).tolist()]
         self.input_ids = input_ids.to(self.device)
         self.attention_mask = attention_mask.to(self.device)
         ensure_trtllm_assets(
@@ -109,9 +111,10 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with self._nvtx_range("optimized_trtllm_phi_3_5_moe"):
             if self.attention_mask is None:
                 raise RuntimeError("Attention mask not initialized")
+            if self.prompt_lengths is None:
+                raise RuntimeError("Prompt lengths not initialized")
             batch_inputs = []
-            for i in range(self.batch_size):
-                valid_len = int(self.attention_mask[i].sum().item())
+            for i, valid_len in enumerate(self.prompt_lengths):
                 batch_inputs.append(self.input_ids[i, :valid_len].contiguous())
             outputs = self.runner.generate(
                 batch_inputs,
@@ -122,7 +125,6 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 raise RuntimeError("TensorRT-LLM generate must return generation_logits when requested")
             logits = self._normalize_generation_logits(outputs["generation_logits"])
             self.output = slice_logits(logits, self.vocab_slice).float()
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 
@@ -178,6 +180,7 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.sampling_config = None
         self.input_ids = None
         self.attention_mask = None
+        self.prompt_lengths = None
         self.output = None
         torch.cuda.empty_cache()
 

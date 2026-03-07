@@ -8,7 +8,11 @@ if [[ -z "${LABEL}" || "${LABEL}" == "localhost" ]]; then
 fi
 DURATION="${DURATION:-600}"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-OUT_RAW="${ROOT_DIR}/results/raw"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW="${CLUSTER_RAW_DIR_EFFECTIVE}"
 
 mkdir -p "$OUT_RAW"
 

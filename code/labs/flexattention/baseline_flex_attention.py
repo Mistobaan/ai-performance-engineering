@@ -74,7 +74,6 @@ class BaselineFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     score_mod=self.score_mod,
                     block_mask=self.inputs.block_mask,
                 )
-            self._synchronize()
             output_tensor = result[0] if isinstance(result, (tuple, list)) else result
             self.output = output_tensor.detach().float().clone()
         if self.output is None:

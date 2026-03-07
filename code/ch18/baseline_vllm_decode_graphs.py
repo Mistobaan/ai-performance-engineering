@@ -26,9 +26,8 @@ if str(REPO_ROOT) not in sys.path:
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig  # noqa: E402
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 
-# Defer decode_kernels import so the harness can load this module even if the
-# optional vLLM dependencies are absent. We still require CUDA; otherwise the
-# benchmark reports a clean SKIPPED reason instead of silently falling back.
+# Defer decode_kernels import so the harness can load this module while still
+# surfacing dependency failures as explicit FAIL FAST errors.
 DECODE_KERNEL_AVAILABLE = False
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 build_decode_kernel = None
@@ -210,7 +209,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     if not DECODE_KERNEL_AVAILABLE:
-        raise RuntimeError("SKIPPED: vllm_decode_graphs dependencies unavailable for CLI run")
+        raise RuntimeError(
+            "FAIL FAST: vllm_decode_graphs dependencies unavailable for CLI run. "
+            "Install the pinned serving stack and verify `ch18.decode_kernels` imports."
+        )
     args = parse_args()
     trace = default_trace(num_steps=args.steps, seed=args.seed)
     driver = BaselineDecodeDriver(trace=trace, hidden=args.hidden)
@@ -230,7 +232,10 @@ class VLLMDecodeGraphsBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def __init__(self, steps: int = 32, hidden: int = 192, seed: int = 42) -> None:
         if not DECODE_KERNEL_AVAILABLE:
-            raise RuntimeError("SKIPPED: vllm_decode_graphs dependencies unavailable")
+            raise RuntimeError(
+                "FAIL FAST: vllm_decode_graphs dependencies unavailable. "
+                "Install the pinned serving stack and verify `ch18.decode_kernels` imports."
+            )
         super().__init__()
         self.steps = steps
         self.hidden = hidden
@@ -256,10 +261,8 @@ class VLLMDecodeGraphsBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def benchmark_fn(self) -> None:
         if self._driver is None:
-            raise RuntimeError("SKIPPED: decode driver not initialized")
-        torch.cuda.synchronize()
+            raise RuntimeError("FAIL FAST: decode driver not initialized")
         self._last_metrics = self._driver.run()
-        torch.cuda.synchronize()
         total_tokens = float(sum(self._trace))
         self.output = torch.tensor(
             [float(len(self._trace)), total_tokens],

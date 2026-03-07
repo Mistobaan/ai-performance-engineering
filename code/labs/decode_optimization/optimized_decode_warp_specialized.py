@@ -79,7 +79,6 @@ class CUDAGraphPersistentDecodeBenchmark(DecodeBenchmark):
         with torch.cuda.stream(self._graph_stream):
             self._decode_graph.replay()
         torch.cuda.current_stream().wait_stream(self._graph_stream)
-        torch.cuda.synchronize()
         self._finalize_output()
 
     def teardown(self) -> None:

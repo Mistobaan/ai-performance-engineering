@@ -90,7 +90,6 @@ class BaselineAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 
                 # Attention @ V -> output
                 self.output = torch.matmul(attn_weights, self.value)
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

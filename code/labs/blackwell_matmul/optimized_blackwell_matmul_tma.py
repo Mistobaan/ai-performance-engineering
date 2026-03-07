@@ -37,10 +37,8 @@ class TmaGraceBlackwellBenchmark(GraceBlackwellMatmulBenchmark):
         )
         self.required_capabilities = {"tma": True}
 
-
-
-def get_benchmark(size: int = 2048) -> GraceBlackwellMatmulBenchmark:
-    return TmaGraceBlackwellBenchmark(size=size)
+def get_benchmark() -> GraceBlackwellMatmulBenchmark:
+    return TmaGraceBlackwellBenchmark()
 
 
 if __name__ == "__main__":

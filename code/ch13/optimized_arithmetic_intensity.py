@@ -81,7 +81,6 @@ class OptimizedArithmeticIntensityBenchmark(VerificationPayloadMixin, BaseBenchm
                 raise RuntimeError("Benchmark not initialized")
             # High arithmetic intensity: full fused matmul, single launch.
             self._fast_matmul()
-            self._synchronize()
         if self.A is None or self.B is None or self.C is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

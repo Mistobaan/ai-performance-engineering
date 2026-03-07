@@ -28,6 +28,11 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 LABEL="${LABEL:-$(hostname)}"
 DEVICE="${DEVICE:-0}"
@@ -53,7 +58,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_STRUCT_DIR"
 OUT_JSON="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_c2c_memcpy.json"
 LOCK_META_OUT="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_c2c_memcpy_clock_lock.json"

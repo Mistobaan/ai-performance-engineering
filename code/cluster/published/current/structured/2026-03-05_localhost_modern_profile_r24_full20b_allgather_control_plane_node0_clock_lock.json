@@ -1,0 +1,30 @@
+{
+  "cmd": "/home/cfregly/ai-performance-engineering/code/cluster/env/venv/bin/torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --rdzv_backend=c10d --rdzv_endpoint=localhost:29503 --max_restarts=0 /home/cfregly/ai-performance-engineering/code/cluster/scripts/allgather_control_plane_bench.py --iters 2000 --warmup 200 --output /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_allgather_control_plane.json",
+  "command_end_ts": "2026-03-05T15:42:58+0000",
+  "command_start_ts": "2026-03-05T15:42:52+0000",
+  "devices": [
+    0
+  ],
+  "label": "allgather_control_plane_node0",
+  "locks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 1965,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1155
+      },
+      "device": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 595.5993599999999
+      },
+      "physical_gpu": 0
+    }
+  ],
+  "require_clock_lock": true,
+  "returncode": 0,
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "timestamp": "2026-03-05T15:42:51+0000"
+}

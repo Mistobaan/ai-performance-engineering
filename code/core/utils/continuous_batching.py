@@ -46,6 +46,7 @@ class ContinuousBatchingBase(BaseBenchmark):
         self.lengths: List[List[int]] = []
         self.lengths_tensor: List[torch.Tensor] = []
         self.group_indices: List[List[torch.Tensor]] = []
+        self.group_max_steps: List[List[int]] = []
         self.schedules: List[List[torch.Tensor]] = []
         self.outputs: List[torch.Tensor] = []
         self.output: Optional[torch.Tensor] = None
@@ -99,6 +100,7 @@ class ContinuousBatchingBase(BaseBenchmark):
         self.lengths = []
         self.lengths_tensor = []
         self.group_indices = []
+        self.group_max_steps = []
         self.schedules = []
         self.streams = []
         total_tokens = 0
@@ -130,6 +132,7 @@ class ContinuousBatchingBase(BaseBenchmark):
             if self.dynamic:
                 self.schedules.append(self._build_dynamic_schedule(lengths, self.max_batch_size, device))
                 self.group_indices.append([])
+                self.group_max_steps.append([])
             else:
                 groups = [
                     torch.arange(
@@ -141,6 +144,7 @@ class ContinuousBatchingBase(BaseBenchmark):
                     for i in range(self.num_batches)
                 ]
                 self.group_indices.append(groups)
+                self.group_max_steps.append([max(lengths[i * self.max_batch_size : (i + 1) * self.max_batch_size]) for i in range(self.num_batches)])
                 self.schedules.append([])
 
         self._verify_input = self.samples[0][:2].detach()
@@ -173,10 +177,9 @@ class ContinuousBatchingBase(BaseBenchmark):
                                 y = model(batch_state)
                                 state.index_copy_(0, active_idx, y)
                         else:
-                            for group_idx in groups:
+                            for group_idx, group_max in zip(groups, self.group_max_steps[idx]):
                                 group_state = state.index_select(0, group_idx)
                                 group_lengths = lengths_tensor.index_select(0, group_idx)
-                                group_max = int(group_lengths.max().item())
                                 for step in range(group_max):
                                     y = model(group_state)
                                     active = step < group_lengths
@@ -213,6 +216,7 @@ class ContinuousBatchingBase(BaseBenchmark):
         self.lengths = []
         self.lengths_tensor = []
         self.group_indices = []
+        self.group_max_steps = []
         self.schedules = []
         self.outputs = []
         self.streams = []

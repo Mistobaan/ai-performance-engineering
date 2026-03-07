@@ -92,7 +92,6 @@ class BaselineReinitCommBenchmark(VerificationPayloadMixin, BaseBenchmark):
             # Perform all-reduce
             self.tensor.copy_(self.input_tensor)
             dist.all_reduce(self.tensor)
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.input_tensor is None or self.tensor is None:

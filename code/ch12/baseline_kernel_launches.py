@@ -6,14 +6,6 @@ Implements BaseBenchmark for harness integration.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-# Add repo root to path for imports
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
-
 import torch
 
 from typing import Optional
@@ -83,7 +75,6 @@ class BaselineKernelLaunchesBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with nvtx_range("kernel_launches", enable=enable_nvtx):
             with torch.no_grad():
                 self.output = many_small_ops_regular(self.x.clone(), self.iterations)
-            self._synchronize()
         if self._verify_input is None:
             raise RuntimeError("Verification input not initialized")
         dtype = self._verify_input.dtype

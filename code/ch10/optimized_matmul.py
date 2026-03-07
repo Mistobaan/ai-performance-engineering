@@ -78,7 +78,6 @@ class OptimizedTensorCoreBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 # Single fused matmul - replaces 64 tiled addmm operations
                 # BF16 enables tensor core acceleration on Ampere+ GPUs
                 torch.matmul(self.A_tc, self.B_tc, out=self.C)
-        self._synchronize()
         if self.C is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

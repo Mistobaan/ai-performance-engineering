@@ -25,6 +25,7 @@ from core.harness.benchmark_harness import (
     LaunchVia,
     TorchrunLaunchSpec,
 )
+from core.benchmark.cuda_event_timing import max_elapsed_ms
 from core.benchmark.metrics import compute_memory_transfer_metrics
 from ch04.verification_payload_mixin import VerificationPayloadMixin
 from core.optimization.symmetric_memory_patch import (
@@ -78,6 +79,7 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         self._last_gbps = 0.0
         self._bytes_transferred = 0.0
         self._inner_iterations = 2000
+        self._pending_timing_pairs: List[tuple[torch.cuda.Event, torch.cuda.Event]] = []
         self.register_workload_metadata(requests_per_iteration=1.0)
         self._verify_input: Optional[torch.Tensor] = None
         self._verify_output: Optional[torch.Tensor] = None
@@ -132,9 +134,7 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         ):
             raise RuntimeError("Tensors not initialized")
 
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
-        start.record()
+        timing_pairs: List[tuple[torch.cuda.Event, torch.cuda.Event]] = []
         if self._copy_streams is None:
             self._copy_streams = (
                 torch.cuda.Stream(device=self.device),
@@ -143,6 +143,12 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         send_stream, recv_stream = self._copy_streams
         send_stream.wait_stream(torch.cuda.current_stream())
         recv_stream.wait_stream(torch.cuda.current_stream())
+        for stream in (send_stream, recv_stream):
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            with torch.cuda.stream(stream):
+                start_event.record()
+            timing_pairs.append((start_event, end_event))
         for _ in range(self._inner_iterations):
             with torch.cuda.stream(send_stream):
                 self._peer_buffer.copy_(self._local_buffer, non_blocking=True)
@@ -150,29 +156,29 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
                 self._recv_buffer.copy_(self._prev_buffer, non_blocking=True)
         torch.cuda.current_stream().wait_stream(send_stream)
         torch.cuda.current_stream().wait_stream(recv_stream)
-        end.record()
-        torch.cuda.synchronize()
-        dist.barrier()
+        with torch.cuda.stream(send_stream):
+            timing_pairs[0][1].record()
+        with torch.cuda.stream(recv_stream):
+            timing_pairs[1][1].record()
+        self._pending_timing_pairs = timing_pairs
+        self._verify_output = self._recv_buffer
+        return None
 
-        elapsed_ms = start.elapsed_time(end)
-        
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, float]]:
+        if not self._pending_timing_pairs:
+            return None
+        elapsed_ms_value = max_elapsed_ms(self._pending_timing_pairs)
+        self._pending_timing_pairs = []
         bytes_per_iter = self.size_mb * 1024 * 1024 * 2
         bytes_moved = bytes_per_iter * self._inner_iterations
-        gbps = (bytes_moved / (elapsed_ms / 1000.0)) / 1e9 if elapsed_ms > 0 else 0.0
-
-        self._last_avg_ms = elapsed_ms
+        gbps = (bytes_moved / (elapsed_ms_value / 1000.0)) / 1e9 if elapsed_ms_value > 0 else 0.0
+        self._last_avg_ms = elapsed_ms_value
         self._last_gbps = gbps
         self._bytes_transferred = bytes_moved
-        self._verify_output = self._recv_buffer
-
-        return {
-            "symmetric_put.elapsed_ms": elapsed_ms,
-            "symmetric_put.gbps": gbps,
-            "symmetric_put.size_mb": self.size_mb,
-            "symmetric_put.peer_rank": float(self.peer_rank),
-        }
+        return None
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         if self._local_buffer is None:
             if self._verify_input is None:
                 torch.manual_seed(42)
@@ -253,6 +259,7 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         )
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        self.finalize_iteration_metrics()
         """Return memory transfer metrics for SymmetricMemory peer-put."""
         return compute_memory_transfer_metrics(
             bytes_transferred=self._bytes_transferred,
@@ -261,6 +268,7 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         )
 
     def validate_result(self) -> Optional[str]:
+        self.finalize_iteration_metrics()
         """Validate benchmark ran successfully."""
         if self.local_tensor is None or self._local_buffer is None:
             return "Local buffer not initialized"

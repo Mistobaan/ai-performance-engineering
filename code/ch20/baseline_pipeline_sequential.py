@@ -8,13 +8,6 @@ Implements BaseBenchmark for harness integration.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
-
 import torch
 import torch.nn as nn
 
@@ -57,6 +50,8 @@ class SimpleStage(nn.Module):
 
 class BaselinePipelineSequentialBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Sequential pipeline - no overlap."""
+
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
     
     def __init__(self):
         super().__init__()
@@ -119,12 +114,9 @@ class BaselinePipelineSequentialBenchmark(VerificationPayloadMixin, BaseBenchmar
                 x = self.inputs
                 for stage in self.stages:
                     x = stage(x)  # Wait for completion before next stage
-                    torch.cuda.synchronize()
                     # Naive pipeline: copy activations back to host between stages at FP32 precision
                     host_buffer = x.detach().float().to("cpu", non_blocking=False)
-                    torch.cuda.synchronize()
                     x = host_buffer.to(self.device, non_blocking=False).half()
-                    torch.cuda.synchronize()
             # Capture output for verification
             self.output = x.detach()
 

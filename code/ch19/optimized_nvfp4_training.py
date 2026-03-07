@@ -191,7 +191,6 @@ class OptimizedNVFP4TrainingBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with nvtx_range("nvfp4_training", enable=enable_nvtx):
             for idx in range(self.micro_batches):
                 self._train_step(idx)
-        torch.cuda.synchronize()
         # Capture output AFTER benchmark for verification
         if self._verify_input is None or self.model is None:
             raise RuntimeError("Verification input/model missing")

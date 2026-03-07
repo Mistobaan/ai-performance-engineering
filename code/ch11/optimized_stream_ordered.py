@@ -45,7 +45,6 @@ class OptimizedStreamOrderedBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def benchmark_fn(self) -> None:
         with self._nvtx_range("stream_ordered_optimized"):
             self.output = run_stream_ordered_allocator_capture(self.elements, self.inner_iterations)
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
         self._payload_inputs = {

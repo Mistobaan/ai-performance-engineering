@@ -77,7 +77,6 @@ class BaselineAutogradStandardBenchmark(VerificationPayloadMixin, BaseBenchmark)
             loss.backward()
             self.optimizer.step()
             self.output = outputs.detach().clone()
-        self._synchronize()
         if self.inputs is None or self.targets is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

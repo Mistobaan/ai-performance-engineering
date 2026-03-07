@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
 
-import pathlib
-import sys
-
-_EXTRAS_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-if str(_EXTRAS_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_EXTRAS_REPO_ROOT))
-
-from pathlib import Path
-
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-from arch_config import ArchitectureConfig
 import torch.profiler as profiler
 from torch.profiler import profile, record_function, ProfilerActivity, schedule
 import torch.cuda.nvtx as nvtx
@@ -21,27 +7,13 @@ from core.profiling.nvtx_helper import standardize_nvtx_label
 import torch
 import os
 import math
+from core.utils.architecture_runtime import (
+    get_arch_config,
+    get_architecture,
+    get_architecture_info,
+)
 
-_ARCH_CFG = ArchitectureConfig()
-
-
-def get_architecture():
-    """Detect and return the current GPU architecture."""
-    if not torch.cuda.is_available():
-        return "cpu"
-    return _ARCH_CFG.arch
-
-
-def get_architecture_info():
-    """Get detailed architecture information."""
-    return {
-        "name": _ARCH_CFG.get_architecture_name(),
-        "compute_capability": _ARCH_CFG.config.get("compute_capability", "Unknown"),
-        "sm_version": _ARCH_CFG.config.get("sm_version", "sm_unknown"),
-        "memory_bandwidth": _ARCH_CFG.config.get("memory_bandwidth", "Unknown"),
-        "tensor_cores": _ARCH_CFG.config.get("tensor_cores", "Unknown"),
-        "features": _ARCH_CFG.config.get("features", []),
-    }
+_ARCH_CFG = get_arch_config()
 """
 radix_attention_example.py
 Chapter 16: Radix Attention KV Cache Implementation Example

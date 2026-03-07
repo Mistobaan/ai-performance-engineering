@@ -59,7 +59,6 @@ class OptimizedBatchBenchmark(VerificationPayloadMixin, BaseBenchmark):
             with torch.no_grad():
                 # Single large forward pass (one kernel launch, better GPU utilization)
                 self.output = self.model(self.input)
-        self._synchronize()
         if self.output is None or self.input is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

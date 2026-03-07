@@ -68,6 +68,7 @@ class BaselineMXFP8MoEBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.bucketed_inputs: Optional[torch.Tensor] = None
         self.bucket_indices: Optional[torch.Tensor] = None
         self.expert_order: Optional[torch.Tensor] = None
+        self.expert_order_list: List[int] = []
         self.m_splits: List[int] = []
         self.weights: Optional[torch.Tensor] = None
         self.matmul_ref: Optional[_NaiveMXFP8Matmul] = None
@@ -94,6 +95,7 @@ class BaselineMXFP8MoEBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.bucketed_inputs = bucketed
         self.bucket_indices = bucket_indices
         self.expert_order = expert_order
+        self.expert_order_list = [int(idx) for idx in expert_order.detach().cpu()]
         self.m_splits = m_splits
         self.matmul_ref = _NaiveMXFP8Matmul(
             hidden_dim=self.hidden_dim,
@@ -113,7 +115,7 @@ class BaselineMXFP8MoEBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
         outputs: List[torch.Tensor] = []
         offset = 0
-        for expert_idx, m in zip(self.expert_order.tolist(), self.m_splits):
+        for expert_idx, m in zip(self.expert_order_list, self.m_splits):
             expert_slice = self.bucketed_inputs.narrow(0, offset, m)
             outputs.append(self.matmul_ref(expert_slice, expert_idx))
             offset += m
@@ -146,6 +148,7 @@ class BaselineMXFP8MoEBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.bucketed_inputs = None
         self.bucket_indices = None
         self.expert_order = None
+        self.expert_order_list = []
         self.m_splits = []
         self.matmul_ref = None
         torch.cuda.empty_cache()

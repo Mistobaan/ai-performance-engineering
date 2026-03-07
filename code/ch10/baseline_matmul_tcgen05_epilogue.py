@@ -71,7 +71,6 @@ class BaselineMatmulTCGen05EpilogueBenchmark(VerificationPayloadMixin, BaseBench
                 C = C + self.bias
                 # Step 3: SiLU activation (separate kernel launch)
                 self.output = F.silu(C).to(dtype=torch.float16)
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

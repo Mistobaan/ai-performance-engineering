@@ -14,12 +14,6 @@ import torch.nn as nn
 
 
 from typing import Dict, List, Optional, Tuple
-import sys
-from pathlib import Path
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from core.utils import compile_utils as _compile_utils_patch  # noqa: F401
 from core.utils.compile_utils import maybe_nested_compile_region

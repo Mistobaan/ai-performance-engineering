@@ -131,7 +131,6 @@ class OptimizedPrecisionFP8PadInnerMatmulBenchmark(VerificationPayloadMixin, Bas
                 )
                 out = a_fp8 @ b_fp8
                 self.output = out.detach().float().clone()
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

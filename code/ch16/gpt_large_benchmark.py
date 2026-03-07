@@ -23,9 +23,6 @@ Example:
 
 from __future__ import annotations
 
-import sys
-import os
-
 import argparse
 import contextlib
 import json
@@ -35,20 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-try:
-    from arch_config import prefer_flash_sdpa  # type: ignore
-except Exception:
-    from contextlib import nullcontext
-
-    def prefer_flash_sdpa():
-        return nullcontext()
+from core.harness.arch_config import prefer_flash_sdpa
 
 import torch
 import torch.nn as nn
@@ -62,7 +46,7 @@ except ImportError:  # pragma: no cover - flex attention may be unavailable
     create_block_mask = None
 
 try:
-    from extras.ch16.fp8_transformer_engine import (
+    from ch16.fp8_transformer_engine import (
         TransformerEngineUnavailable,
         convert_linear_layers as convert_linear_layers_to_te,
         fp8_autocast as te_fp8_autocast,

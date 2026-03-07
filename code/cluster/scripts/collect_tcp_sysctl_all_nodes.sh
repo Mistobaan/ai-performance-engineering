@@ -22,7 +22,8 @@ SSH_USER="ubuntu"
 SSH_KEY="${SSH_KEY:-}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-OUT_DIR="${ROOT_DIR}/results/structured"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,6 +43,8 @@ if [[ -z "$HOSTS" ]]; then
   exit 2
 fi
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_DIR"
 
 SSH_OPTS=(
@@ -120,4 +123,4 @@ for idx in "${!HOST_ARR[@]}"; do
 done
 
 echo "Exporting JSON + diff..."
-"${ROOT_DIR}/scripts/export_tcp_sysctl_json.sh" --run-id "$RUN_ID"
+"${ROOT_DIR}/scripts/export_tcp_sysctl_json.sh" --run-id "$RUN_ID" --structured-dir "$OUT_DIR"

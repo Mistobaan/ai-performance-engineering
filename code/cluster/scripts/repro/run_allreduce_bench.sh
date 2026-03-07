@@ -13,6 +13,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 LABEL="$(hostname)"
 NPROC=""
@@ -50,7 +52,8 @@ fi
 
 # Enforce strict GPU clock locking for the whole torchrun job.
 export RUN_ID LABEL
-STRUCT_DIR="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$STRUCT_DIR"
 LOCK_META_OUT="${STRUCT_DIR}/${RUN_ID}_${LABEL}_allreduce_bench_clock_lock.json"
 if [[ "${AISP_CLOCK_LOCKED:-}" != "1" ]]; then
@@ -71,7 +74,7 @@ if [[ ! -f "$BENCH_SCRIPT" ]]; then
   exit 1
 fi
 
-OUT_DIR="${ROOT_DIR}/results/raw/${RUN_ID}_${LABEL}_allreduce_bench"
+OUT_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}/${RUN_ID}_${LABEL}_allreduce_bench"
 mkdir -p "$OUT_DIR"
 
 LOG_PATH="${OUT_DIR}/run.log"
@@ -93,7 +96,7 @@ echo "LOG_PATH=${LOG_PATH}"
     "$BENCH_SCRIPT"
 ) 2>&1 | tee "$LOG_PATH"
 
-# Copy the latest JSON output into results/structured for easy discovery.
+# Copy the latest JSON output into the run-local structured directory for easy discovery.
 latest_json=""
 if compgen -G "${OUT_DIR}/logs/allreduce_benchmark_results_"'*'.json > /dev/null; then
   latest_json="$(ls -t "${OUT_DIR}/logs/allreduce_benchmark_results_"*.json | head -n 1)"

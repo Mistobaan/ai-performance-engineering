@@ -16,6 +16,7 @@ from typing import Callable, List, Optional, Sequence, Tuple
 import torch
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
+from core.benchmark.wrapper_utils import attach_benchmark_metadata
 from core.harness.benchmark_harness import (
     BaseBenchmark,
     BenchmarkConfig,
@@ -342,16 +343,3 @@ __all__ = [
     "input_t",
     "output_t",
 ]
-
-
-def attach_benchmark_metadata(bench: BaseBenchmark, module_file: str) -> BaseBenchmark:
-    """Annotate a benchmark so subprocess runner can re-import via get_benchmark.
-
-    The bench harness runs in a subprocess for isolation; by default it would try to
-    re-instantiate NVFP4GroupGemmBenchmark() from nvfp4_group_gemm_common.py, but
-    this benchmark requires constructor args. We instead instruct the harness to
-    import the wrapper module (baseline_/optimized_) and call get_benchmark().
-    """
-    bench._module_file_override = module_file
-    bench._factory_name_override = "get_benchmark"
-    return bench

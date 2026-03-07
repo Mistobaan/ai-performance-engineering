@@ -511,7 +511,6 @@ class FlexAttentionSparseDemoBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
         self._last = result.get("elapsed_ms", 0.0)
         self.output = self.demo_benchmark._last_output
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
         block_mask = getattr(self.demo_benchmark, "_last_block_mask", None)

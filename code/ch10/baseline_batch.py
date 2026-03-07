@@ -80,7 +80,6 @@ class BaselineBatchBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     end = start + self.micro_batch_size
                     output[start:end] = self.model(self.inputs_chunked[idx])
         self.output = output
-        self._synchronize()
         if self.output is None or self.input_flat is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

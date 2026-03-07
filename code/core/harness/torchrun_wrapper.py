@@ -87,12 +87,26 @@ def _run_target_script(script_path: Path, argv: list[str]) -> None:
                 sys.path[0] = previous_path0
 
 
+def _run_target_module(module_name: str, argv: list[str]) -> None:
+    previous_argv = sys.argv
+    try:
+        sys.argv = [module_name, *argv]
+        runpy.run_module(module_name, run_name="__main__", alter_sys=True)
+    finally:
+        sys.argv = previous_argv
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument(
         "--aisp-target-script",
-        required=True,
+        required=False,
         help="Path to the benchmark script to execute under torchrun.",
+    )
+    parser.add_argument(
+        "--aisp-target-module",
+        required=False,
+        help="Module name of the benchmark entrypoint to execute under torchrun.",
     )
     parser.add_argument(
         "--aisp-expected-torch-seed",
@@ -113,9 +127,19 @@ def main(argv: Optional[list[str]] = None) -> None:
     )
     args, remainder = parser.parse_known_args(argv)
 
-    script_path = Path(args.aisp_target_script).resolve()
-    if not script_path.exists():
-        raise FileNotFoundError(f"Target script not found: {script_path}")
+    if bool(args.aisp_target_script) == bool(args.aisp_target_module):
+        raise RuntimeError(
+            "Specify exactly one of --aisp-target-script or --aisp-target-module."
+        )
+
+    script_path: Optional[Path] = None
+    module_name: Optional[str] = None
+    if args.aisp_target_script:
+        script_path = Path(args.aisp_target_script).resolve()
+        if not script_path.exists():
+            raise FileNotFoundError(f"Target script not found: {script_path}")
+    else:
+        module_name = str(args.aisp_target_module)
 
     _apply_backend_policy(bool(args.aisp_deterministic))
     _set_seeds(int(args.aisp_expected_torch_seed))
@@ -141,9 +165,15 @@ def main(argv: Optional[list[str]] = None) -> None:
         with lock_ctx:
             if ramp_requested:
                 ramp_gpu_clocks(device=local_rank)
-            _run_target_script(script_path, remainder)
+            if script_path is not None:
+                _run_target_script(script_path, remainder)
+            else:
+                _run_target_module(module_name or "", remainder)
     else:
-        _run_target_script(script_path, remainder)
+        if script_path is not None:
+            _run_target_script(script_path, remainder)
+        else:
+            _run_target_module(module_name or "", remainder)
 
     current_torch_seed = int(torch.initial_seed())
     if current_torch_seed != expected_torch_seed:

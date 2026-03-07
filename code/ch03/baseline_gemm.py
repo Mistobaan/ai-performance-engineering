@@ -72,7 +72,6 @@ class BaselineGemmBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 right_block = self.right[start:end, :]  # (block_size, n)
                 # Accumulate partial result
                 result += torch.matmul(left_block, right_block)
-                self._synchronize()  # CPU sync between blocks (inefficient!)
         
         self.output = result
         if self.left is None or self.right is None:

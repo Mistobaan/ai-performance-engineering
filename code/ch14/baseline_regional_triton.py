@@ -68,6 +68,8 @@ class TinyTransformerBlock(nn.Module):
 class BaselineRegionalTritonBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Full-graph compile baseline without Triton fusion."""
 
+    allowed_benchmark_fn_antipatterns = ("compile",)
+
     def __init__(self):
         super().__init__()
         self.hidden = 1024
@@ -138,7 +140,6 @@ class BaselineRegionalTritonBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with torch.no_grad(), self._nvtx_range("baseline_regional_triton"):
             self._last_input = x
             self.output = compiled_model(x)
-        self._synchronize()
         if self.output is None or self._last_input is None:
             raise RuntimeError("benchmark_fn() must produce output")
         dtype = self._last_input.dtype

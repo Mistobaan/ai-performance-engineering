@@ -128,11 +128,9 @@ class BaselineNoOverlapBenchmark(VerificationPayloadMixin, BaseBenchmark):
             loss.backward()
             self._host_buffer.copy_(self.data, non_blocking=False)
             self.data.copy_(self._host_buffer, non_blocking=False)
-            torch.cuda.synchronize(self.device)
             self.optimizer.step()
             self.optimizer.zero_grad()
         self.output = output.detach()
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.data is None or self.target is None or self.output is None:

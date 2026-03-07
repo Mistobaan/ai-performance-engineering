@@ -12,18 +12,12 @@ from __future__ import annotations
 import argparse
 import inspect
 import os
-import sys
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from ch15.verification_payload_mixin import VerificationPayloadMixin  # noqa: E402
 from core.benchmark.verification import PrecisionFlags  # noqa: E402

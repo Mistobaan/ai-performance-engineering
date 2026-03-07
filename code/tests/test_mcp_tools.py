@@ -157,6 +157,9 @@ CATEGORY_TOOLS: Dict[str, List[str]] = {
         "cluster_slurm",
         "cost_estimate",
         "cluster_eval_suite",
+        "cluster_common_eval",
+        "cluster_build_canonical_package",
+        "cluster_promote_run",
         "cluster_validate_field_report",
     ],
     "tools": [
@@ -347,6 +350,24 @@ TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
     "cluster_slurm": {"model": "7b", "nodes": 1, "gpus": 2},
     "cost_estimate": {"gpu_type": "h100", "num_gpus": 1, "hours_per_day": 1},
     "cluster_eval_suite": {"mode": "smoke", "run_id": "mcp_cluster_smoke_test", "include_context": False},
+    "cluster_common_eval": {
+        "preset": "multinode-readiness",
+        "run_id": "mcp_cluster_smoke_test",
+        "hosts": ["localhost"],
+        "labels": ["localhost"],
+        "include_context": False,
+    },
+    "cluster_build_canonical_package": {
+        "canonical_run_id": "mcp_cluster_smoke_test",
+        "output_dir": str(ARTIFACT_DIR / "cluster_pkg_smoke"),
+        "include_context": False,
+    },
+    "cluster_promote_run": {
+        "run_id": "mcp_cluster_smoke_test",
+        "skip_render_localhost_report": True,
+        "skip_validate_localhost_report": True,
+        "include_context": False,
+    },
     "cluster_validate_field_report": {"canonical_run_id": "mcp_cluster_smoke_test", "include_context": False},
     "clock_lock_check": {"devices": [0], "include_context": False},
     "suggest_tools": {"query": "profile this model", "llm_routing": False},
@@ -456,7 +477,7 @@ def test_expected_tool_registration_matches_catalog():
     expected = {case.name for case in ALL_TOOL_CASES}
     registered = set(mcp_server.TOOLS.keys())
     assert expected == registered, "Tool catalog must mirror MCP server registry"
-    assert len(expected) == 103
+    assert len(expected) == 106
 
 
 def test_optimize_path_resolution():

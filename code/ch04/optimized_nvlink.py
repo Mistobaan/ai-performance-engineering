@@ -55,7 +55,6 @@ class OptimizedNVLinkBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with self._nvtx_range("optimized_nvlink"):
             self.host_buffer.copy_(self.data_gpu0, non_blocking=True)
             self.data_gpu1.copy_(self.host_buffer, non_blocking=True)
-            torch.cuda.synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.data_gpu0 is None or self.data_gpu1 is None:

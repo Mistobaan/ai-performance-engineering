@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import inspect
 import os
-import sys
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -14,10 +13,6 @@ from typing import List, Optional, Tuple
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from core.benchmark.verification import PrecisionFlags
 from core.benchmark.verification_mixin import VerificationPayloadMixin
@@ -725,11 +720,11 @@ class _PrefillDecodeMultiGPUBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def get_torchrun_spec(self, config: Optional[BenchmarkConfig] = None) -> TorchrunLaunchSpec:
         self._prepare_verification_payload()
         module = inspect.getmodule(self.__class__)
-        script_path = Path(module.__file__).resolve() if module and module.__file__ else Path(__file__).resolve()
+        module_name = getattr(module, "__name__", None) if module else None
         master_port = os.environ.get("MASTER_PORT", "29517")
         script_args = ["--prefill-ranks", str(self.prefill_ranks)]
         return TorchrunLaunchSpec(
-            script_path=script_path,
+            module_name=module_name,
             script_args=script_args,
             env={
                 "NCCL_DEBUG": "WARN",

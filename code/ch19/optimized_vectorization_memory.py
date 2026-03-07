@@ -109,7 +109,6 @@ class OptimizedVectorizationMemoryBenchmark(VerificationPayloadMixin, BaseBenchm
                 torch.add(beta, a, alpha=alpha, out=b)
                 a, b = b, a
             self.output = a.detach().float()
-            torch.cuda.synchronize(self.device)
         if self.tensor is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output")
 

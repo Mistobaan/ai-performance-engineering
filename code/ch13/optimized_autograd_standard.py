@@ -108,7 +108,6 @@ class OptimizedAutogradCompiledBenchmark(VerificationPayloadMixin, BaseBenchmark
                 if self.output_buffer is None:
                     raise RuntimeError("Output buffer not initialized")
                 self.output = self.output_buffer.detach().clone()
-        self._synchronize()
         if self.inputs is None or self.targets is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

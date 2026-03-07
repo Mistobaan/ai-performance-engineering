@@ -125,7 +125,6 @@ class OptimizedMatmulCUTLASSBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with self._nvtx_range("matmul_pytorch"):
             # CUTLASS-optimized matrix multiplication (via torch.compile)
             self.C = self.compiled_matmul(self.A, self.B, self.bias, self.residual, self.scale)
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if (

@@ -125,7 +125,6 @@ class BaselinePrecisionFP8Benchmark(VerificationPayloadMixin, BaseBenchmark):
             with torch.no_grad():
                 verify_out = self.model(self._verify_input)
                 self.output = verify_out.detach().float().clone()
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

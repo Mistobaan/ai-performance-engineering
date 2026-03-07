@@ -178,14 +178,13 @@ class OptimizedPipelineParallelismBenchmark(VerificationPayloadMixin, BaseBenchm
                             stage_buffers[next_stage_idx][chunk_idx] = out
                             self.stage_events[stage_idx][chunk_idx].record(stream)
 
-        for stream in self.stage_streams:
-            stream.synchronize()
-        self._synchronize()
         # Bubble fraction approximates fill/drain overhead: (S-1)/M
         self._bubble_fraction = (num_stages - 1) / float(self.micro_batches)
         # Store final output from last stage
         final_outputs = [o for o in stage_buffers[num_stages] if o is not None]
         if final_outputs:
+            with torch.cuda.device(stage_devices[-1]):
+                torch.cuda.current_stream(stage_devices[-1]).wait_stream(self.stage_streams[-1])
             self.output = torch.cat(final_outputs, dim=0)
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output")

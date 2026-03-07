@@ -1,0 +1,80 @@
+{
+  "input_csv": "/home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv",
+  "label": "localhost",
+  "points": [
+    {
+      "concurrency": 32,
+      "goodput_req_s": 0.768,
+      "goodput_tok_s": 1572.544,
+      "p99_tpot_ms": 41.494,
+      "p99_ttft_ms": 460.532,
+      "request_throughput": 0.768,
+      "slo_pass": true,
+      "total_token_throughput": 1572.544
+    },
+    {
+      "concurrency": 64,
+      "goodput_req_s": 1.497,
+      "goodput_tok_s": 3065.01,
+      "p99_tpot_ms": 42.715,
+      "p99_ttft_ms": 722.19,
+      "request_throughput": 1.497,
+      "slo_pass": true,
+      "total_token_throughput": 3065.01
+    },
+    {
+      "concurrency": 128,
+      "goodput_req_s": 2.852,
+      "goodput_tok_s": 5840.971,
+      "p99_tpot_ms": 44.318,
+      "p99_ttft_ms": 1202.268,
+      "request_throughput": 2.852,
+      "slo_pass": true,
+      "total_token_throughput": 5840.971
+    },
+    {
+      "concurrency": 256,
+      "goodput_req_s": 0.0,
+      "goodput_tok_s": 0.0,
+      "p99_tpot_ms": 43.529,
+      "p99_ttft_ms": 2196.305,
+      "request_throughput": 5.968,
+      "slo_pass": false,
+      "total_token_throughput": 12223.246
+    },
+    {
+      "concurrency": 512,
+      "goodput_req_s": 0.0,
+      "goodput_tok_s": 0.0,
+      "p99_tpot_ms": 50.598,
+      "p99_ttft_ms": 4453.392,
+      "request_throughput": 10.477,
+      "slo_pass": false,
+      "total_token_throughput": 21456.795
+    }
+  ],
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "slo_thresholds_ms": {
+    "p99_tpot_ms": 200.0,
+    "p99_ttft_ms": 2000.0
+  },
+  "status": "ok",
+  "summary": {
+    "all_points_meet_slo": false,
+    "any_point_meets_slo": true,
+    "concurrency_at_max_goodput_req_s": 128,
+    "concurrency_at_max_goodput_tok_s": 128,
+    "concurrency_at_peak_total_req_s": 512,
+    "concurrency_at_peak_total_tok_s": 512,
+    "concurrency_points": 5,
+    "goodput_efficiency_req_ratio": 0.2722153288155006,
+    "goodput_efficiency_tok_ratio": 0.2722201055656262,
+    "knee_concurrency": 256,
+    "max_goodput_req_s": 2.852,
+    "max_goodput_tok_s": 5840.971,
+    "p99_tpot_ms_at_max_goodput_tok_s": 44.318,
+    "p99_ttft_ms_at_max_goodput_tok_s": 1202.268,
+    "peak_total_req_s": 10.477,
+    "peak_total_tok_s": 21456.795
+  }
+}

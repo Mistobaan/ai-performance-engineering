@@ -15,6 +15,11 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
 VENV_PY="${VENV_PY:-${ROOT_DIR}/env/venv/bin/python}"
 
 DEVICES=""
@@ -68,7 +73,7 @@ if [[ -z "$LOCK_META_OUT" ]]; then
   # If the caller provides RUN_ID/LABEL (common in this repo), default to a
   # structured lock metadata file so clock-lock evidence is always retained.
   if [[ -n "${RUN_ID:-}" ]]; then
-    out_dir="${ROOT_DIR}/results/structured"
+    out_dir="$(cluster_structured_dir_for_root "${ROOT_DIR}" "${RUN_ID}")"
     mkdir -p "$out_dir"
     if [[ -n "${LABEL:-}" ]]; then
       LOCK_META_OUT="${out_dir}/${RUN_ID}_${LABEL}_clock_lock.json"

@@ -8533,6 +8533,127 @@ def tool_cluster_eval_suite(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @register_tool(
+    "cluster_common_eval",
+    "Tags: cluster, eval, preset, llm, system-validation, reproducibility. "
+    "Run a preset benchmark bundle that answers the common system-evaluation questions people usually ask. "
+    "Presets: common-answer-fast, core-system, modern-llm, multinode-readiness. "
+    "Returns: {success, preset, artifact_roles, run_id, stdout/stderr}. "
+    "🕐 MEDIUM (varies). USE when: You want one obvious entrypoint for standard evaluation output instead of composing suite flags manually.",
+    {"type": "object", "properties": with_context_params({
+        "preset": {"type": "string", "enum": ["common-answer-fast", "core-system", "modern-llm", "multinode-readiness"], "default": "core-system", "description": "Preset evaluation bundle"},
+        "run_id": {"type": "string", "description": "RUN_ID prefix (default: YYYY-MM-DD)"},
+        "hosts": {"type": "array", "items": {"type": "string"}, "description": "Host list"},
+        "labels": {"type": "array", "items": {"type": "string"}, "description": "Optional labels (must match hosts count)"},
+        "ssh_user": {"type": "string", "description": "SSH user"},
+        "ssh_key": {"type": "string", "description": "SSH key path"},
+        "oob_if": {"type": "string", "description": "Out-of-band interface for multi-node readiness and network-heavy presets"},
+        "socket_ifname": {"type": "string", "description": "NCCL socket interface"},
+        "nccl_ib_hca": {"type": "string", "description": "NCCL_IB_HCA allowlist"},
+        "primary_label": {"type": "string", "description": "Label for single-node/local steps"},
+        "coverage_baseline_run_id": {"type": "string", "description": "Optional baseline run id for coverage delta artifacts"},
+        "extra_args": {"type": "array", "items": {"type": "string"}, "description": "Extra args appended after preset flags"},
+        "timeout_seconds": {"type": "integer", "description": "Optional timeout in seconds (0/null = no timeout)"},
+    })},
+)
+def tool_cluster_common_eval(params: Dict[str, Any]) -> Dict[str, Any]:
+    from core.cluster import run_cluster_common_eval
+
+    include_context, context_level = extract_context_opts(params)
+    try:
+        result = run_cluster_common_eval(
+            preset=str(params.get("preset", "core-system")),
+            run_id=params.get("run_id"),
+            hosts=params.get("hosts") if isinstance(params.get("hosts"), list) else None,
+            labels=params.get("labels") if isinstance(params.get("labels"), list) else None,
+            ssh_user=params.get("ssh_user"),
+            ssh_key=params.get("ssh_key"),
+            oob_if=params.get("oob_if"),
+            socket_ifname=params.get("socket_ifname"),
+            nccl_ib_hca=params.get("nccl_ib_hca"),
+            primary_label=params.get("primary_label"),
+            coverage_baseline_run_id=params.get("coverage_baseline_run_id"),
+            extra_args=params.get("extra_args") if isinstance(params.get("extra_args"), list) else None,
+            timeout_seconds=params.get("timeout_seconds"),
+        )
+        return attach_context_if_requested(result, include_context, context_level)
+    except Exception as e:
+        return make_error(f"common cluster eval failed: {e}", include_context, context_level)
+
+
+@register_tool(
+    "cluster_build_canonical_package",
+    "Tags: cluster, package, canonical, cleanup, artifacts, reproducibility. "
+    "Materialize a clean canonical cluster package from one primary run plus optional comparison and historical runs. "
+    "Returns: {success, output_dir, package_manifest_path, package_readme_path, cleanup_keep_run_ids_path}. "
+    "⚡ FAST (~1-10s). USE when: You want one agent-friendly bundle rooted at a single output directory without deleting source artifacts.",
+    {"type": "object", "properties": with_context_params({
+        "canonical_run_id": {"type": "string", "description": "Primary canonical run id to package"},
+        "comparison_run_ids": {"type": "array", "items": {"type": "string"}, "description": "Additional comparison/baseline run ids"},
+        "historical_run_ids": {"type": "array", "items": {"type": "string"}, "description": "Historical run ids to retain as references or include when present"},
+        "output_dir": {"type": "string", "description": "Package output directory (must not already contain files)"},
+        "timeout_seconds": {"type": "integer", "default": 300, "description": "Builder timeout in seconds"},
+    })},
+)
+def tool_cluster_build_canonical_package(params: Dict[str, Any]) -> Dict[str, Any]:
+    from core.cluster import build_canonical_package
+
+    include_context, context_level = extract_context_opts(params)
+    try:
+        result = build_canonical_package(
+            canonical_run_id=str(params.get("canonical_run_id") or ""),
+            comparison_run_ids=params.get("comparison_run_ids") if isinstance(params.get("comparison_run_ids"), list) else None,
+            historical_run_ids=params.get("historical_run_ids") if isinstance(params.get("historical_run_ids"), list) else None,
+            output_dir=params.get("output_dir"),
+            timeout_seconds=int(params.get("timeout_seconds", 300) or 300),
+        )
+        return attach_context_if_requested(result, include_context, context_level)
+    except Exception as e:
+        return make_error(f"canonical package build failed: {e}", include_context, context_level)
+
+
+@register_tool(
+    "cluster_promote_run",
+    "Tags: cluster, publish, promote, canonical, localhost, reports. "
+    "Promote one run-local cluster result tree into the published cluster package. "
+    "Returns: {success, run_id, published_root, published_structured_dir, published_localhost_report_path, steps}. "
+    "⚡ FAST (~1-30s). USE when: A run under `cluster/runs/<run_id>/` should become the published localhost package and materialized published artifact set.",
+    {"type": "object", "properties": with_context_params({
+        "run_id": {"type": "string", "description": "Run id under cluster/runs/<run_id>"},
+        "label": {"type": "string", "default": "localhost", "description": "Host label for localhost report rendering"},
+        "allow_run_ids": {"type": "array", "items": {"type": "string"}, "description": "Additional run ids to retain during cleanup/validation hygiene checks"},
+        "publish_report_path": {"type": "string", "description": "Published localhost report path"},
+        "publish_notes_path": {"type": "string", "description": "Published localhost notes path"},
+        "skip_render_localhost_report": {"type": "boolean", "default": False, "description": "Skip rendering run-local + published localhost report markdown"},
+        "skip_validate_localhost_report": {"type": "boolean", "default": False, "description": "Skip localhost report validation after promotion"},
+        "cleanup": {"type": "boolean", "default": False, "description": "Run cleanup_run_artifacts.sh after promotion using this run_id as canonical"},
+        "timeout_seconds": {"type": "integer", "default": 300, "description": "Promotion timeout in seconds"},
+    })},
+)
+def tool_cluster_promote_run(params: Dict[str, Any]) -> Dict[str, Any]:
+    from core.cluster import promote_cluster_run
+
+    include_context, context_level = extract_context_opts(params)
+    try:
+        run_id = str(params.get("run_id") or "").strip()
+        if not run_id:
+            return make_error("run_id is required", include_context, context_level)
+        result = promote_cluster_run(
+            run_id=run_id,
+            label=str(params.get("label") or "localhost"),
+            allow_run_ids=params.get("allow_run_ids") if isinstance(params.get("allow_run_ids"), list) else None,
+            publish_report_path=params.get("publish_report_path"),
+            publish_notes_path=params.get("publish_notes_path"),
+            skip_render_localhost_report=bool(params.get("skip_render_localhost_report", False)),
+            skip_validate_localhost_report=bool(params.get("skip_validate_localhost_report", False)),
+            cleanup=bool(params.get("cleanup", False)),
+            timeout_seconds=int(params.get("timeout_seconds", 300) or 300),
+        )
+        return attach_context_if_requested(result, include_context, context_level)
+    except Exception as e:
+        return make_error(f"promote run failed: {e}", include_context, context_level)
+
+
+@register_tool(
     "cluster_validate_field_report",
     "Tags: cluster, report, validate, hygiene, artifacts, requirements. "
     "Validate `cluster/field-report.md` and companion notes/template/runbook plus artifact hygiene. "

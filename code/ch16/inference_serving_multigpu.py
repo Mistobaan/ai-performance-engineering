@@ -45,17 +45,6 @@ Error Recovery:
 
 Author: Blackwell Performance Engineering Team
 """
-import pathlib
-import sys
-
-_EXTRAS_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-if str(_EXTRAS_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_EXTRAS_REPO_ROOT))
-
-from pathlib import Path
-
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.optimization.symmetric_memory_patch import (
     SymmetricMemoryHandle,
@@ -63,15 +52,7 @@ from core.optimization.symmetric_memory_patch import (
 )
 from core.utils.compile_utils import compile_callable, compile_model
 from core.benchmark.gpu_requirements import require_min_gpus
-
-
-try:
-    from arch_config import prefer_flash_sdpa  # type: ignore
-except Exception:
-    from contextlib import nullcontext
-
-    def prefer_flash_sdpa():
-        return nullcontext()
+from core.harness.arch_config import prefer_flash_sdpa
 
 
 from typing import Any, Callable, Dict, List, Optional, Tuple

@@ -74,7 +74,6 @@ class BaselineNvfp4GemvBenchmark(VerificationPayloadMixin, BaseBenchmark):
             raise RuntimeError("Benchmark not initialized")
         with self._nvtx_range("baseline_nvfp4_gemv"):
             self.output = self._kernel_fn(self._input_data)
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")
 

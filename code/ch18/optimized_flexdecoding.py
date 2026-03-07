@@ -1,10 +1,10 @@
-"""Optimized FlexDecoding benchmark using Flash SDPA on sliding-window slices."""
+"""Optimized FlexDecoding benchmark using compiled FlexAttention on sliding-window slices."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import torch
 import torch.nn.functional as F
@@ -18,14 +18,14 @@ from ch18.baseline_flexdecoding import FlexDecodingHarness  # noqa: E402
 
 
 class OptimizedFlexDecodingBenchmark(FlexDecodingHarness):
-    """Optimized path: Flash SDPA with sliding-window cache slicing."""
+    """Optimized path: compiled FlexAttention with sliding-window cache slicing."""
 
     def __init__(self) -> None:
         super().__init__(
-            use_flex_attention=False,
-            require_flex=False,
+            use_flex_attention=True,
+            require_flex=True,
             decode_tokens=512,
-            compile_enabled=False,
+            compile_enabled=True,
         )
 
     def setup(self) -> None:
@@ -57,7 +57,7 @@ class OptimizedFlexDecodingBenchmark(FlexDecodingHarness):
         )
         return self.model.o_proj(out.transpose(1, 2).reshape(token.shape[0], 1, self.config.dim))
 
-    def benchmark_fn(self) -> Dict[str, List[float]]:
+    def benchmark_fn(self) -> Optional[Dict[str, List[float]]]:
         if self.model is None or self.prefill_tokens is None or self.decode_token is None:
             raise RuntimeError("Model/tokens not initialized")
         if self._prefill_events is None or self._decode_events is None:
@@ -65,8 +65,6 @@ class OptimizedFlexDecodingBenchmark(FlexDecodingHarness):
         if len(self._decode_events) != self.decode_tokens:
             raise RuntimeError("Timing event count mismatch")
 
-        prefill_times: List[float] = []
-        decode_times: List[float] = []
         base_position = self.prefill_tokens.size(1)
 
         with torch.no_grad():
@@ -84,17 +82,11 @@ class OptimizedFlexDecodingBenchmark(FlexDecodingHarness):
                         decode_out = self._decode_step(self.decode_token, base_position + pos)
                         end_evt.record()
 
-        torch.cuda.synchronize(self.device)
-        prefill_times.append(prefill_start.elapsed_time(prefill_end))
-        decode_times.extend(start.elapsed_time(end) for start, end in self._decode_events)
-
         self._last_output = decode_out if "decode_out" in locals() else prefill_out
-
-        self._history["prefill_ms"].extend(prefill_times)
-        self._history["decode_ms"].extend(decode_times)
+        self._pending_iteration_metrics = True
         if self._last_output is None or self.prefill_tokens is None or self.decode_token is None:
             raise RuntimeError("benchmark_fn() must produce output")
-        return {"prefill_ms": prefill_times, "decode_ms": decode_times}
+        return None
 
 
 def get_benchmark():

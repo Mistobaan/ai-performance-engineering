@@ -73,9 +73,7 @@ class BaselinePipelineParallelismBenchmark(VerificationPayloadMixin, BaseBenchma
                 activations = self.input_data
                 for layer in self.model:
                     activations = layer(activations)
-                    self._synchronize()
                 self.output = activations
-        self._synchronize()
         if self.output is None or self.input_data is None:
             raise RuntimeError("benchmark_fn() must produce output")
         dtype = self.output.dtype

@@ -8,15 +8,35 @@ Usage:
 """
 
 import argparse
+import warnings
 import sys
 from pathlib import Path
 
 # Add repo root to path
-repo_root = Path(__file__).parent.parent.parent
+repo_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(repo_root))
 
 from core.benchmark.contract import check_benchmark_file
-from core.discovery import discover_benchmark_pairs, discover_all_chapters
+from core.discovery import discover_benchmark_entrypoints, is_benchmark_entrypoint_file
+
+
+def _display_path(file_path: Path) -> str:
+    try:
+        return str(file_path.relative_to(repo_root))
+    except ValueError:
+        return str(file_path)
+
+
+def _dedupe_paths(paths: list[Path]) -> list[Path]:
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in paths:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(path)
+    return unique
 
 
 def main():
@@ -38,9 +58,24 @@ def main():
         help="Verbose output",
     )
     parser.add_argument(
+        "--fail-on-warnings",
+        action="store_true",
+        help="Return nonzero if warnings are found",
+    )
+    parser.add_argument(
         "--run-setup",
         action="store_true",
         help="Actually import and instantiate benchmarks during validation (WARNING: executes module code and constructors, requires CUDA for BaseBenchmark, not suitable for pre-commit hooks). By default, uses AST parsing for side-effect free validation.",
+    )
+    parser.add_argument(
+        "--sync-only",
+        action="store_true",
+        help="Only fail on benchmark_fn() hot-path synchronization warnings. Structural contract debt is ignored except for parse/file errors.",
+    )
+    parser.add_argument(
+        "--include-unpaired",
+        action="store_true",
+        help="Include benchmark entrypoints that expose get_benchmark()/registration decorators even when they are not named baseline_*/optimized_*.",
     )
     args = parser.parse_args()
     
@@ -56,21 +91,24 @@ def main():
             if path.is_file() and path.suffix == ".py":
                 benchmark_files.append(path)
             elif path.is_dir():
-                # Find all benchmark files in directory
-                for file in path.rglob("baseline_*.py"):
-                    benchmark_files.append(file)
-                for file in path.rglob("optimized_*.py"):
-                    benchmark_files.append(file)
+                for file in sorted(path.rglob("*.py")):
+                    if "__pycache__" in file.parts or file.name.startswith("test_"):
+                        continue
+                    if args.include_unpaired:
+                        if is_benchmark_entrypoint_file(file):
+                            benchmark_files.append(file)
+                        continue
+                    if file.name.startswith(("baseline_", "optimized_")):
+                        benchmark_files.append(file)
     else:
-        # Check all benchmarks using discover_benchmark_pairs
-        benchmark_files = []
-        pairs = discover_benchmark_pairs(repo_root, chapter="all")
-        for baseline, optimized_list, _ in pairs:
-            if baseline:
-                benchmark_files.append(baseline)
-            # optimized_list is a list of Path objects, not a single Path
-            for optimized_path in optimized_list:
-                benchmark_files.append(optimized_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            benchmark_files = discover_benchmark_entrypoints(
+                repo_root,
+                include_unpaired=args.include_unpaired,
+            )
+
+    benchmark_files = _dedupe_paths(benchmark_files)
     
     if not benchmark_files:
         print("No benchmark files found")
@@ -84,23 +122,41 @@ def main():
     failed_files = []
     
     for file_path in sorted(benchmark_files):
-        is_valid, errors, warnings = check_benchmark_file(file_path, run_setup=args.run_setup)
+        is_valid, errors, file_warnings = check_benchmark_file(
+            file_path,
+            run_setup=args.run_setup,
+        )
+        if args.sync_only:
+            relevant_errors = [
+                error for error in errors
+                if error.startswith("Syntax error:")
+                or error.startswith("Failed to parse file:")
+                or error.startswith("File does not exist:")
+                or error.startswith("Not a Python file:")
+            ]
+            relevant_warnings = [
+                warning for warning in file_warnings
+                if "benchmark_fn() contains" in warning and "synchronize" in warning
+            ]
+            errors = relevant_errors
+            file_warnings = relevant_warnings
+            is_valid = len(errors) == 0
         
-        if errors or warnings:
-            print(f"❌ {file_path.relative_to(repo_root)}")
+        if errors or file_warnings:
+            print(f"❌ {_display_path(file_path)}")
             if errors:
                 total_errors += len(errors)
                 for error in errors:
                     print(f"   ERROR: {error}")
-            if warnings:
-                total_warnings += len(warnings)
-                if args.verbose:
-                    for warning in warnings:
+            if file_warnings:
+                total_warnings += len(file_warnings)
+                if args.verbose or args.sync_only:
+                    for warning in file_warnings:
                         print(f"   WARNING: {warning}")
             failed_files.append(file_path)
         else:
             if args.verbose:
-                print(f"✓ {file_path.relative_to(repo_root)}")
+                print(f"✓ {_display_path(file_path)}")
     
     print()
     print("=" * 80)
@@ -115,11 +171,10 @@ def main():
         print()
         print("Failed files:")
         for file_path in failed_files:
-            print(f"  - {file_path.relative_to(repo_root)}")
+            print(f"  - {_display_path(file_path)}")
     
-    return 1 if total_errors > 0 else 0
+    return 1 if total_errors > 0 or (args.fail_on_warnings and total_warnings > 0) else 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

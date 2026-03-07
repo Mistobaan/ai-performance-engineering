@@ -20,7 +20,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Handle import robustly - baseline module may not be in sys.modules yet
 try:
     from ch18.baseline_vllm_decode_graphs import (  # noqa: E402
         DecodeMetrics,
@@ -28,26 +27,18 @@ try:
         export_prom_metrics,
         format_metrics,
     )
-except ImportError:
-    # Fallback: load baseline module directly
-    import importlib.util
-    _baseline_path = Path(__file__).parent / "baseline_vllm_decode_graphs.py"
-    _spec = importlib.util.spec_from_file_location("ch18.baseline_vllm_decode_graphs", _baseline_path)
-    _baseline_module = importlib.util.module_from_spec(_spec)
-    sys.modules["ch18.baseline_vllm_decode_graphs"] = _baseline_module
-    _spec.loader.exec_module(_baseline_module)
-    DecodeMetrics = _baseline_module.DecodeMetrics
-    default_trace = _baseline_module.default_trace
-    export_prom_metrics = _baseline_module.export_prom_metrics
-    format_metrics = _baseline_module.format_metrics
+except ImportError as exc:
+    raise RuntimeError(
+        "FAIL FAST: Unable to import ch18.baseline_vllm_decode_graphs. "
+        "Ensure the benchmark is executed from repo root with `ch18` on PYTHONPATH."
+    ) from exc
 
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig  # noqa: E402
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from ch18.decode_kernels import DEVICE, build_decode_kernel  # noqa: E402
 
-# Tuned for the default ragged trace candidates (3..28) to keep padding overhead
-# small while still collapsing many distinct batch sizes into a smaller set of
-# stable shapes for workspace and (real-world) CUDA graph reuse.
+# Keep a moderately coarse bucket set that limits padding overhead while still
+# reducing shape churn relative to the ragged baseline.
 BUCKETS = (7, 9, 12, 18, 24, 28)
 FRAG_LIMIT = 0.20
 AGE_LIMIT = 6  # steps; small for the toy demo
@@ -94,8 +85,8 @@ class BucketWorkspace:
         self.tokens = self.tokens_kv[0]
         self.kv = self.tokens_kv[1]
         self.mask = torch.ones(self.batch, dtype=torch.bool, device=self.device)
-        # Default padded rows are treated as inactive; keep them stable.
-        self.tokens_kv.zero_()
+        # Populate once and reuse to avoid per-step RNG overhead in the optimized path.
+        self.tokens_kv.normal_(mean=0.0, std=1.0)
         if torch.cuda.is_available():
             self.stream = torch.cuda.Stream(device=self.device)
             with torch.cuda.stream(self.stream):
@@ -205,8 +196,6 @@ class OptimizedDecodeDriver:
                 seq_lens[:batch_size].fill_(self._vllm_kernel.block_size)
                 if bucket > batch_size:
                     seq_lens[batch_size:bucket].zero_()
-            # Populate preallocated padded buffers in-place to keep shapes stable.
-            ws.tokens_kv[:, :batch_size].normal_(mean=0.0, std=1.0)
             # Keep the compute path aligned with the baseline (no masking); the
             # benchmark's outputs are metrics, not decoded logits.
             logits = self.decode_kernel(ws.tokens, ws.kv, None)
@@ -284,10 +273,8 @@ class OptimizedVLLMDecodeGraphsBenchmark(VerificationPayloadMixin, BaseBenchmark
 
     def benchmark_fn(self) -> None:
         if self._driver is None:
-            raise RuntimeError("SKIPPED: optimized decode driver not initialized")
-        torch.cuda.synchronize()
+            raise RuntimeError("FAIL FAST: optimized decode driver not initialized")
         self._last_metrics = self._driver.run()
-        torch.cuda.synchronize()
         total_tokens = float(sum(self._trace))
         self.output = torch.tensor(
             [float(len(self._trace)), total_tokens],

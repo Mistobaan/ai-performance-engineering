@@ -61,7 +61,6 @@ class OptimizedLlama31_8B(VerificationPayloadMixin, BaseBenchmark):
         self.model_wrapper.run()
         self._last_metrics = {}
         self.output = self.model_wrapper.output
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")
 

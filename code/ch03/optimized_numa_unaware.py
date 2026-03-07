@@ -81,7 +81,6 @@ class OptimizedNUMAAwareBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self._start_copy(self.cur_slot)
         # Swap slots
         self.cur_slot, self.next_slot = self.next_slot, self.cur_slot
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

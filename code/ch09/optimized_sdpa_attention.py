@@ -109,7 +109,6 @@ class OptimizedSDPAAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 # Force materialization
                 _ = self.output.sum()
         
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

@@ -38,7 +38,10 @@ class VLLMDecodeKernel:
             from vllm import _custom_ops as vllm_ops
             from vllm.v1.attention.ops.paged_attn import PagedAttention
         except Exception as exc:  # pragma: no cover - optional dependency
-            raise RuntimeError(f"SKIPPED: vLLM PagedAttention unavailable ({exc})") from exc
+            raise RuntimeError(
+                f"FAIL FAST: vLLM PagedAttention unavailable ({exc}). "
+                "Install the pinned serving stack and verify vllm._C import."
+            ) from exc
 
         self._ops = vllm_ops
         self._paged_attention = vllm_ops.paged_attention_v1
@@ -145,7 +148,7 @@ class VLLMDecodeKernel:
 
 
 def _torch_decode(hidden: int) -> Callable[[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], torch.Tensor]:
-    """Fallback torch-based decode (for when vLLM unavailable)."""
+    """Explicit torch-based decode path used only when prefer_vllm=False."""
     def _decode(tokens: torch.Tensor, kv: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         attn_scores = torch.tanh(tokens + kv)
         if mask is not None:
@@ -172,7 +175,7 @@ def build_decode_kernel(
         try:
             kernel = VLLMDecodeKernel(hidden=hidden, max_batch=max_batch, device=device)
         except Exception as exc:
-            raise RuntimeError(f"SKIPPED: vLLM decode kernel unavailable ({exc})") from exc
+            raise RuntimeError(f"FAIL FAST: vLLM decode kernel unavailable ({exc})") from exc
         return DecodeKernel(fn=kernel, backend="vllm")
 
     # Only use torch if explicitly requested (prefer_vllm=False)

@@ -123,7 +123,6 @@ class OptimizedFP8PadInnerBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 _ = self.model(self.inputs_fp16)
                 verify_out = self.model(self._verify_input_fp16)
                 self.output = verify_out.detach().float().clone()
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

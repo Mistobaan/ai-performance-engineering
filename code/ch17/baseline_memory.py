@@ -100,7 +100,6 @@ class BaselineMemoryBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 device_batch = host_batch.to(self.device, dtype=torch.float32, non_blocking=False)
                 self._last_input = device_batch
                 self.output = self.model(device_batch)
-        self._synchronize()
         if self.output is None or self._last_input is None:
             raise RuntimeError("benchmark_fn() must produce output")
 

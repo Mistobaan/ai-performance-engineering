@@ -52,7 +52,6 @@ class OptimizedGb200LocalityBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.device_buf.add_(1.0)
         _ = self.device_buf.sum()
         self.output = self.device_buf[: 256 * 256].detach()
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.device_template is None or self.output is None:

@@ -41,14 +41,14 @@ if [[ "$PROFILE" != "open" && "$PROFILE" != "orig_parity" ]]; then
 fi
 if [[ "$PROFILE" == "open" ]]; then
   if [[ "$TAG_SET" -eq 0 ]]; then
-    TAG="cfregly/cluster_perf:latest"
+    TAG="cluster_perf:latest"
   fi
   if [[ "$DOCKERFILE_SET" -eq 0 ]]; then
     DOCKERFILE="${ROOT_DIR}/docker/cluster_perf.Dockerfile"
   fi
 else
   if [[ "$TAG_SET" -eq 0 ]]; then
-    TAG="cfregly/cluster_perf_orig_parity:latest"
+    TAG="cluster_perf_orig_parity:latest"
   fi
   if [[ "$DOCKERFILE_SET" -eq 0 ]]; then
     DOCKERFILE="${ROOT_DIR}/docker/cluster_perf_orig_parity.Dockerfile"

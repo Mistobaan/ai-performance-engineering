@@ -95,7 +95,6 @@ class OptimizedNcclBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self._output_buffer.div_(self.num_shards)
             self.output = self._output_buffer
         
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.input is None or self.output is None:

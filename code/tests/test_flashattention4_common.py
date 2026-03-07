@@ -1,0 +1,190 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import torch
+
+from labs.flashattention4.baseline_flashattention4_dense import (
+    BaselineFlashAttention4DenseBenchmark,
+)
+from labs.flashattention4.optimized_best_available_attention_alibi import (
+    OptimizedBestAvailableAttentionAlibiBenchmark,
+)
+from labs.flashattention4.flashattention4_common import (
+    FlashAttention4Config,
+    best_available_candidate_providers,
+    build_flashattention4_mode_table_payload,
+    build_reference_inputs,
+    build_dense_attention_mask,
+    count_nonmasked_attention_elements,
+    emit_flashattention4_mode_table_artifacts,
+    estimate_attention_forward_flops,
+    flashattention4_claim_type_id,
+    flashattention4_provider_id,
+    reference_attention,
+    resolve_flashattention4_mode_decision,
+    select_lowest_latency_provider,
+)
+
+
+def test_dense_attention_mask_for_windowed_mode_is_causal_and_bounded() -> None:
+    mask = build_dense_attention_mask(
+        "windowed",
+        seq_len=8,
+        window_size=3,
+        device=torch.device("cpu"),
+    )
+    assert mask is not None
+    mask_2d = mask[0, 0]
+    assert bool(mask_2d[3, 3])
+    assert bool(mask_2d[3, 1])
+    assert not bool(mask_2d[3, 0])
+    assert not bool(mask_2d[3, 4])
+
+
+def test_reference_attention_runs_for_softcap_mode_on_cpu() -> None:
+    cfg = FlashAttention4Config(
+        batch=1,
+        heads=2,
+        seq_len=8,
+        head_dim=4,
+        mode="softcap",
+        dtype=torch.float32,
+    )
+    inputs = build_reference_inputs(cfg, device=torch.device("cpu"), include_block_mask=False)
+    output = reference_attention(inputs)
+    assert output.shape == (1, 2, 8, 4)
+    assert output.dtype == torch.float32
+
+
+def test_attention_flop_count_matches_dense_and_causal_conventions() -> None:
+    dense_nonmasked = count_nonmasked_attention_elements(
+        "dense",
+        q_seq_len=8,
+        kv_seq_len=8,
+    )
+    causal_nonmasked = count_nonmasked_attention_elements(
+        "causal",
+        q_seq_len=8,
+        kv_seq_len=8,
+    )
+    assert dense_nonmasked == 64
+    assert causal_nonmasked == 36
+
+    dense_flops = estimate_attention_forward_flops(
+        batch=2,
+        heads=4,
+        q_seq_len=8,
+        kv_seq_len=8,
+        head_dim=16,
+        mode="dense",
+    )
+    causal_flops = estimate_attention_forward_flops(
+        batch=2,
+        heads=4,
+        q_seq_len=8,
+        kv_seq_len=8,
+        head_dim=16,
+        mode="causal",
+    )
+    assert dense_flops == 4 * 2 * 4 * 16 * 64
+    assert causal_flops == 4 * 2 * 4 * 16 * 36
+
+
+def test_windowed_nonmasked_count_respects_window_size() -> None:
+    count = count_nonmasked_attention_elements(
+        "windowed",
+        q_seq_len=8,
+        kv_seq_len=8,
+        window_size=3,
+    )
+    assert count == 21
+
+
+def test_best_available_candidates_include_cudnn_for_dense_and_causal() -> None:
+    assert best_available_candidate_providers("dense", include_flash_backend=True) == ("cudnn_sdpa",)
+    assert best_available_candidate_providers("causal", include_flash_backend=False) == ("cudnn_sdpa",)
+
+
+def test_best_available_candidates_exclude_cudnn_for_flex_only_modes() -> None:
+    assert best_available_candidate_providers("alibi", include_flash_backend=True) == (
+        "flash_backend",
+        "flex_tma",
+        "flex_compiled",
+    )
+    assert best_available_candidate_providers("softcap", include_flash_backend=False) == (
+        "flex_tma",
+        "flex_compiled",
+    )
+
+
+def test_select_lowest_latency_provider_prefers_smallest_median() -> None:
+    winner = select_lowest_latency_provider(
+        {
+            "flash_backend": 0.92,
+            "cudnn_sdpa": 0.54,
+            "flex_tma": 0.81,
+        }
+    )
+    assert winner == "cudnn_sdpa"
+
+
+def test_provider_id_encoding_is_stable() -> None:
+    assert flashattention4_provider_id("cudnn_sdpa") == 1.0
+    assert flashattention4_provider_id("flash_backend") == 2.0
+    assert flashattention4_provider_id("flex_tma") == 3.0
+    assert flashattention4_provider_id("flex_compiled") == 4.0
+    assert flashattention4_provider_id("eager_flex") == 5.0
+    assert flashattention4_provider_id("unknown") == 0.0
+
+
+def test_claim_type_encoding_and_mode_decision_payload() -> None:
+    assert flashattention4_claim_type_id("educational") == 1.0
+    assert flashattention4_claim_type_id("absolute") == 2.0
+    assert flashattention4_claim_type_id("reproduction") == 3.0
+    assert flashattention4_claim_type_id("unknown") == 0.0
+
+    decision = resolve_flashattention4_mode_decision("dense")
+    assert decision.recommended_backend == "cudnn_sdpa"
+    assert decision.recommended_claim_type == "absolute"
+
+    payload = build_flashattention4_mode_table_payload(
+        current_mode="alibi",
+        run_claim_type="educational",
+        target_label="labs/flashattention4:flashattention4",
+        selected_provider="flex_tma",
+    )
+    assert payload["current_run"]["recommended_backend_for_mode"] == "flex_tma"
+    assert payload["current_run"]["run_claim_type"] == "educational"
+    assert payload["current_run"]["selected_provider"] == "flex_tma"
+
+
+def test_emit_mode_table_artifacts_writes_json_and_markdown(tmp_path) -> None:
+    config = SimpleNamespace(
+        subprocess_stderr_dir=str(tmp_path),
+        profiling_output_dir=None,
+        target_label="labs/flashattention4:best_available_attention",
+    )
+    paths = emit_flashattention4_mode_table_artifacts(
+        config,
+        current_mode="dense",
+        run_claim_type="absolute",
+        selected_provider="cudnn_sdpa",
+    )
+    assert paths is not None
+
+    json_path = tmp_path / "flashattention4_mode_table__labs_flashattention4_best_available_attention__dense.json"
+    md_path = tmp_path / "flashattention4_mode_table__labs_flashattention4_best_available_attention__dense.md"
+    assert paths["json"] == str(json_path)
+    assert paths["markdown"] == str(md_path)
+    assert json_path.exists()
+    assert md_path.exists()
+    assert '"recommended_backend_for_mode": "cudnn_sdpa"' in json_path.read_text()
+    assert "| dense | absolute | cudnn_sdpa |" in md_path.read_text()
+
+
+def test_explicit_mode_targets_override_default_mode() -> None:
+    dense_bench = BaselineFlashAttention4DenseBenchmark()
+    alibi_bench = OptimizedBestAvailableAttentionAlibiBenchmark()
+    assert dense_bench.config.mode == "dense"
+    assert alibi_bench.config.mode == "alibi"

@@ -13,18 +13,20 @@ from typing import Callable, Dict, Literal, Optional, Tuple
 import torch
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
+from core.benchmark.wrapper_utils import attach_benchmark_metadata
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 
 try:
-    from transformers import GPT2Config, GPT2LMHeadModel
+    from transformers import GPT2Config
     from transformers.cache_utils import StaticCache
 
     _TRANSFORMERS_AVAILABLE = True
-except Exception:
+    _TRANSFORMERS_IMPORT_ERROR = ""
+except Exception as exc:
     GPT2Config = None  # type: ignore[assignment]
-    GPT2LMHeadModel = None  # type: ignore[assignment]
     StaticCache = None  # type: ignore[assignment]
     _TRANSFORMERS_AVAILABLE = False
+    _TRANSFORMERS_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
 
 
 @dataclass(frozen=True)
@@ -53,20 +55,106 @@ class HFDecoderCacheConfig:
     label: str = "hf_decoder_cache"
 
 
-def attach_benchmark_metadata(bench: BaseBenchmark, module_file: str) -> BaseBenchmark:
-    """Annotate a benchmark for subprocess-safe reload via get_benchmark()."""
-    bench._module_file_override = module_file
-    bench._factory_name_override = "get_benchmark"
-    return bench
+class _TinyHFDecoderLM(torch.nn.Module):
+    """Small decoder-like model with cache-compatible forward semantics."""
 
+    def __init__(self, config: GPT2Config, *, device: torch.device, dtype: torch.dtype):
+        super().__init__()
+        self.config = config
+        self.num_layers = int(config.n_layer)
+        self.num_heads = int(config.n_head)
+        self.hidden_size = int(config.n_embd)
+        if self.hidden_size % self.num_heads != 0:
+            raise ValueError(
+                f"hidden_size ({self.hidden_size}) must be divisible by num_heads ({self.num_heads})"
+            )
+        self.head_dim = self.hidden_size // self.num_heads
+        self.token_embed = torch.nn.Embedding(
+            num_embeddings=int(config.vocab_size),
+            embedding_dim=self.hidden_size,
+            device=device,
+            dtype=dtype,
+        )
+        self.ffn_in = torch.nn.Linear(
+            self.hidden_size, self.hidden_size, bias=False, device=device, dtype=dtype
+        )
+        self.ffn_out = torch.nn.Linear(
+            self.hidden_size, self.hidden_size, bias=False, device=device, dtype=dtype
+        )
+        self.lm_head = torch.nn.Linear(
+            self.hidden_size,
+            int(config.vocab_size),
+            bias=False,
+            device=device,
+            dtype=dtype,
+        )
+        self.activation = torch.nn.GELU()
 
+    def _compute_hidden(self, input_ids: torch.Tensor) -> torch.Tensor:
+        hidden = self.token_embed(input_ids)
+        hidden = self.ffn_out(self.activation(self.ffn_in(hidden)))
+        return hidden
+
+    def _compute_kv(self, hidden: torch.Tensor, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        batch, seq, _ = hidden.shape
+        base = hidden.view(batch, seq, self.num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+        layer_scale = 1.0 + (float(layer_idx + 1) / max(self.num_layers, 1))
+        key_states = base * layer_scale
+        value_states = base * (2.0 - layer_scale * 0.5)
+        return key_states, value_states
+
+    def forward(
+        self,
+        *,
+        input_ids: torch.Tensor,
+        past_key_values: object = None,
+        cache_position: Optional[torch.Tensor] = None,
+        use_cache: bool = True,
+        return_dict: bool = False,
+    ) -> Tuple[torch.Tensor, object]:
+        del return_dict  # Keep return signature tuple-only for harness simplicity.
+        hidden = self._compute_hidden(input_ids)
+        logits = self.lm_head(hidden)
+        if not use_cache:
+            return logits, past_key_values
+
+        if StaticCache is not None and isinstance(past_key_values, StaticCache):
+            cache_kwargs = {"cache_position": cache_position} if cache_position is not None else None
+            for layer_idx in range(self.num_layers):
+                key_states, value_states = self._compute_kv(hidden, layer_idx)
+                past_key_values.update(
+                    key_states=key_states,
+                    value_states=value_states,
+                    layer_idx=layer_idx,
+                    cache_kwargs=cache_kwargs,
+                )
+            return logits, past_key_values
+
+        # Dynamic-cache path: use legacy tuple[(k, v), ...] so we avoid heavyweight model imports.
+        old_cache = list(past_key_values) if past_key_values is not None else []
+        new_cache = []
+        for layer_idx in range(self.num_layers):
+            key_states, value_states = self._compute_kv(hidden, layer_idx)
+            if layer_idx < len(old_cache):
+                prev_key, prev_value = old_cache[layer_idx]
+                key_states = torch.cat((prev_key, key_states), dim=2)
+                value_states = torch.cat((prev_value, value_states), dim=2)
+            new_cache.append((key_states, value_states))
+        return logits, tuple(new_cache)
 class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Harness benchmark for decoder cache strategy and EOS host-sync policies."""
 
     def __init__(self, cfg: HFDecoderCacheConfig):
         super().__init__()
         if not _TRANSFORMERS_AVAILABLE:
-            raise RuntimeError("SKIPPED: transformers is required for HF decoder cache benchmarks")
+            reason = (
+                _TRANSFORMERS_IMPORT_ERROR
+                or "transformers (and dependencies) failed to import"
+            )
+            raise RuntimeError(
+                "SKIPPED: HF decoder cache benchmark dependencies unavailable: "
+                f"{reason}"
+            )
         if not torch.cuda.is_available():
             raise RuntimeError("SKIPPED: HF decoder cache benchmarks require CUDA")
         if cfg.eos_poll_interval < 1:
@@ -94,6 +182,9 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
         self._sync_checks = 0
         self._eos_all_true_checks = 0
+        self._prefill_start_event: Optional[torch.cuda.Event] = None
+        self._prefill_end_event: Optional[torch.cuda.Event] = None
+        self._decode_end_event: Optional[torch.cuda.Event] = None
 
         total_tokens = cfg.batch_size * (cfg.prompt_tokens + cfg.decode_tokens)
         self._workload = WorkloadMetadata(
@@ -121,7 +212,7 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
             embd_pdrop=0.0,
             attn_pdrop=0.0,
         )
-        model = GPT2LMHeadModel(model_cfg).to(device=self.device, dtype=self.dtype).eval()
+        model = _TinyHFDecoderLM(model_cfg, device=self.device, dtype=self.dtype).eval()
         model.requires_grad_(False)
         return model
 
@@ -190,10 +281,14 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self._sync_checks = 0
         self._eos_all_true_checks = 0
         self._pending_poll = False
+        self._metrics = {}
         if self._poll_flag_host is not None:
             self._poll_flag_host.zero_()
         if self._static_cache is not None:
             self._static_cache.reset()
+        self._prefill_start_event = torch.cuda.Event(enable_timing=True)
+        self._prefill_end_event = torch.cuda.Event(enable_timing=True)
+        self._decode_end_event = torch.cuda.Event(enable_timing=True)
 
     def _maybe_poll_done(self, done_mask: torch.Tensor, step: int) -> bool:
         should_poll = (step + 1) % self.cfg.eos_poll_interval == 0 or (step + 1) == self.cfg.decode_tokens
@@ -226,6 +321,32 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self._poll_event.synchronize()
             self._eos_all_true_checks += int(self._poll_flag_host.item() != 0)
             self._pending_poll = False
+
+    def _refresh_iteration_metrics(self) -> None:
+        if self._metrics:
+            return
+        if any(event is None for event in (self._prefill_start_event, self._prefill_end_event, self._decode_end_event)):
+            return
+        self._finalize_polling()
+        prefill_start = self._prefill_start_event
+        prefill_end = self._prefill_end_event
+        decode_end = self._decode_end_event
+        prefill_end.synchronize()
+        decode_end.synchronize()
+        prefill_ms = float(prefill_start.elapsed_time(prefill_end))
+        total_ms = float(prefill_start.elapsed_time(decode_end))
+        decode_ms = max(total_ms - prefill_ms, 0.0)
+        decode_total_tokens = float(self.cfg.batch_size * self.cfg.decode_tokens)
+        end_to_end_tokens = float(self.cfg.batch_size * (self.cfg.prompt_tokens + self.cfg.decode_tokens))
+        self._metrics = {
+            "hf_decode.prefill_ms": prefill_ms,
+            "hf_decode.decode_ms": decode_ms,
+            "hf_decode.total_ms": total_ms,
+            "hf_decode.decode_tokens_per_s": decode_total_tokens / max(decode_ms / 1000.0, 1e-9),
+            "hf_decode.end_to_end_tokens_per_s": end_to_end_tokens / max(total_ms / 1000.0, 1e-9),
+            "hf_decode.sync_checks": float(self._sync_checks),
+            "hf_decode.eos_all_true_checks": float(self._eos_all_true_checks),
+        }
 
     def _decode_dynamic(self, next_token: torch.Tensor, past_key_values: object) -> torch.Tensor:
         if self.model is None:
@@ -281,10 +402,12 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
         if self.model is None or self.prompt_ids is None:
             raise RuntimeError("Benchmark not configured")
         self._prepare_iteration()
+        current_stream = torch.cuda.current_stream(device=self.device)
 
         with torch.no_grad():
-            self._synchronize()
-            prefill_start = time.perf_counter()
+            if self._prefill_start_event is None or self._prefill_end_event is None or self._decode_end_event is None:
+                raise RuntimeError("Iteration timing events not initialized")
+            self._prefill_start_event.record(current_stream)
 
             if self.cfg.cache_mode == "dynamic":
                 prefill = self.model(
@@ -296,10 +419,7 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 past_key_values = prefill[1]
                 next_token = torch.argmax(prefill_logits[:, -1, :], dim=-1)
                 verification_token = next_token.detach().to(torch.int32).clone()
-                self._synchronize()
-                prefill_ms = (time.perf_counter() - prefill_start) * 1000.0
-
-                decode_start = time.perf_counter()
+                self._prefill_end_event.record(current_stream)
                 _ = self._decode_dynamic(next_token, past_key_values)
             else:
                 if self._static_cache is None:
@@ -314,28 +434,12 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 )[0]
                 next_token = torch.argmax(prefill_logits[:, -1, :], dim=-1)
                 verification_token = next_token.detach().to(torch.int32).clone()
-                self._synchronize()
-                prefill_ms = (time.perf_counter() - prefill_start) * 1000.0
-
-                decode_start = time.perf_counter()
+                self._prefill_end_event.record(current_stream)
                 _ = self._decode_static(next_token)
 
-            self._finalize_polling()
-            self._synchronize()
-            decode_ms = (time.perf_counter() - decode_start) * 1000.0
-
-        total_ms = prefill_ms + decode_ms
-        decode_total_tokens = float(self.cfg.batch_size * self.cfg.decode_tokens)
-        end_to_end_tokens = float(self.cfg.batch_size * (self.cfg.prompt_tokens + self.cfg.decode_tokens))
-        self._metrics = {
-            "hf_decode.prefill_ms": float(prefill_ms),
-            "hf_decode.decode_ms": float(decode_ms),
-            "hf_decode.total_ms": float(total_ms),
-            "hf_decode.decode_tokens_per_s": decode_total_tokens / max(decode_ms / 1000.0, 1e-9),
-            "hf_decode.end_to_end_tokens_per_s": end_to_end_tokens / max(total_ms / 1000.0, 1e-9),
-            "hf_decode.sync_checks": float(self._sync_checks),
-            "hf_decode.eos_all_true_checks": float(self._eos_all_true_checks),
-        }
+            if self.cfg.eos_sync_mode == "async_streamed" and self._pending_poll and self._poll_stream is not None:
+                current_stream.wait_stream(self._poll_stream)
+            self._decode_end_event.record(current_stream)
         # Use the first decode token after prefill for verification.
         # Static/dynamic cache decode loops can diverge over long rollouts due to
         # tiny numeric differences amplified by greedy argmax, while this prefill
@@ -345,6 +449,7 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def capture_verification_payload(self) -> None:
         if self.prompt_ids is None or self.output is None:
             raise RuntimeError("setup() and benchmark_fn() must run before capture_verification_payload()")
+        self._refresh_iteration_metrics()
         self._set_verification_payload(
             inputs={"prompt_ids": self.prompt_ids},
             output=self.output,
@@ -368,6 +473,9 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self._poll_stream = None
         self._poll_event = None
         self._poll_flag_host = None
+        self._prefill_start_event = None
+        self._prefill_end_event = None
+        self._decode_end_event = None
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         super().teardown()
@@ -386,4 +494,5 @@ class HFDecoderCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
         return self._workload
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        self._refresh_iteration_metrics()
         return self._metrics

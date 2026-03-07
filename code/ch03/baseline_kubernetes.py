@@ -76,7 +76,6 @@ class BaselineKubernetesBenchmark(VerificationPayloadMixin, BaseBenchmark):
             # Blocking H2D copy (the slow part)
             data = self.host_batches[idx].to(self.device, non_blocking=False)
             target = self.target_batches[idx].to(self.device, non_blocking=False)
-            self._synchronize()
             
             # Forward
             out = self.model(data)
@@ -88,7 +87,6 @@ class BaselineKubernetesBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 p.grad = None
         
         self.output = out.detach()
-        self._synchronize()
         self._payload_data = data
         self._payload_target = target
 

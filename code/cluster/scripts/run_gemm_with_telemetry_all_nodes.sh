@@ -27,6 +27,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d_%H%M%S)_gemm_telemetry}"
 HOSTS=""
 LABELS=""
@@ -93,6 +95,13 @@ if [[ -n "$SSH_KEY" ]]; then
   SSH_OPTS+=(-i "$SSH_KEY")
 fi
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+LOCAL_STRUCTURED_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+LOCAL_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+REMOTE_STRUCTURED_DIR="$(cluster_structured_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+REMOTE_RAW_DIR="$(cluster_raw_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+mkdir -p "$LOCAL_STRUCTURED_DIR" "$LOCAL_RAW_DIR"
+
 run_remote() {
   local host="$1"
   local cmd="$2"
@@ -139,11 +148,11 @@ for idx in "${!HOST_ARR[@]}"; do
     else
       run_remote "$host" "$cmd"
       # Fetch artifacts back to the driver node.
-      fetch_remote "$host" "results/structured/${RUN_ID}_${label}_gpu${gpu}_gemm.csv" "${ROOT_DIR}/results/structured" || true
-      fetch_remote "$host" "results/structured/${RUN_ID}_${label}_gpu${gpu}_gemm_clock_lock.json" "${ROOT_DIR}/results/structured" || true
-      fetch_remote "$host" "results/raw/${RUN_ID}_${label}_gpu${gpu}_gemm.log" "${ROOT_DIR}/results/raw" || true
-      fetch_remote "$host" "results/raw/${RUN_ID}_${label}_gpu${gpu}_gemm_telemetry_query.csv" "${ROOT_DIR}/results/raw" || true
-      fetch_remote "$host" "results/raw/${RUN_ID}_${label}_gpu${gpu}_gemm_telemetry_pmon.log" "${ROOT_DIR}/results/raw" || true
+      fetch_remote "$host" "${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu${gpu}_gemm.csv" "${LOCAL_STRUCTURED_DIR}" || true
+      fetch_remote "$host" "${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu${gpu}_gemm_clock_lock.json" "${LOCAL_STRUCTURED_DIR}" || true
+      fetch_remote "$host" "${REMOTE_RAW_DIR}/${RUN_ID}_${label}_gpu${gpu}_gemm.log" "${LOCAL_RAW_DIR}" || true
+      fetch_remote "$host" "${REMOTE_RAW_DIR}/${RUN_ID}_${label}_gpu${gpu}_gemm_telemetry_query.csv" "${LOCAL_RAW_DIR}" || true
+      fetch_remote "$host" "${REMOTE_RAW_DIR}/${RUN_ID}_${label}_gpu${gpu}_gemm_telemetry_pmon.log" "${LOCAL_RAW_DIR}" || true
     fi
   done
 done

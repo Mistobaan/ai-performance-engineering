@@ -75,7 +75,6 @@ class VectorizationBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 torch.add(beta, a, alpha=alpha, out=b)
                 a, b = b, a
             self.output = a.detach()
-            torch.cuda.synchronize(self.device)
 
     def capture_verification_payload(self) -> None:
         if self.output is None or self._verify_probe is None:

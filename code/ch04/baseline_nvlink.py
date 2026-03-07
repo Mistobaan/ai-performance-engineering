@@ -55,9 +55,7 @@ class BaselineNVLinkBenchmark(VerificationPayloadMixin, BaseBenchmark):
         """Benchmark: PCIe-based communication (no NVLink)."""
         with self._nvtx_range("baseline_nvlink"):
             self.host_buffer.copy_(self.data_gpu0, non_blocking=False)
-            torch.cuda.synchronize()
             self.data_gpu1.copy_(self.host_buffer, non_blocking=False)
-            torch.cuda.synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.data_gpu0 is None or self.data_gpu1 is None:

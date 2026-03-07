@@ -51,7 +51,6 @@ class PersistentPrefillBaselineBenchmark(DecodeBenchmark):
                 self.current_tokens.copy_(next_token)
         if self.compute_stream is not None:
             torch.cuda.current_stream().wait_stream(stream)
-        torch.cuda.synchronize()
         self._finalize_output()
 
 

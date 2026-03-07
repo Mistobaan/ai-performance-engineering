@@ -136,7 +136,6 @@ class OptimizedRackPrepBenchmark(VerificationPayloadMixin, BaseBenchmark):
             raise RuntimeError("benchmark_fn() must produce output for verification")
         self._start_copy(self.cur_slot)
         self.cur_slot, self.next_slot = self.next_slot, self.cur_slot
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

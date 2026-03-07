@@ -13,6 +13,7 @@ repo_root = Path(__file__).parent.parent
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
+from core.benchmark.cuda_event_timing import elapsed_ms, elapsed_ms_list
 from core.harness.benchmark_harness import (  # noqa: E402
     BaseBenchmark,
     BenchmarkConfig,
@@ -48,6 +49,7 @@ class FlexDecodingHarness(VerificationPayloadMixin, BaseBenchmark):
         self._verification_payload = None
         self._prefill_events: Optional[tuple[torch.cuda.Event, torch.cuda.Event]] = None
         self._decode_events: Optional[List[tuple[torch.cuda.Event, torch.cuda.Event]]] = None
+        self._pending_iteration_metrics = False
         total_tokens = self.config.max_seq_len + self.decode_tokens
         self._workload = WorkloadMetadata(
             requests_per_iteration=1.0,
@@ -110,7 +112,7 @@ class FlexDecodingHarness(VerificationPayloadMixin, BaseBenchmark):
         return self.model.decode(token, position)
 
     # --------------------------------------------------------------- benchmark_fn
-    def benchmark_fn(self) -> Dict[str, List[float]]:
+    def benchmark_fn(self) -> Optional[Dict[str, List[float]]]:
         if self.model is None or self.prefill_tokens is None or self.decode_token is None:
             raise RuntimeError("Model/tokens not initialized")
         if self._prefill_events is None or self._decode_events is None:
@@ -118,8 +120,6 @@ class FlexDecodingHarness(VerificationPayloadMixin, BaseBenchmark):
         if len(self._decode_events) != self.decode_tokens:
             raise RuntimeError("Timing event count mismatch")
 
-        prefill_times: List[float] = []
-        decode_times: List[float] = []
         base_position = self.prefill_tokens.size(1)
 
         with torch.no_grad():
@@ -136,20 +136,25 @@ class FlexDecodingHarness(VerificationPayloadMixin, BaseBenchmark):
                     decode_out = self._decode_step(self.decode_token, base_position + pos)
                     end_evt.record()
 
-        torch.cuda.synchronize(self.device)
-        prefill_times.append(prefill_start.elapsed_time(prefill_end))
-        decode_times.extend(start.elapsed_time(end) for start, end in self._decode_events)
-
         # Store last output for verification
-        self._last_output = decode_out if 'decode_out' in dir() else prefill_out
-
-        self._history["prefill_ms"].extend(prefill_times)
-        self._history["decode_ms"].extend(decode_times)
+        self._last_output = decode_out if "decode_out" in locals() else prefill_out
+        self._pending_iteration_metrics = True
         if self._last_output is None or self.prefill_tokens is None or self.decode_token is None:
             raise RuntimeError("benchmark_fn() must produce output")
-        return {"prefill_ms": prefill_times, "decode_ms": decode_times}
+        return None
+
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, List[float]]]:
+        if not self._pending_iteration_metrics or self._prefill_events is None or self._decode_events is None:
+            return None
+        prefill_time = elapsed_ms(self._prefill_events)
+        decode_times = elapsed_ms_list(self._decode_events)
+        self._pending_iteration_metrics = False
+        self._history["prefill_ms"].append(prefill_time)
+        self._history["decode_ms"].extend(decode_times)
+        return {"prefill_ms": [prefill_time], "decode_ms": decode_times}
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         self._set_verification_payload(
             inputs={
                 "prefill_tokens": self.prefill_tokens,
@@ -183,6 +188,7 @@ class FlexDecodingHarness(VerificationPayloadMixin, BaseBenchmark):
         return self._workload
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        self.finalize_iteration_metrics()
         if not self._history["prefill_ms"]:
             return None
         return {
@@ -193,6 +199,7 @@ class FlexDecodingHarness(VerificationPayloadMixin, BaseBenchmark):
         }
 
     def validate_result(self) -> Optional[str]:
+        self.finalize_iteration_metrics()
         if not self._history["prefill_ms"]:
             return "No prefill samples collected"
         if not self._history["decode_ms"]:

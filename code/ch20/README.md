@@ -22,7 +22,7 @@ Combines kernel, memory, pipeline, and inference optimizations into holistic cas
 ## Running the Benchmarks
 Use the benchmark harness for quick comparisons or drive the Typer CLI when you need repeatable artifact capture.
 ```bash
-python ch20/compare.py --profile none
+python -m ch20.compare --profile none
 python -m cli.aisp bench list-targets --chapter ch20
 python -m cli.aisp bench run --targets ch20 --profile minimal
 ```
@@ -31,9 +31,9 @@ python -m cli.aisp bench run --targets ch20 --profile minimal
 - Expectation baselines live next to each chapter in `expectations_{hardware_key}.json`; refresh with `--update-expectations` after validating new hardware. In portable mode, add `--allow-portable-expectations-update` to write expectation files explicitly.
 
 ## Validation Checklist
-- `python compare.py` emits per-stage summaries that show each optimized variant meeting or exceeding stored expectations.
-- `python ai_kernel_generator.py --emit test.cu` produces CUDA kernels that compile via `nvcc` and integrate into the harness without manual edits.
-- `python optimized_pipeline_sequential.py --trace` shows smooth NVTX ranges covering the entire pipeline, demonstrating overlap success.
+- `python -m ch20.compare` emits per-stage summaries that show each optimized variant meeting or exceeding stored expectations.
+- `python -m ch20.ai_kernel_generator --emit test.cu` produces CUDA kernels that compile via `nvcc` and integrate into the harness without manual edits.
+- `python -m ch20.optimized_pipeline_sequential --trace` shows smooth NVTX ranges covering the entire pipeline, demonstrating overlap success.
 
 ## Notes
 - `inductor_guard.py` provides convenience toggles for gating experimental kernels behind feature flags.

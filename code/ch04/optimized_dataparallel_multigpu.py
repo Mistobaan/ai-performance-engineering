@@ -141,8 +141,9 @@ class OptimizedDataParallelMultiGPUBenchmark(VerificationPayloadMixin, BaseBench
                     loss.backward()
                     outputs.append(output)
 
-            for stream in self.streams:
-                stream.synchronize()
+            for stream, device_id in zip(self.streams, self.device_ids):
+                with torch.cuda.device(device_id):
+                    torch.cuda.current_stream(device_id).wait_stream(stream)
 
             # Reduce gradients onto GPU0 and update master parameters.
             for param_group in zip(*(model.parameters() for model in self.models)):
@@ -157,7 +158,6 @@ class OptimizedDataParallelMultiGPUBenchmark(VerificationPayloadMixin, BaseBench
                     reduced.add_(grad.to(master_device, non_blocking=True))
                 param_group[0].grad = reduced
 
-            torch.cuda.synchronize(self.device_ids[0])
 
             self.optimizers[0].step()
             for opt in self.optimizers:
@@ -170,7 +170,6 @@ class OptimizedDataParallelMultiGPUBenchmark(VerificationPayloadMixin, BaseBench
                     replica_param.data.copy_(master_param, non_blocking=True)
 
         self.output = outputs[0].detach()
-        self._sync_all()
 
     def capture_verification_payload(self) -> None:
         if (

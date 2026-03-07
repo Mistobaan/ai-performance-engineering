@@ -23,7 +23,7 @@ python -m cli.aisp bench run --targets labs/flashinfer_attention --profile minim
 ## Notes
 - Default head configuration targets gpt-oss-20b hidden size (2880) with head_dim=64 (45 heads).
 - Increase `seq_len` if you need larger batch sizes to expose speedups.
-- Requires FlashInfer (`pip install flashinfer-python==0.6.2`).
+- Requires FlashInfer (`pip install flashinfer-python==0.6.3`).
 
 ## Related Chapters
 - **Ch16**: FlashInfer block-sparse attention.

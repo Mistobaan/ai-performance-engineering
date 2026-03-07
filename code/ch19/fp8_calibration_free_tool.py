@@ -313,7 +313,6 @@ class _FP8CalibrationFreeBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def benchmark_fn(self) -> None:
         output = self._impl.run()
         self._output = output if isinstance(output, torch.Tensor) else torch.tensor(output)
-        self._synchronize()
         if self._impl.input is None or self._output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

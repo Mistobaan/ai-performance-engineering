@@ -41,7 +41,6 @@ class BaselineTcgen05WarpSpecializationCutlassBenchmark(Tcgen05MatmulBenchmarkBa
                 self.output = self.extension.matmul_tcgen05_warp_specialized_cutlass(
                     self.matrix_a, self.matrix_b
                 )
-        self._synchronize()
 
 
 def get_benchmark() -> BaseBenchmark:

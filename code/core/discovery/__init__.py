@@ -51,6 +51,39 @@ def _has_get_benchmark(file_path: Path) -> bool:
     return False
 
 
+def _has_benchmark_decorator(file_path: Path) -> bool:
+    """Return True when a Python file uses benchmark registration decorators."""
+    import ast
+
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(f"Failed to read benchmark file {file_path}: {exc}") from exc
+    try:
+        tree = ast.parse(source, filename=str(file_path))
+    except SyntaxError as exc:
+        raise SyntaxError(f"Syntax error in benchmark file {file_path}: {exc}") from exc
+
+    decorator_names = {"export_benchmark", "register_benchmark"}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Name) and decorator.id in decorator_names:
+                return True
+            if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name):
+                if decorator.func.id in decorator_names:
+                    return True
+    return False
+
+
+def is_benchmark_entrypoint_file(file_path: Path) -> bool:
+    """Return True when a Python file exposes a benchmark entrypoint."""
+    if file_path.suffix != ".py":
+        return False
+    return _has_get_benchmark(file_path) or _has_benchmark_decorator(file_path)
+
+
 def is_cuda_binary_benchmark_file(file_path: Path) -> bool:
     """Return True if a Python benchmark subclasses CudaBinaryBenchmark.
 
@@ -95,7 +128,7 @@ def validate_benchmark_file(file_path: Path, warn: bool = True) -> bool:
     if not file_path.suffix == ".py":
         return True  # Skip non-Python files
     
-    has_fn = _has_get_benchmark(file_path)
+    has_fn = is_benchmark_entrypoint_file(file_path)
     
     if not has_fn and warn:
         warnings.warn(
@@ -106,6 +139,46 @@ def validate_benchmark_file(file_path: Path, warn: bool = True) -> bool:
         )
     
     return has_fn
+
+
+def discover_benchmark_entrypoints(
+    repo_root: Path,
+    bench_roots: Optional[List[Path]] = None,
+    *,
+    include_unpaired: bool = False,
+) -> List[Path]:
+    """Discover benchmark entrypoint files for linting and audit workflows."""
+    roots = bench_roots or get_bench_roots(repo_root=repo_root)
+    benchmark_files: List[Path] = []
+    seen: Set[Path] = set()
+
+    for chapter_dir in discover_all_chapters(repo_root, bench_roots=roots):
+        for baseline, optimized_list, _ in discover_benchmarks(
+            chapter_dir,
+            warn_missing=False,
+        ):
+            for candidate in [baseline, *optimized_list]:
+                resolved = candidate.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                benchmark_files.append(candidate)
+
+        if not include_unpaired:
+            continue
+
+        for candidate in sorted(chapter_dir.rglob("*.py")):
+            if "__pycache__" in candidate.parts or candidate.name.startswith("test_"):
+                continue
+            if not is_benchmark_entrypoint_file(candidate):
+                continue
+            resolved = candidate.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            benchmark_files.append(candidate)
+
+    return benchmark_files
 
 # Shorthand aliases for common labs (optional convenience)
 LAB_ALIASES: Dict[str, str] = {

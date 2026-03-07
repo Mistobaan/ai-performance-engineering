@@ -1,0 +1,30 @@
+{
+  "cmd": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range '1 2 4 8 16' --repeats 3 --max-concurrency 256 --port 8888",
+  "command_end_ts": "2026-03-05T15:33:16+0000",
+  "command_start_ts": "2026-03-05T15:29:47+0000",
+  "devices": [
+    0
+  ],
+  "label": "localhost",
+  "locks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 1965,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1155
+      },
+      "device": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 595.5993599999999
+      },
+      "physical_gpu": 0
+    }
+  ],
+  "require_clock_lock": true,
+  "returncode": 0,
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "timestamp": "2026-03-05T15:29:47+0000"
+}

@@ -241,11 +241,64 @@ export interface ClusterEvalSuiteResult {
   success: boolean;
   mode?: string;
   run_id?: string;
+  run_dir?: string;
+  structured_dir?: string;
+  raw_dir?: string;
+  figures_dir?: string;
+  reports_dir?: string;
   primary_label?: string;
   meta_path?: string;
   manifest_path?: string | null;
   collect?: CommandRunResult;
   manifest?: CommandRunResult;
+  command?: string[];
+  returncode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  duration_ms?: number;
+  error?: string;
+}
+
+export interface ClusterCommonEvalResult extends ClusterEvalSuiteResult {
+  preset?: string;
+  preset_description?: string;
+  artifact_roles?: string[];
+  coverage_baseline_run_id?: string | null;
+}
+
+export interface ClusterCanonicalPackageResult {
+  success: boolean;
+  canonical_run_id?: string;
+  comparison_run_ids?: string[];
+  historical_run_ids?: string[];
+  output_dir?: string;
+  package_readme_path?: string;
+  package_manifest_path?: string;
+  cleanup_keep_run_ids_path?: string;
+  historical_reference_path?: string;
+  command?: string[];
+  returncode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  duration_ms?: number;
+  error?: string;
+}
+
+export interface ClusterPromoteRunResult {
+  success: boolean;
+  run_id?: string;
+  label?: string;
+  run_dir?: string;
+  published_root?: string;
+  published_structured_dir?: string;
+  published_raw_dir?: string;
+  published_figures_dir?: string;
+  published_reports_dir?: string;
+  published_manifest_path?: string;
+  published_localhost_report_path?: string;
+  published_localhost_notes_path?: string;
+  allow_run_ids?: string[];
+  steps?: Record<string, unknown>;
   command?: string[];
   returncode?: number | null;
   stdout?: string;

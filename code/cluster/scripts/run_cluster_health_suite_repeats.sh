@@ -32,8 +32,8 @@ EOF
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUITE="${ROOT_DIR}/scripts/run_cluster_health_suite.sh"
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 
 HOSTS=""
 REPEATS=3
@@ -72,6 +72,9 @@ case "$MODE" in
   *) echo "ERROR: invalid --mode: $MODE" >&2; usage >&2; exit 2 ;;
 esac
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$PREFIX"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW_DIR" "$OUT_STRUCT_DIR"
 LOG="${OUT_RAW_DIR}/${PREFIX}_repeats.log"
 

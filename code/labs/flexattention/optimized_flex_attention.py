@@ -108,7 +108,6 @@ class OptimizedFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     self.inputs.k,
                     self.inputs.v,
                 )
-            self._synchronize()
             output_tensor = result[0] if isinstance(result, (tuple, list)) else result
             self.output = output_tensor.detach().float().clone()
         if self.output is None:

@@ -101,7 +101,6 @@ class OptimizedPerformanceFusionBenchmark(VerificationPayloadMixin, BaseBenchmar
                 loss = torch.nn.functional.cross_entropy(logits, target)
                 loss.backward()
                 self.optimizer.step()
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.model is None or self._verify_input is None:

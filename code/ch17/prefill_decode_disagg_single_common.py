@@ -7,23 +7,22 @@ from typing import List, Optional
 import torch
 
 from core.benchmark.verification import PrecisionFlags
+from core.benchmark.wrapper_utils import attach_benchmark_metadata
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from ch17.prefill_decode_disagg_multigpu_common import PrefillDecodeConfig, TinyPrefillDecode
 
 
-class PrefillDecodeSingleGPUBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Single-GPU analogue for disaggregated prefill/decode pipelines."""
+class _PrefillDecodeSingleGPUBase(VerificationPayloadMixin, BaseBenchmark):
+    """Shared single-GPU disaggregated prefill/decode setup and verification logic."""
 
     def __init__(
         self,
         *,
-        use_host_staging: bool,
         label: str,
         cfg: Optional[PrefillDecodeConfig] = None,
     ) -> None:
         super().__init__()
-        self.use_host_staging = bool(use_host_staging)
         self.label = label
         self.cfg = cfg or PrefillDecodeConfig()
         tokens = self.cfg.requests_per_rank * self.cfg.tokens_per_request
@@ -61,38 +60,13 @@ class PrefillDecodeSingleGPUBenchmark(VerificationPayloadMixin, BaseBenchmark):
             device=self.device,
             dtype=self.cfg.dtype,
         )
-        if not self.use_host_staging:
-            self.kv_caches = [
-                torch.empty(
-                    (self.cfg.batch_size, self.cfg.context_window, self.cfg.hidden_size),
-                    device=self.device,
-                    dtype=self.cfg.dtype,
-                )
-                for _ in range(self.cfg.requests_per_rank)
-            ]
         self._param_count = sum(p.numel() for p in self.prefill_model.parameters()) + sum(
             p.numel() for p in self.decode_model.parameters()
         )
         torch.cuda.synchronize(self.device)
 
-    def benchmark_fn(self) -> None:
-        if self.prefill_model is None or self.decode_model is None or self.prompts is None:
-            raise RuntimeError("setup() must run before benchmark_fn()")
-
-        outputs: List[torch.Tensor] = []
-        with torch.no_grad():
-            for idx in range(self.cfg.requests_per_rank):
-                kv_cache, seed = self.prefill_model.prefill(self.prompts[idx])
-                if self.use_host_staging:
-                    kv_cpu = kv_cache.cpu()
-                    kv_cache = kv_cpu.to(self.device)
-                else:
-                    self.kv_caches[idx].copy_(kv_cache)
-                    kv_cache = self.kv_caches[idx]
-                outputs.append(self.decode_model.decode(seed, kv_cache, self.cfg.decode_tokens))
-
-        torch.cuda.synchronize(self.device)
-        self._output = torch.stack([out.detach().cpu() for out in outputs], dim=0)
+    def _set_output(self, outputs: List[torch.Tensor]) -> None:
+        self._output = torch.stack(outputs, dim=0)
 
     def capture_verification_payload(self) -> None:
         if self._output is None or self.prompts is None:
@@ -135,8 +109,51 @@ class PrefillDecodeSingleGPUBenchmark(VerificationPayloadMixin, BaseBenchmark):
         return self._workload
 
 
-def attach_benchmark_metadata(bench: BaseBenchmark, module_file: str) -> BaseBenchmark:
-    """Ensure subprocess runner calls get_benchmark() for parameterized benchmarks."""
-    bench._module_file_override = module_file
-    bench._factory_name_override = "get_benchmark"
-    return bench
+class BaselinePrefillDecodeSingleGPUBenchmark(_PrefillDecodeSingleGPUBase):
+    """Single-GPU disaggregated prefill/decode baseline with host-staged KV handoff."""
+
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
+
+    def benchmark_fn(self) -> None:
+        if self.prefill_model is None or self.decode_model is None or self.prompts is None:
+            raise RuntimeError("setup() must run before benchmark_fn()")
+
+        outputs: List[torch.Tensor] = []
+        with torch.no_grad():
+            for idx in range(self.cfg.requests_per_rank):
+                kv_cache, seed = self.prefill_model.prefill(self.prompts[idx])
+                kv_cpu = kv_cache.cpu()
+                kv_cache = kv_cpu.to(self.device)
+                outputs.append(self.decode_model.decode(seed, kv_cache, self.cfg.decode_tokens))
+
+        self._set_output(outputs)
+
+
+class OptimizedPrefillDecodeSingleGPUBenchmark(_PrefillDecodeSingleGPUBase):
+    """Single-GPU disaggregated prefill/decode optimized with device-local KV reuse."""
+
+    def setup(self) -> None:
+        super().setup()
+        self.kv_caches = [
+            torch.empty(
+                (self.cfg.batch_size, self.cfg.context_window, self.cfg.hidden_size),
+                device=self.device,
+                dtype=self.cfg.dtype,
+            )
+            for _ in range(self.cfg.requests_per_rank)
+        ]
+
+    def benchmark_fn(self) -> None:
+        if self.prefill_model is None or self.decode_model is None or self.prompts is None:
+            raise RuntimeError("setup() must run before benchmark_fn()")
+        if not self.kv_caches:
+            raise RuntimeError("Optimized KV caches not initialized")
+
+        outputs: List[torch.Tensor] = []
+        with torch.no_grad():
+            for idx in range(self.cfg.requests_per_rank):
+                kv_cache, seed = self.prefill_model.prefill(self.prompts[idx])
+                self.kv_caches[idx].copy_(kv_cache)
+                outputs.append(self.decode_model.decode(seed, self.kv_caches[idx], self.cfg.decode_tokens))
+
+        self._set_output(outputs)

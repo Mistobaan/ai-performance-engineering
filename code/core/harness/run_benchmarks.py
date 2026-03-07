@@ -1264,8 +1264,18 @@ def check_hardware_limitation(error_msg: str) -> Optional[str]:
     """
     error_lower = error_msg.lower()
     
-    # FAIL FAST markers - Triton version/feature limitations (software stack issue)
+    # FAIL FAST markers - keep serving-stack mismatches as hard errors.
     if 'fail fast:' in error_lower:
+        # Serving runtime/ABI/version mismatches must fail hard so strict sweeps
+        # do not silently pass with skipped serving examples.
+        if (
+            "serving stack mismatch" in error_lower
+            or "vllm abi mismatch" in error_lower
+            or "vllm import failed" in error_lower
+            or "vllm._c failed to import" in error_lower
+            or "requires vllm execution" in error_lower
+        ):
+            return None
         # Extract the reason after "FAIL FAST:"
         idx = error_lower.find('fail fast:')
         reason = error_msg[idx + len('fail fast:'):].strip()
@@ -1315,24 +1325,20 @@ def check_hardware_limitation(error_msg: str) -> Optional[str]:
     ):
         return "Distributed benchmark requires multiple GPUs (insufficient GPUs available)"
 
-    # Missing optional serving/inference dependencies should be classified as
-    # software limitations in strict sweeps, not hard benchmark errors.
+    # Serving/inference dependency mismatches are hard failures.
+    # They indicate benchmark environment drift, not optional behavior.
     if (
         "undefined symbol" in error_lower
         and ("vllm/_c.abi3.so" in error_lower or "vllm._c" in error_lower)
     ) or "c10_cuda_check_implementation" in error_lower:
-        return (
-            "vLLM extension ABI mismatch with torch/CUDA runtime. "
-            "Reinstall pinned benchmark stack: "
-            f"{_SERVING_STACK_PINS.pinned_stack_str}."
-        )
+        return None
     if (
         "vllm required for this benchmark" in error_lower
         or "no module named 'vllm'" in error_lower
     ):
-        return "vLLM is not installed or not importable in this environment"
+        return None
     if "no module named 'flashinfer'" in error_lower:
-        return "flashinfer is not installed in this environment"
+        return None
     if (
         "cutlass python package (cutlass_library) is missing" in error_lower
         or "install nvidia-cutlass-dsl" in error_lower
@@ -1911,7 +1917,14 @@ def _harden_profile_env(
         "yes",
         "on",
     }
-    include_user_site = not force_no_user_site
+    # Default to user-site enabled so profiling subprocesses resolve the same
+    # pinned serving stack as timing runs (torch/vllm/msgspec/etc.).
+    include_user_site = True
+    include_user_site_raw = str(env.get("AISP_PROFILE_INCLUDE_USER_SITE", "")).strip().lower()
+    if include_user_site_raw:
+        include_user_site = include_user_site_raw in {"1", "true", "yes", "on"}
+    if force_no_user_site:
+        include_user_site = False
     pythonpath_entries = [str(repo_root)]
     if chapter_dir is not None:
         pythonpath_entries.append(str(chapter_dir))
@@ -1948,10 +1961,10 @@ def _harden_profile_env(
         seen.add(entry)
         deduped.append(entry)
     env["PYTHONPATH"] = os.pathsep.join(deduped)
-    if force_no_user_site:
-        env["PYTHONNOUSERSITE"] = "1"
-    else:
+    if include_user_site:
         env.pop("PYTHONNOUSERSITE", None)
+    else:
+        env["PYTHONNOUSERSITE"] = "1"
     # Avoid expensive/fragile addr2line symbolization in profiler subprocesses.
     # PyTorch itself recommends this when Module.cpp symbolization warnings appear.
     env.setdefault("TORCH_DISABLE_ADDR2LINE", "1")
@@ -2043,7 +2056,6 @@ sys.path.insert(0, r'{chapter_dir}')
 # Import and load benchmark
 from {benchmark_path.stem} import get_benchmark
 
-benchmark = get_benchmark()
 from core.harness.benchmark_harness import (
     BenchmarkConfig,
     ReadOnlyBenchmarkConfigView,
@@ -2051,51 +2063,64 @@ from core.harness.benchmark_harness import (
     ramp_gpu_clocks,
 )
 from core.profiling.nvtx_helper import nvtx_range
-_profiling_config = BenchmarkConfig(
-    enable_profiling=True,
-    enable_nvtx=True,
-    nsys_nvtx_include={nvtx_includes!r},
-    validity_profile={validity_profile!r},
-    lock_gpu_clocks={lock_gpu_clocks_flag!r},
-    gpu_sm_clock_mhz={gpu_sm_clock_mhz!r},
-    gpu_mem_clock_mhz={gpu_mem_clock_mhz!r},
-)
-benchmark._config = ReadOnlyBenchmarkConfigView.from_config(_profiling_config)
-lock_ctx = (
-    lock_gpu_clocks(
-        device=0,
-        sm_clock_mhz=getattr(_profiling_config, "gpu_sm_clock_mhz", None),
-        mem_clock_mhz=getattr(_profiling_config, "gpu_mem_clock_mhz", None),
+
+def _run_profile() -> None:
+    benchmark = get_benchmark()
+    _profiling_config = BenchmarkConfig(
+        enable_profiling=True,
+        enable_nvtx=True,
+        nsys_nvtx_include={nvtx_includes!r},
+        validity_profile={validity_profile!r},
+        lock_gpu_clocks={lock_gpu_clocks_flag!r},
+        gpu_sm_clock_mhz={gpu_sm_clock_mhz!r},
+        gpu_mem_clock_mhz={gpu_mem_clock_mhz!r},
     )
-    if getattr(_profiling_config, "lock_gpu_clocks", False)
-    else nullcontext()
-)
-with lock_ctx:
-    # Best-effort clock ramp before capture.
-    try:
-        ramp_gpu_clocks(device=0)
-    except Exception:
-        pass
-    benchmark.setup()
+    benchmark._config = ReadOnlyBenchmarkConfigView.from_config(_profiling_config)
+    lock_ctx = (
+        lock_gpu_clocks(
+            device=0,
+            sm_clock_mhz=getattr(_profiling_config, "gpu_sm_clock_mhz", None),
+            mem_clock_mhz=getattr(_profiling_config, "gpu_mem_clock_mhz", None),
+        )
+        if getattr(_profiling_config, "lock_gpu_clocks", False)
+        else nullcontext()
+    )
+    with lock_ctx:
+        # Best-effort clock ramp before capture.
+        try:
+            ramp_gpu_clocks(device=0)
+        except Exception:
+            pass
+        benchmark.setup()
 
-    # Warmup (keep short; profiling is not a timing run)
-    benchmark.benchmark_fn()
-
-    # Profile execution
-    import torch
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-
-    with nvtx_range("compute_kernel:profile", enable=True):
+        # Warmup (keep short; profiling is not a timing run)
         benchmark.benchmark_fn()
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
 
-    # TensorRT-LLM can crash in execution-context deallocation under Nsight
-    # teardown/finalization paths. Profiling subprocesses can hard-exit safely
-    # after synchronized work is complete.
-    import os as _os
-    _os._exit(0)
+        # Profile execution
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+        with nvtx_range("compute_kernel:profile", enable=True):
+            benchmark.benchmark_fn()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+        # Some benchmarks launch worker processes (e.g., vLLM) and need
+        # graceful teardown so Nsight can exit cleanly. Others prefer hard-exit
+        # to avoid teardown crashes under Nsight.
+        if getattr(benchmark, "profile_require_teardown", False):
+            try:
+                benchmark.teardown()
+            except Exception:
+                pass
+            raise SystemExit(0)
+        import os as _os
+        _os._exit(0)
+
+
+if __name__ == "__main__":
+    _run_profile()
 """)
         wrapper_script.close()
         
@@ -2278,11 +2303,12 @@ def profile_python_benchmark_ncu(
     except Exception:
         is_cuda_binary = False
 
-    # For in-process Python benchmarks, create a stable NVTX range and use it as
-    # the default NCU filter to avoid profiling every kernel in the process.
+    # Keep NCU NVTX includes opt-in only. A default include filter can miss
+    # kernels for workloads where work is launched outside the wrapper NVTX
+    # context (for example CUDA Graph replay or subprocess-driven execution).
     ncu_nvtx_includes = nvtx_includes or None
-    if not ncu_nvtx_includes and not is_cuda_binary:
-        ncu_nvtx_includes = [profile_nvtx_label]
+    if bool(getattr(benchmark, "disable_ncu_nvtx_filter", False)):
+        ncu_nvtx_includes = None
     # chapter_dir points to e.g. <repo>/ch10 or <repo>/labs/<lab>; use global
     # repository root for package imports like `labs.*` and `core.*`.
     repo_root = Path(__file__).resolve().parents[2]
@@ -2330,7 +2356,6 @@ sys.path.insert(0, r'{chapter_dir}')
 # Import and load benchmark
 from {benchmark_path.stem} import get_benchmark
 
-benchmark = get_benchmark()
 from core.harness.benchmark_harness import (
     BenchmarkConfig,
     ReadOnlyBenchmarkConfigView,
@@ -2338,56 +2363,69 @@ from core.harness.benchmark_harness import (
     ramp_gpu_clocks,
 )
 from core.profiling.nvtx_helper import nvtx_range
-_profiling_config = BenchmarkConfig(
-    enable_profiling=True,
-    enable_nsys=True,
-    enable_ncu=True,
-    enable_nvtx=True,
-    nsys_nvtx_include={configured_nvtx_includes!r},
-    profile_type={config.profile_type!r},
-    ncu_metric_set={config.ncu_metric_set!r},
-    pm_sampling_interval={config.pm_sampling_interval!r},
-    ncu_replay_mode={config.ncu_replay_mode!r},
-    validity_profile={validity_profile!r},
-    lock_gpu_clocks={lock_gpu_clocks_flag!r},
-    gpu_sm_clock_mhz={gpu_sm_clock_mhz!r},
-    gpu_mem_clock_mhz={gpu_mem_clock_mhz!r},
-)
-benchmark._config = ReadOnlyBenchmarkConfigView.from_config(_profiling_config)
-lock_ctx = (
-    lock_gpu_clocks(
-        device=0,
-        sm_clock_mhz=getattr(_profiling_config, "gpu_sm_clock_mhz", None),
-        mem_clock_mhz=getattr(_profiling_config, "gpu_mem_clock_mhz", None),
+
+def _run_profile() -> None:
+    benchmark = get_benchmark()
+    _profiling_config = BenchmarkConfig(
+        enable_profiling=True,
+        enable_nsys=True,
+        enable_ncu=True,
+        enable_nvtx=True,
+        nsys_nvtx_include={configured_nvtx_includes!r},
+        profile_type={config.profile_type!r},
+        ncu_metric_set={config.ncu_metric_set!r},
+        pm_sampling_interval={config.pm_sampling_interval!r},
+        ncu_replay_mode={config.ncu_replay_mode!r},
+        validity_profile={validity_profile!r},
+        lock_gpu_clocks={lock_gpu_clocks_flag!r},
+        gpu_sm_clock_mhz={gpu_sm_clock_mhz!r},
+        gpu_mem_clock_mhz={gpu_mem_clock_mhz!r},
     )
-    if getattr(_profiling_config, "lock_gpu_clocks", False)
-    else nullcontext()
-)
-with lock_ctx:
-    try:
-        ramp_gpu_clocks(device=0)
-    except Exception:
-        pass
-    benchmark.setup()
+    benchmark._config = ReadOnlyBenchmarkConfigView.from_config(_profiling_config)
+    lock_ctx = (
+        lock_gpu_clocks(
+            device=0,
+            sm_clock_mhz=getattr(_profiling_config, "gpu_sm_clock_mhz", None),
+            mem_clock_mhz=getattr(_profiling_config, "gpu_mem_clock_mhz", None),
+        )
+        if getattr(_profiling_config, "lock_gpu_clocks", False)
+        else nullcontext()
+    )
+    with lock_ctx:
+        try:
+            ramp_gpu_clocks(device=0)
+        except Exception:
+            pass
+        benchmark.setup()
 
-    # Warmup (keep short; profiling is not a timing run)
-    benchmark.benchmark_fn()
-
-    # Profile execution
-    import torch
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-
-    with nvtx_range({profile_nvtx_label!r}, enable=True):
+        # Warmup (keep short; profiling is not a timing run)
         benchmark.benchmark_fn()
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
 
-    # TensorRT-LLM can crash in execution-context deallocation under Nsight
-    # teardown/finalization paths. Profiling subprocesses can hard-exit safely
-    # after synchronized work is complete.
-    import os as _os
-    _os._exit(0)
+        # Profile execution
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+        with nvtx_range({profile_nvtx_label!r}, enable=True):
+            benchmark.benchmark_fn()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+        # Some benchmarks launch worker processes (e.g., vLLM) and need
+        # graceful teardown so Nsight can exit cleanly. Others prefer hard-exit
+        # to avoid teardown crashes under Nsight.
+        if getattr(benchmark, "profile_require_teardown", False):
+            try:
+                benchmark.teardown()
+            except Exception:
+                pass
+            raise SystemExit(0)
+        import os as _os
+        _os._exit(0)
+
+
+if __name__ == "__main__":
+    _run_profile()
 """)
         wrapper_script.close()
         
@@ -2643,52 +2681,58 @@ from core.harness.benchmark_harness import (
 import torch
 import torch.profiler
 
-benchmark = get_benchmark()
-profiling_config = BenchmarkConfig(
-    enable_profiling=True,
-    enable_nvtx=True,
-    validity_profile={validity_profile!r},
-    lock_gpu_clocks={lock_gpu_clocks_flag!r},
-    gpu_sm_clock_mhz={getattr(existing_cfg, "gpu_sm_clock_mhz", None)!r},
-    gpu_mem_clock_mhz={getattr(existing_cfg, "gpu_mem_clock_mhz", None)!r},
-)
-benchmark._config = ReadOnlyBenchmarkConfigView.from_config(profiling_config)
 
-lock_ctx = (
-    lock_gpu_clocks(
-        device=0,
-        sm_clock_mhz=getattr(profiling_config, "gpu_sm_clock_mhz", None),
-        mem_clock_mhz=getattr(profiling_config, "gpu_mem_clock_mhz", None),
+def _run_profile() -> None:
+    benchmark = get_benchmark()
+    profiling_config = BenchmarkConfig(
+        enable_profiling=True,
+        enable_nvtx=True,
+        validity_profile={validity_profile!r},
+        lock_gpu_clocks={lock_gpu_clocks_flag!r},
+        gpu_sm_clock_mhz={getattr(existing_cfg, "gpu_sm_clock_mhz", None)!r},
+        gpu_mem_clock_mhz={getattr(existing_cfg, "gpu_mem_clock_mhz", None)!r},
     )
-    if getattr(profiling_config, "lock_gpu_clocks", False) and torch.cuda.is_available()
-    else nullcontext()
-)
+    benchmark._config = ReadOnlyBenchmarkConfigView.from_config(profiling_config)
 
-with lock_ctx:
-    if torch.cuda.is_available():
-        ramp_gpu_clocks(device=0)
-    benchmark.setup()
-    benchmark.benchmark_fn()
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    activities = [torch.profiler.ProfilerActivity.CPU]
-    if torch.cuda.is_available():
-        activities.append(torch.profiler.ProfilerActivity.CUDA)
-    with torch.profiler.profile(
-        activities=activities,
-        record_shapes=False,
-        profile_memory=False,
-        with_stack=False,
-        with_flops=False,
-        with_modules=False,
-    ) as prof:
+    lock_ctx = (
+        lock_gpu_clocks(
+            device=0,
+            sm_clock_mhz=getattr(profiling_config, "gpu_sm_clock_mhz", None),
+            mem_clock_mhz=getattr(profiling_config, "gpu_mem_clock_mhz", None),
+        )
+        if getattr(profiling_config, "lock_gpu_clocks", False) and torch.cuda.is_available()
+        else nullcontext()
+    )
+
+    with lock_ctx:
+        if torch.cuda.is_available():
+            ramp_gpu_clocks(device=0)
+        benchmark.setup()
         benchmark.benchmark_fn()
-        prof.step()
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    benchmark.teardown()
-prof.export_chrome_trace(r"{torch_output}")
-print(r"{torch_output}")
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        activities = [torch.profiler.ProfilerActivity.CPU]
+        if torch.cuda.is_available():
+            activities.append(torch.profiler.ProfilerActivity.CUDA)
+        with torch.profiler.profile(
+            activities=activities,
+            record_shapes=False,
+            profile_memory=False,
+            with_stack=False,
+            with_flops=False,
+            with_modules=False,
+        ) as prof:
+            benchmark.benchmark_fn()
+            prof.step()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        benchmark.teardown()
+    prof.export_chrome_trace(r"{torch_output}")
+    print(r"{torch_output}")
+
+
+if __name__ == "__main__":
+    _run_profile()
 """
     )
     wrapper_script.close()
@@ -3007,6 +3051,29 @@ def _canonicalize_optimized_variants_for_full_sweep(
     return canonical_pairs, suppressed
 
 
+def _resolve_expectation_validation_policy(
+    *,
+    validity_profile: str,
+    update_expectations: bool,
+    accept_regressions: bool,
+    allow_mixed_provenance: bool,
+    allow_portable_expectations_update: bool,
+) -> Tuple[bool, bool]:
+    """Return (validation_enabled, writes_enabled) for expectation handling."""
+    normalized_profile = normalize_validity_profile(
+        str(validity_profile).strip().lower(),
+        field_name="validity_profile",
+    )
+    validation_enabled = (
+        normalized_profile == "strict" or bool(allow_portable_expectations_update)
+    )
+    write_requested = bool(
+        update_expectations or accept_regressions or allow_mixed_provenance
+    )
+    writes_enabled = validation_enabled and write_requested
+    return validation_enabled, writes_enabled
+
+
 def _test_chapter_impl(
     chapter_dir: Path,
     enable_profiling: bool = False,
@@ -3082,17 +3149,27 @@ def _test_chapter_impl(
         target_extra_args: Optional per-target arg overrides (target -> list of CLI args)
     """
     logger.info("launch_via arg=%s nproc_per_node=%s nnodes=%s", launch_via, nproc_per_node, nnodes)
+    debug_signature_verify = str(os.environ.get("AISP_DEBUG_SIGNATURE_VERIFY", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     validity_profile = str(validity_profile).strip().lower()
     validity_profile = normalize_validity_profile(validity_profile, field_name="validity_profile")
     allow_virtualization = validity_profile == "portable"
-    expectation_writes_enabled = (
-        validity_profile == "strict" or bool(allow_portable_expectations_update)
+    expectation_validation_enabled, expectation_writes_enabled = _resolve_expectation_validation_policy(
+        validity_profile=validity_profile,
+        update_expectations=bool(update_expectations),
+        accept_regressions=bool(accept_regressions),
+        allow_mixed_provenance=bool(allow_mixed_provenance),
+        allow_portable_expectations_update=bool(allow_portable_expectations_update),
     )
-    if not expectation_writes_enabled:
+    if validity_profile != "strict" and not expectation_validation_enabled:
         logger.warning(
-            "Portable validity profile active: expectation file updates are disabled. "
+            "Portable validity profile active: expectation validation and file updates are disabled. "
             "Set --allow-portable-expectations-update "
-            "(allow_portable_expectations_update=True) to enable writes."
+            "(allow_portable_expectations_update=True) to enable them."
         )
 
     if single_gpu:
@@ -4754,6 +4831,11 @@ def _test_chapter_impl(
                                     else None
                                 ),
                             }
+                            if debug_signature_verify:
+                                opt_result["input_verification"]["baseline_signature"] = baseline_signature.to_dict()
+                                opt_result["input_verification"]["optimized_signature"] = optimized_signature.to_dict()
+                                opt_result["input_verification"]["baseline_workload"] = baseline_workload
+                                opt_result["input_verification"]["optimized_workload"] = optimized_workload
                             if mismatches:
                                 raise RuntimeError(f"Input signature mismatch: {mismatches[0]}")
                         except Exception as exc:
@@ -5604,8 +5686,16 @@ def _test_chapter_impl(
                         best_optimization_technique=best_opt.get("technique"),
                     )
                     update_result = None
-                    if expectation_writes_enabled:
-                        update_result = expectations_store.update_entry(example_key, entry)
+                    if expectation_validation_enabled:
+                        active_expectations_store = expectations_store
+                        if not expectation_writes_enabled:
+                            active_expectations_store = ExpectationsStore(
+                                chapter_dir,
+                                expectation_hardware_key,
+                                accept_regressions=accept_regressions or update_expectations,
+                                allow_mixed_provenance=allow_mixed_provenance or update_expectations,
+                            )
+                        update_result = active_expectations_store.update_entry(example_key, entry)
                         try:
                             result_entry["expectation"] = update_result.to_dict()
                         except Exception:
@@ -5614,7 +5704,16 @@ def _test_chapter_impl(
                                 "message": update_result.message,
                                 "validation_issues": [issue.to_dict() for issue in update_result.validation_issues],
                             }
-                        logger.info("    Expectations: %s", update_result.message)
+                        if expectation_writes_enabled:
+                            logger.info("    Expectations: %s", update_result.message)
+                        else:
+                            result_entry["expectation"]["persisted"] = False
+                            result_entry["expectation"]["message"] = (
+                                f"{update_result.message} (preview only; rerun with "
+                                "--update-expectations/--accept-regressions/--allow-mixed-provenance "
+                                "to write the file.)"
+                            )
+                            logger.info("    Expectations (preview): %s", update_result.message)
                         log_expectation_delta(
                             logger,
                             example_key=example_key,
@@ -5629,9 +5728,9 @@ def _test_chapter_impl(
                         result_entry["expectation"] = {
                             "status": "skipped",
                             "message": (
-                                "Expectation updates are disabled in portable validity profile. "
+                                "Expectation validation is disabled in portable validity profile. "
                                 "Enable --allow-portable-expectations-update "
-                                "(allow_portable_expectations_update=True) to write expectation files."
+                                "(allow_portable_expectations_update=True) to validate and write expectation files."
                             ),
                             "validation_issues": [],
                         }
@@ -6849,8 +6948,16 @@ def _test_chapter_impl(
                         best_optimization_technique=best_opt.get("technique"),
                     )
                     update_result = None
-                    if expectation_writes_enabled:
-                        update_result = expectations_store.update_entry(example_key, entry)
+                    if expectation_validation_enabled:
+                        active_expectations_store = expectations_store
+                        if not expectation_writes_enabled:
+                            active_expectations_store = ExpectationsStore(
+                                chapter_dir,
+                                expectation_hardware_key,
+                                accept_regressions=accept_regressions or update_expectations,
+                                allow_mixed_provenance=allow_mixed_provenance or update_expectations,
+                            )
+                        update_result = active_expectations_store.update_entry(example_key, entry)
                         try:
                             result_entry["expectation"] = update_result.to_dict()
                         except Exception:
@@ -6859,7 +6966,16 @@ def _test_chapter_impl(
                                 "message": update_result.message,
                                 "validation_issues": [issue.to_dict() for issue in update_result.validation_issues],
                             }
-                        logger.info("    Expectations: %s", update_result.message)
+                        if expectation_writes_enabled:
+                            logger.info("    Expectations: %s", update_result.message)
+                        else:
+                            result_entry["expectation"]["persisted"] = False
+                            result_entry["expectation"]["message"] = (
+                                f"{update_result.message} (preview only; rerun with "
+                                "--update-expectations/--accept-regressions/--allow-mixed-provenance "
+                                "to write the file.)"
+                            )
+                            logger.info("    Expectations (preview): %s", update_result.message)
                         log_expectation_delta(
                             logger,
                             example_key=example_key,
@@ -6874,9 +6990,9 @@ def _test_chapter_impl(
                         result_entry["expectation"] = {
                             "status": "skipped",
                             "message": (
-                                "Expectation updates are disabled in portable validity profile. "
+                                "Expectation validation is disabled in portable validity profile. "
                                 "Enable --allow-portable-expectations-update "
-                                "(allow_portable_expectations_update=True) to write expectation files."
+                                "(allow_portable_expectations_update=True) to validate and write expectation files."
                             ),
                             "validation_issues": [],
                         }

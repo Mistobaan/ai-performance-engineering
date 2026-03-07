@@ -31,6 +31,7 @@ except Exception:  # pragma: no cover - defensive import
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin  # noqa: E402
 from core.benchmark.verification import PrecisionFlags, simple_signature  # noqa: E402
+from core.benchmark.wrapper_utils import attach_benchmark_metadata  # noqa: E402
 from core.harness.hardware_capabilities import detect_capabilities  # noqa: E402
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig  # noqa: E402
 
@@ -51,15 +52,6 @@ except Exception:  # pragma: no cover - safe fallback
     DelayedScaling = None  # type: ignore
     te_constants = None  # type: ignore
     TE_AVAILABLE = False
-
-
-def attach_benchmark_metadata(bench: BaseBenchmark, module_file: str):
-    """Annotate a benchmark so subprocess runner can re-import via get_benchmark."""
-    bench._module_file_override = module_file
-    bench._factory_name_override = "get_benchmark"
-    return bench
-
-
 def _te_version_at_least(major: int, minor: int = 0) -> bool:
     if not TE_AVAILABLE or not hasattr(te, "__version__"):
         return False
@@ -119,6 +111,7 @@ class DecodeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.graph_logits: Optional[torch.Tensor] = None
         self.graph_next_token: Optional[torch.Tensor] = None
         self._custom_metrics: Dict[str, float] = {}
+        self._pending_iteration_events: Optional[Dict[str, torch.cuda.Event]] = None
         self._fp8_enabled: bool = False
         self._fp4_enabled: bool = False
         self._graph_error: Optional[str] = None
@@ -503,10 +496,6 @@ class DecodeBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.gpu_prompt.copy_(self.host_prompt, non_blocking=non_blocking)
             if self.host_payload is not None and self.gpu_payload is not None:
                 self.gpu_payload.copy_(self.host_payload, non_blocking=non_blocking)
-            # CRITICAL: If non_blocking copy with no stream, must synchronize
-            # Otherwise gpu_prompt may contain garbage when immediately accessed
-            if non_blocking:
-                torch.cuda.synchronize()
 
     def _copy_prompt_to_device_idx(
         self,
@@ -529,8 +518,6 @@ class DecodeBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 event = self._copy_done_events[idx]
                 event.record(active_stream)
                 return event
-        if stream is None and non_blocking:
-            torch.cuda.synchronize()
         return None
 
     def _run_prefill_decode(self, prompt: torch.Tensor, stream: torch.cuda.Stream) -> None:
@@ -591,20 +578,6 @@ class DecodeBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
         if self.compute_stream is not None:
             torch.cuda.current_stream().wait_stream(self.compute_stream)
-        torch.cuda.synchronize()
-
-        ttft_ms = batch0_end.elapsed_time(iter_start) if batch0_end.query() else 0.0
-        total_ms = iter_end.elapsed_time(iter_start) if iter_end.query() else ttft_ms
-
-        # Defensive clamp to avoid negative/zero timing artifacts
-        eps_ms = 1e-6
-        ttft_ms = max(ttft_ms, eps_ms)
-        total_ms = max(total_ms, ttft_ms)
-
-        tokens_per_iter = float(
-            self.cfg.prefetch_batches * self.cfg.batch_size * (self.cfg.prompt_tokens + self.cfg.decode_tokens)
-        )
-        tokens_per_s = tokens_per_iter / max(total_ms / 1000.0, 1e-6)
 
         self.gpu_prompt = self.gpu_prompts[1]
         self.host_prompt = self.host_prompts[1]
@@ -612,31 +585,12 @@ class DecodeBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.gpu_payload = self.gpu_payloads[1]
             self.host_payload = self.host_payloads[1]
 
-        self._custom_metrics = {
-            "tokens_per_iteration": tokens_per_iter,
-            "prompt_tokens": float(self.cfg.prompt_tokens),
-            "decode_tokens": float(self.cfg.decode_tokens),
-            "hidden_size": float(self.cfg.hidden_size),
-            "prefetch_batches": float(self.cfg.prefetch_batches),
-            "host_payload_mb": float(self.cfg.host_payload_mb),
-            "use_pinned_host": float(self.cfg.use_pinned_host),
-            "use_copy_stream": float(self.cfg.use_copy_stream),
-            "use_compute_stream": float(self.cfg.use_compute_stream),
-            "use_cuda_graphs": float(False),
-            "graph_full_iteration": float(False),
-            "use_torch_compile": float(self.cfg.use_torch_compile and not self._compile_error),
-            "use_fp8": float(self._fp8_enabled),
-            "fp8_fallback": float(1.0 if (self.cfg.use_fp8 and not self._fp8_enabled) else 0.0),
-            "use_fp4": float(self._fp4_enabled),
-            "use_te_mlp": float(self.cfg.use_te_mlp),
-            "ttft_ms": float(ttft_ms),
-            "decode_time_ms": float(max(total_ms - ttft_ms, eps_ms)),
-            "tpot_mean_ms": float((max(total_ms - ttft_ms, eps_ms)) / max(self.cfg.decode_tokens, 1)),
-            "tokens_per_s": float(tokens_per_s),
-            "total_time_ms": float(total_ms),
+        self._pending_iteration_events = {
+            "prefill_start": iter_start,
+            "prefill_end": batch0_end,
+            "decode_start": batch0_end,
+            "decode_end": iter_end,
         }
-        if self._compile_error:
-            self._custom_metrics["compile_error"] = 1.0
 
     def benchmark_fn(self) -> None:
         if self.cfg.prefetch_batches > 1:
@@ -706,14 +660,27 @@ class DecodeBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
         if nvtx:
             nvtx.range_pop()
+        self._pending_iteration_events = {
+            "prefill_start": prefill_start,
+            "prefill_end": prefill_end,
+            "decode_start": decode_start,
+            "decode_end": decode_end,
+        }
 
-        torch.cuda.synchronize()
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, list[float]]]:
+        if not self._pending_iteration_events:
+            return None
 
-        ttft_ms = prefill_end.elapsed_time(prefill_start) if prefill_end.query() else 0.0
-        decode_ms = decode_end.elapsed_time(decode_start) if decode_end.query() else 0.0
-        total_ms = decode_end.elapsed_time(prefill_start) if decode_end.query() else ttft_ms + decode_ms
+        prefill_start = self._pending_iteration_events["prefill_start"]
+        prefill_end = self._pending_iteration_events["prefill_end"]
+        decode_start = self._pending_iteration_events["decode_start"]
+        decode_end = self._pending_iteration_events["decode_end"]
+        self._pending_iteration_events = None
 
-        # Defensive clamp to avoid negative/zero timing artifacts
+        ttft_ms = prefill_start.elapsed_time(prefill_end) if prefill_end.query() else 0.0
+        decode_ms = decode_start.elapsed_time(decode_end) if decode_end.query() else 0.0
+        total_ms = prefill_start.elapsed_time(decode_end) if decode_end.query() else ttft_ms + decode_ms
+
         eps_ms = 1e-6
         ttft_ms = max(ttft_ms, eps_ms)
         decode_ms = max(decode_ms, eps_ms)
@@ -752,6 +719,11 @@ class DecodeBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self._custom_metrics["compile_error"] = 1.0
         if self._graph_error:
             self._custom_metrics["graph_capture_failed"] = 1.0
+
+        return {
+            "ttft_times_ms": [ttft_ms],
+            "tpot_times_ms": [tpot_ms] * self.cfg.decode_tokens,
+        }
 
     def _finalize_output(self) -> None:
         """Capture a slice of model state for verification."""

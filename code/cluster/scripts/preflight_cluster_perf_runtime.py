@@ -334,6 +334,11 @@ def main() -> int:
     ap.add_argument("--host-python", default="", help="Host Python interpreter for runtime=host stack probe")
     ap.add_argument("--profiles-json", default="", help="Path to stack profile JSON (default: repo config)")
     ap.add_argument("--out-json", default="", help="Optional output JSON path")
+    ap.add_argument(
+        "--require-peermem",
+        action="store_true",
+        help="Require nvidia_peermem to be loaded. Use only for GPUDirect RDMA paths.",
+    )
     args = ap.parse_args()
 
     script_dir = Path(__file__).resolve().parent
@@ -377,9 +382,15 @@ def main() -> int:
                         f"expected digest {expected_digest} not found in {sorted(repo_digests)}"
                     )
 
-    peermem_state = _try_load_peermem()
+    peermem_state = _try_load_peermem() if args.require_peermem else {
+        "loaded_before": _peermem_loaded(),
+        "attempted_modprobe": False,
+        "loaded_after": _peermem_loaded(),
+        "modprobe_errors": [],
+        "required": False,
+    }
     peermem_loaded = bool(peermem_state.get("loaded_after"))
-    if not peermem_loaded:
+    if args.require_peermem and not peermem_loaded:
         detail = "; ".join(peermem_state.get("modprobe_errors") or [])
         if detail:
             errors.append(
@@ -458,6 +469,7 @@ def main() -> int:
         "image_info": image_info,
         "peermem_loaded": peermem_loaded,
         "peermem": peermem_state,
+        "require_peermem": args.require_peermem,
         "expected_stack": expected_stack,
         "detected_stack": detected_stack,
         "requested_math_policy": {

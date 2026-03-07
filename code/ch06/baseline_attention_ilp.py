@@ -58,7 +58,6 @@ class BaselineAttentionILPBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 for query in self.input.split(self.query_chunk, dim=1):
                     out = self.model(query, self.input, self.input)[0]
                     accum += out.sum()
-                    self._synchronize()
                 self._last_sum = accum
         self._payload_accum = accum
 

@@ -92,7 +92,6 @@ class BaselinePrecisionFP8PadInnerBenchmark(VerificationPayloadMixin, BaseBenchm
                 _ = self.model(self.inputs)
                 verify_out = self.model(self._verify_input)
                 self.output = verify_out.detach().float().clone()
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

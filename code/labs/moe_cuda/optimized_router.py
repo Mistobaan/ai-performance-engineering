@@ -172,7 +172,6 @@ class OptimizedRouterTopKBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with nvtx_range("moe_cuda_router_topk", enable=enable_nvtx):
             with torch.inference_mode():
                 self.output = self.model(self.inputs)
-        torch.cuda.synchronize(self.device)
         if self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")
 

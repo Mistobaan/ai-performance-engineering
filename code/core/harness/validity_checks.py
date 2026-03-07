@@ -25,6 +25,11 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from core.benchmark.hot_path_checks import (
+    check_benchmark_fn_antipatterns,
+    check_benchmark_fn_sync_calls,
+)
+
 try:
     import torch
 except ImportError:
@@ -589,6 +594,164 @@ def _parse_cgroup_v2_path(cgroup_text: str) -> Optional[str]:
     return None
 
 
+def _list_foreign_cuda_compute_processes(
+    *,
+    device_index: int,
+    current_pid: int,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Return compute-process records on this GPU excluding current_pid."""
+
+    try:
+        import pynvml
+    except ImportError as exc:  # pragma: no cover - environment dependent
+        return [], f"pynvml unavailable: {exc}"
+
+    def _query_processes(handle: Any) -> List[Any]:
+        for fn_name in (
+            "nvmlDeviceGetComputeRunningProcesses_v3",
+            "nvmlDeviceGetComputeRunningProcesses_v2",
+            "nvmlDeviceGetComputeRunningProcesses_v1",
+            "nvmlDeviceGetComputeRunningProcesses",
+        ):
+            fn = getattr(pynvml, fn_name, None)
+            if fn is None:
+                continue
+            return list(fn(handle))
+        return []
+
+    unknown_mem = getattr(pynvml, "NVML_VALUE_NOT_AVAILABLE", None)
+    foreign: List[Dict[str, Any]] = []
+    try:
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(int(device_index))
+        for proc in _query_processes(handle):
+            pid = int(getattr(proc, "pid", -1))
+            if pid <= 0 or pid == int(current_pid):
+                continue
+            used_raw = getattr(proc, "usedGpuMemory", None)
+            used_mb: Optional[float] = None
+            try:
+                if used_raw is not None:
+                    used_int = int(used_raw)
+                    if unknown_mem is None or used_int != int(unknown_mem):
+                        used_mb = used_int / (1024.0 * 1024.0)
+            except Exception:
+                used_mb = None
+            proc_name: Optional[str] = None
+            try:
+                raw_name = pynvml.nvmlSystemGetProcessName(pid)
+                if isinstance(raw_name, (bytes, bytearray)):
+                    proc_name = raw_name.decode("utf-8", errors="ignore")
+                elif raw_name is not None:
+                    proc_name = str(raw_name)
+            except Exception:
+                proc_name = None
+            foreign.append(
+                {
+                    "pid": pid,
+                    "process_name": proc_name,
+                    "used_memory_mb": used_mb,
+                }
+            )
+    except Exception as exc:  # pragma: no cover - environment dependent
+        return [], f"NVML query failed: {exc}"
+    finally:
+        try:
+            pynvml.nvmlShutdown()
+        except Exception:
+            pass
+    return foreign, None
+
+
+def _collect_process_tree_pids(root_pid: int, proc_root: Path = Path("/proc")) -> Set[int]:
+    """Collect `root_pid` plus all descendant PIDs visible under /proc."""
+    owned: Set[int] = {int(root_pid)}
+    ppid_to_children: Dict[int, Set[int]] = {}
+
+    try:
+        proc_entries = list(proc_root.iterdir())
+    except Exception:
+        return owned
+
+    for entry in proc_entries:
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        stat_path = entry / "stat"
+        try:
+            stat_text = stat_path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        # /proc/<pid>/stat format: "<pid> (<comm>) <state> <ppid> ..."
+        close_paren = stat_text.rfind(")")
+        if close_paren < 0:
+            continue
+        tail = stat_text[close_paren + 1 :].strip().split()
+        if len(tail) < 2:
+            continue
+        try:
+            ppid = int(tail[1])
+        except ValueError:
+            continue
+        ppid_to_children.setdefault(ppid, set()).add(pid)
+
+    stack = [int(root_pid)]
+    while stack:
+        parent = stack.pop()
+        for child in ppid_to_children.get(parent, set()):
+            if child in owned:
+                continue
+            owned.add(child)
+            stack.append(child)
+    return owned
+
+
+def _collect_process_lineage_pids(root_pid: int, proc_root: Path = Path("/proc")) -> Set[int]:
+    """Collect `root_pid` plus all ancestor PIDs visible under /proc."""
+    lineage: Set[int] = {int(root_pid)}
+    current_pid = int(root_pid)
+
+    while True:
+        stat_path = proc_root / str(current_pid) / "stat"
+        try:
+            stat_text = stat_path.read_text(encoding="utf-8")
+        except Exception:
+            break
+        close_paren = stat_text.rfind(")")
+        if close_paren < 0:
+            break
+        tail = stat_text[close_paren + 1 :].strip().split()
+        if len(tail) < 2:
+            break
+        try:
+            parent_pid = int(tail[1])
+        except ValueError:
+            break
+        if parent_pid <= 0 or parent_pid in lineage:
+            break
+        lineage.add(parent_pid)
+        current_pid = parent_pid
+
+    return lineage
+
+
+def _pid_is_live_process(pid: int, proc_root: Path = Path("/proc")) -> bool:
+    """Return True when `/proc/<pid>` exists and the process is not a zombie."""
+    stat_path = proc_root / str(int(pid)) / "stat"
+    try:
+        stat_text = stat_path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+    close_paren = stat_text.rfind(")")
+    if close_paren < 0:
+        return False
+    tail = stat_text[close_paren + 1 :].strip().split()
+    if not tail:
+        return False
+    state = tail[0]
+    return state not in {"Z", "X", "x"}
+
+
 def validate_environment(
     *,
     device: Optional["torch.device"] = None,
@@ -638,6 +801,73 @@ def validate_environment(
                 warnings_list.append(
                     f"Multiple GPUs detected ({gpu_count}). Ensure benchmarks use consistent device placement."
                 )
+            device_index = int(device.index) if device.index is not None else int(torch.cuda.current_device())
+            details["gpu_device_index"] = device_index
+            # Only perform live process checks against the real host filesystem.
+            if probe.root.resolve() == Path("/"):
+                allow_foreign = str(probe.env.get("AISP_ALLOW_FOREIGN_GPU_PROCESSES", "")).strip().lower() in {
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
+                }
+                # Strict mode should reject moderate concurrent workloads too:
+                # a few hundred MiB of active compute can still distort timings.
+                min_foreign_mb = 512.0
+                raw_min_foreign_mb = str(probe.env.get("AISP_FOREIGN_GPU_PROCESS_MIN_MB", "")).strip()
+                if raw_min_foreign_mb:
+                    try:
+                        min_foreign_mb = float(raw_min_foreign_mb)
+                    except ValueError:
+                        warnings_list.append(
+                            f"Invalid AISP_FOREIGN_GPU_PROCESS_MIN_MB='{raw_min_foreign_mb}'; using default {min_foreign_mb:.0f}MiB."
+                        )
+                foreign_procs, foreign_err = _list_foreign_cuda_compute_processes(
+                    device_index=device_index,
+                    current_pid=os.getpid(),
+                )
+                if foreign_err:
+                    warnings_list.append(f"Could not validate foreign CUDA compute processes: {foreign_err}")
+                else:
+                    owned_process_tree = _collect_process_tree_pids(os.getpid())
+                    owned_process_lineage = _collect_process_lineage_pids(os.getpid())
+                    owned_related_pids = owned_process_tree | owned_process_lineage
+                    foreign_procs = [
+                        proc
+                        for proc in foreign_procs
+                        if int(proc.get("pid", -1)) not in owned_related_pids
+                        and _pid_is_live_process(int(proc.get("pid", -1)))
+                    ]
+                    details["foreign_cuda_compute_processes"] = foreign_procs
+                    details["foreign_cuda_compute_process_min_mb"] = min_foreign_mb
+                    significant_foreign = []
+                    for proc in foreign_procs:
+                        mem = proc.get("used_memory_mb")
+                        if mem is None or float(mem) >= min_foreign_mb:
+                            significant_foreign.append(proc)
+                    if significant_foreign:
+                        preview: List[str] = []
+                        for proc in significant_foreign[:5]:
+                            mem = proc.get("used_memory_mb")
+                            mem_txt = f"{mem:.1f}MiB" if isinstance(mem, (int, float)) else "unknown"
+                            name = proc.get("process_name") or "unknown"
+                            preview.append(f"pid={proc['pid']} name={name} mem={mem_txt}")
+                        if len(significant_foreign) > 5:
+                            preview.append(f"+{len(significant_foreign) - 5} more")
+                        msg = (
+                            "Foreign CUDA compute process(es) detected on benchmark GPU before run: "
+                            + "; ".join(preview)
+                            + f". Threshold={min_foreign_mb:.0f}MiB. "
+                            + "Stop concurrent GPU workloads (for example vLLM serve/bench) before strict benchmarking."
+                        )
+                        if allow_foreign:
+                            warnings_list.append(
+                                msg + " Override acknowledged via AISP_ALLOW_FOREIGN_GPU_PROCESSES=1."
+                            )
+                        else:
+                            errors.append(msg)
+            else:
+                details["foreign_cuda_compute_processes"] = []
 
     # Swap interference (Memory category)
     swaps = _read_optional(probe, "/proc/swaps")
@@ -1730,6 +1960,8 @@ def check_graph_capture_integrity(
 
 __all__ = [
     # GPU State
+    "check_benchmark_fn_sync_calls",
+    "check_benchmark_fn_antipatterns",
     "GPUState",
     "capture_gpu_state", 
     "check_gpu_state_consistency",

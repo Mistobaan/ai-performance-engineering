@@ -1,0 +1,33 @@
+{
+  "advanced_coverage": {
+    "allgather_control_plane": true,
+    "allreduce_latency_comp": true,
+    "allreduce_stability": true,
+    "fio_repeat_stability": true,
+    "mlperf_alignment": true,
+    "nccl_algo_comparison": true,
+    "nccl_alltoall": true,
+    "train_step_workload": true,
+    "vllm_concurrency_repeat_stability": true,
+    "vllm_request_rate_repeat_stability": true,
+    "vllm_request_rate_sweep": true
+  },
+  "advanced_coverage_score_pct": 100,
+  "coverage_maturity": "high",
+  "coverage_score_pct": 100,
+  "generated_at_utc": "2026-03-05T15:42:16.023468+00:00",
+  "labels": [
+    "localhost"
+  ],
+  "missing_subsystems": [],
+  "primary_label": "localhost",
+  "recommendations": [],
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "subsystem_coverage": {
+    "ai_workloads": true,
+    "gpu_cpu_transfer": true,
+    "gpu_gpu_communication": true,
+    "hbm_memory": true,
+    "sm_compute": true
+  }
+}

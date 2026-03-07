@@ -132,7 +132,6 @@ class BaselineCudaPythonBenchmark(VerificationPayloadMixin, BaseBenchmark):
             # Step 4: Residual connection (separate kernel)
             self.output = masked + self.input
         
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

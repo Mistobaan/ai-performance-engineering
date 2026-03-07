@@ -9,7 +9,7 @@ Usage:
 
 Notes:
 - Appends a markdown entry to field-report.md (Activity Log table section).
-- Writes a raw log to results/raw/activity/<RUN_ID>_activity.log.
+- Writes a raw log to runs/<RUN_ID>/raw/activity/<RUN_ID>_activity.log.
 EOF
 }
 
@@ -23,6 +23,8 @@ shift
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIELD_REPORT="${ROOT_DIR}/field-report.md"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 LABEL=""
 NOTE=""
@@ -53,7 +55,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-RAW_DIR="${ROOT_DIR}/results/raw/activity"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}/activity"
 RAW_LOG="${RAW_DIR}/${RUN_ID}_activity.log"
 mkdir -p "$RAW_DIR"
 

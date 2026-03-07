@@ -12,6 +12,8 @@ from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, Workl
 
 class BaselineDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Host-staged sum to contrast with on-device aggregation."""
+
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
     
     def __init__(self):
         super().__init__()
@@ -37,7 +39,6 @@ class BaselineDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
             cpu_result = self.data.cpu().sum()
             result = cpu_result.to(self.device)
             _ = result
-            self._synchronize()
         self.output = result.detach().clone()
 
     def capture_verification_payload(self) -> None:

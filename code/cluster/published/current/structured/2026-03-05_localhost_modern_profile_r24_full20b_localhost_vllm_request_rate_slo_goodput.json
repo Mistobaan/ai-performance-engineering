@@ -1,0 +1,78 @@
+{
+  "input_csv": "/home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_request_rate_sweep.csv",
+  "label": "localhost",
+  "points": [
+    {
+      "goodput_req_s": 0.87806,
+      "goodput_tok_s": 1798.266683,
+      "p99_tpot_ms": 42.330522,
+      "p99_ttft_ms": 137.682919,
+      "request_rate": 1.0,
+      "request_throughput": 0.87806,
+      "slo_pass": true,
+      "total_token_throughput": 1798.266683
+    },
+    {
+      "goodput_req_s": 1.56538,
+      "goodput_tok_s": 3205.897692,
+      "p99_tpot_ms": 42.637902,
+      "p99_ttft_ms": 142.932349,
+      "request_rate": 2.0,
+      "request_throughput": 1.56538,
+      "slo_pass": true,
+      "total_token_throughput": 3205.897692
+    },
+    {
+      "goodput_req_s": 2.564564,
+      "goodput_tok_s": 5252.226788,
+      "p99_tpot_ms": 41.127092,
+      "p99_ttft_ms": 144.558847,
+      "request_rate": 4.0,
+      "request_throughput": 2.564564,
+      "slo_pass": true,
+      "total_token_throughput": 5252.226788
+    },
+    {
+      "goodput_req_s": 3.313796,
+      "goodput_tok_s": 6786.654083,
+      "p99_tpot_ms": 41.328819,
+      "p99_ttft_ms": 148.549036,
+      "request_rate": 8.0,
+      "request_throughput": 3.313796,
+      "slo_pass": true,
+      "total_token_throughput": 6786.654083
+    },
+    {
+      "goodput_req_s": 3.445355,
+      "goodput_tok_s": 7056.087509,
+      "p99_tpot_ms": 41.269583,
+      "p99_ttft_ms": 154.350479,
+      "request_rate": 16.0,
+      "request_throughput": 3.445355,
+      "slo_pass": true,
+      "total_token_throughput": 7056.087509
+    }
+  ],
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "slo_thresholds_ms": {
+    "p99_tpot_ms": 200.0,
+    "p99_ttft_ms": 2000.0
+  },
+  "status": "ok",
+  "summary": {
+    "all_points_meet_slo": true,
+    "any_point_meets_slo": true,
+    "goodput_efficiency_req_ratio": 1.0,
+    "goodput_efficiency_tok_ratio": 1.0,
+    "knee_request_rate": null,
+    "max_goodput_req_s": 3.445355,
+    "max_goodput_tok_s": 7056.087509,
+    "p99_tpot_ms_at_max_goodput_tok_s": 41.269583,
+    "p99_ttft_ms_at_max_goodput_tok_s": 154.350479,
+    "peak_total_req_s": 3.445355,
+    "peak_total_tok_s": 7056.087509,
+    "request_rate_at_max_goodput_tok_s": 16.0,
+    "request_rate_at_peak_total_tok_s": 16.0,
+    "request_rate_points": 5
+  }
+}

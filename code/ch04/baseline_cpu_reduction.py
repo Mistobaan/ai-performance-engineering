@@ -31,6 +31,8 @@ from ch04.verification_payload_mixin import VerificationPayloadMixin
 
 class BaselineCpuReductionBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Anti-pattern: CPU round-trips for tensor reduction (very slow)."""
+
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
     
     def __init__(self):
         super().__init__()
@@ -80,7 +82,6 @@ class BaselineCpuReductionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 if self.output is None:
                     self.output = torch.empty_like(reduced, device=self.device)
                 self.output.copy_(reduced, non_blocking=False)
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.input is None or self.output is None:

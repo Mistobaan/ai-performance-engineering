@@ -13,25 +13,12 @@ speculative decoding algorithms and optimizations, see:
 - ch18/run_vllm_decoder.py (production vLLM integration)
 """
 
-import pathlib
-import sys
-
-_EXTRAS_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-if str(_EXTRAS_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_EXTRAS_REPO_ROOT))
-
-from pathlib import Path
-
 import os
 from contextlib import nullcontext
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Tuple, Optional
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-from arch_config import ArchitectureConfig
 import torch.profiler as profiler
 from torch.profiler import profile, record_function, ProfilerActivity, schedule
 import torch.cuda.nvtx as nvtx
@@ -42,28 +29,14 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from torch.nn.attention import sdpa_kernel, SDPBackend
 from core.utils.compile_utils import compile_callable, maybe_nested_compile_region
+from core.utils.architecture_runtime import (
+    get_arch_config,
+    get_architecture,
+    get_architecture_info,
+)
 from core.benchmark.gpu_requirements import require_min_gpus
 
-_ARCH_CFG = ArchitectureConfig()
-
-
-def get_architecture():
-    """Detect and return the current GPU architecture."""
-    if not torch.cuda.is_available():
-        return "cpu"
-    return _ARCH_CFG.arch
-
-
-def get_architecture_info():
-    """Get detailed architecture information."""
-    return {
-        "name": _ARCH_CFG.get_architecture_name(),
-        "compute_capability": _ARCH_CFG.config.get("compute_capability", "Unknown"),
-        "sm_version": _ARCH_CFG.config.get("sm_version", "sm_unknown"),
-        "memory_bandwidth": _ARCH_CFG.config.get("memory_bandwidth", "Unknown"),
-        "tensor_cores": _ARCH_CFG.config.get("tensor_cores", "Unknown"),
-        "features": _ARCH_CFG.config.get("features", []),
-    }
+_ARCH_CFG = get_arch_config()
 
 """disaggregated_inference_multigpu.py
 Chapter 15: Disaggregated Inference Architectures

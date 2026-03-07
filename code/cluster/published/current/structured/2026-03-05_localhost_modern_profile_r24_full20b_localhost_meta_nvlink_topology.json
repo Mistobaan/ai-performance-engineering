@@ -1,0 +1,22 @@
+{
+  "figure": "/home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.png",
+  "label": "localhost",
+  "meta_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta.json",
+  "run_ref": "2026-03-05_localhost_modern_profile_r24_full20b_localhost",
+  "summary": {
+    "gpu_count": 1,
+    "gpu_labels": [
+      "GPU0"
+    ],
+    "gpu_matrix": {
+      "GPU0": {
+        "GPU0": "X"
+      }
+    },
+    "link_pair_counts": {},
+    "nvlink_pair_count": 0,
+    "nvlink_width_max": null,
+    "nvlink_width_mean": null,
+    "nvlink_width_min": null
+  }
+}

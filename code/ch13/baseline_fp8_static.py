@@ -91,7 +91,6 @@ class BaselineFP8StaticBenchmark(VerificationPayloadMixin, BaseBenchmark):
             _ = torch.clamp(input_amax / self.static_linear.fp8_max, min=1e-12)
             _ = torch.clamp(weight_amax / self.static_linear.fp8_max, min=1e-12)
             self.output = self.static_linear(self.x)
-        self._synchronize()
 
         if self._verify_input is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")

@@ -44,7 +44,6 @@ class OptimizedBankConflictsBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with self._nvtx_range("bank_conflicts_optimized"):
             for _ in range(self.repeats):
                 self._extension.bank_conflicts_padded(self.output, self.input)
-            self._synchronize()
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

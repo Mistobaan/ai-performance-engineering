@@ -61,7 +61,6 @@ class BaselineLongContextAttentionBenchmark(VerificationPayloadMixin, BaseBenchm
             scores = scores.masked_fill(self._mask, float("-inf"))
             attn = torch.softmax(scores, dim=-1)
             self.output = torch.matmul(attn, self.v)
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

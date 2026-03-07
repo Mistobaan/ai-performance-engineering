@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF' >&2
 Run grouped GEMM benchmark (DeepGEMM FP8xFP4 path + torch baselines)
-and write a structured log + summary + plot under results/ and docs/.
+and write a structured log + summary + plot under runs/<run_id>/.
 
 This validates the DeepGEMM grouped-GEMM FP8xFP4 path on GB200/SM100.
 
@@ -37,6 +37,8 @@ if [[ ! -f "${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh" ]]; then
   echo "ERROR: missing stack profile helper: ${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh" >&2
   exit 1
 fi
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 # shellcheck source=scripts/cluster_perf_stack_profiles.sh
 source "${ROOT_DIR}/scripts/cluster_perf_stack_profiles.sh"
 
@@ -92,14 +94,17 @@ if [[ "$RUNTIME" == "container" && -z "$IMAGE" ]]; then
   exit 1
 fi
 
-mkdir -p "${ROOT_DIR}/results/structured" "${ROOT_DIR}/docs/figures"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+OUT_FIG_DIR="${CLUSTER_FIGURES_DIR_EFFECTIVE}"
+mkdir -p "${OUT_STRUCT_DIR}" "${OUT_FIG_DIR}"
 
-OUT_LOG="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm.txt"
-OUT_JSON="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_summary.json"
-OUT_PNG="${ROOT_DIR}/docs/figures/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_tflops.png"
-LOCK_META="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_clock_lock.json"
-PREFLIGHT_STACK_META="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_preflight_stack.json"
-PREFLIGHT_CLOCK_META="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_preflight_clock_lock.json"
+OUT_LOG="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm.txt"
+OUT_JSON="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_summary.json"
+OUT_PNG="${OUT_FIG_DIR}/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_tflops.png"
+LOCK_META="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_clock_lock.json"
+PREFLIGHT_STACK_META="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_preflight_stack.json"
+PREFLIGHT_CLOCK_META="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_cluster_perf_grouped_gemm_preflight_clock_lock.json"
 BENCH_SCRIPT_REL="scripts/benchmarks/grouped_gemm_bench.py"
 BENCH_SCRIPT="${ROOT_DIR}/${BENCH_SCRIPT_REL}"
 MATH_ALLOW_TF32="$(cluster_perf_profile_math_allow_tf32 "$ROOT_DIR" "$STACK_PROFILE")"

@@ -357,7 +357,6 @@ class OptimizedCudaPythonBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with self._nvtx_range("optimized_cuda_python"):
             self._run_fused_kernel()
         
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.input is None or self.mask is None or self.weight is None or self.bias is None or self.output is None:

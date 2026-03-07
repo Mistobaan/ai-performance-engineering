@@ -90,7 +90,6 @@ class BaselineDecodeKernelBenchmark(VerificationPayloadMixin, BaseBenchmark):
         enable_nvtx = get_nvtx_enabled(self.get_config())
         with nvtx_range("moe_cuda_decode_kernel_baseline", enable=enable_nvtx):
             run_baseline_kernel(self.input, self._output_buffer)
-        torch.cuda.synchronize(self.device)
         self.output = self._output_buffer
         if self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")

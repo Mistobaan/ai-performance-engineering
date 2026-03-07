@@ -5,7 +5,10 @@ from __future__ import annotations
 from core.harness.benchmark_harness import BaseBenchmark
 
 from ch17.prefill_decode_disagg_multigpu_common import PrefillDecodeConfig
-from ch17.prefill_decode_disagg_single_common import PrefillDecodeSingleGPUBenchmark, attach_benchmark_metadata
+from ch17.prefill_decode_disagg_single_common import (
+    BaselinePrefillDecodeSingleGPUBenchmark,
+    attach_benchmark_metadata,
+)
 
 TPOT_LONG_CONFIG = PrefillDecodeConfig(
     context_window=2048,
@@ -16,8 +19,7 @@ TPOT_LONG_CONFIG = PrefillDecodeConfig(
 
 
 def get_benchmark() -> BaseBenchmark:
-    bench = PrefillDecodeSingleGPUBenchmark(
-        use_host_staging=True,
+    bench = BaselinePrefillDecodeSingleGPUBenchmark(
         label="baseline_prefill_decode_disagg_tpot_long",
         cfg=TPOT_LONG_CONFIG,
     )

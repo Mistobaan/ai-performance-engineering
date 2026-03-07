@@ -15,16 +15,10 @@ Optimization behavior:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Optional
 
 import torch
 import torch.nn as nn
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from ch15.verification_payload_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
@@ -174,4 +168,3 @@ if __name__ == "__main__":
     from core.harness.benchmark_harness import benchmark_main
 
     benchmark_main(get_benchmark)
-

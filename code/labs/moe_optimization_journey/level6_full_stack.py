@@ -178,6 +178,7 @@ class Level6FullStack(VerificationPayloadMixin, BaseBenchmark):
         self.parameter_count: int = 0
         self.last_latency_ms: float = 0.0
         self.last_tokens_per_sec: float = 0.0
+        self._pending_events: Optional[Tuple[torch.cuda.Event, torch.cuda.Event]] = None
         
         total_tokens = self.config.batch_size * self.config.seq_len
         self._workload = WorkloadMetadata(
@@ -241,8 +242,9 @@ class Level6FullStack(VerificationPayloadMixin, BaseBenchmark):
         print("Ready")
     
     def benchmark_fn(self) -> None:
-        torch.cuda.synchronize()
-        start = time.perf_counter()
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()
         
         with self._nvtx_range("level6_cuda_graphs"):
             # torch.compile with reduce-overhead handles graph replay internally
@@ -250,13 +252,23 @@ class Level6FullStack(VerificationPayloadMixin, BaseBenchmark):
                 logits = self.compiled_model(self.static_input)
         self.output = logits[:, :1, : min(8, logits.shape[-1])].detach().float().clone()
         
-        torch.cuda.synchronize()
-        self.last_latency_ms = (time.perf_counter() - start) * 1000
-        
-        total_tokens = self.config.batch_size * self.config.seq_len
-        self.last_tokens_per_sec = total_tokens / (self.last_latency_ms / 1000)
+        end_event.record()
+        self._pending_events = (start_event, end_event)
         if self.static_input is None or self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")
+
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, float]]:
+        if self._pending_events is None:
+            return None
+        start_event, end_event = self._pending_events
+        self._pending_events = None
+        self.last_latency_ms = start_event.elapsed_time(end_event)
+        total_tokens = self.config.batch_size * self.config.seq_len
+        self.last_tokens_per_sec = total_tokens / max(self.last_latency_ms / 1000.0, 1e-9)
+        return {
+            "latency_ms": float(self.last_latency_ms),
+            "tokens_per_sec": float(self.last_tokens_per_sec),
+        }
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

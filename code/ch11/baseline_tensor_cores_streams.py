@@ -105,9 +105,9 @@ class BaselineTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchmar
                     with torch.cuda.stream(self.stream):
                         torch.matmul(self.device_A[idx], self.device_B[idx], out=self.device_C[idx])
                         self.device_output_rows[idx].copy_(self.device_C[idx, 0], non_blocking=True)
-                    self.stream.synchronize()
 
-        torch.cuda.synchronize()
+        torch.cuda.current_stream(device=self.device).wait_stream(self.stream)
+
         assert self.host_output is not None
         self.host_output.copy_(self.device_output_rows, non_blocking=False)
 

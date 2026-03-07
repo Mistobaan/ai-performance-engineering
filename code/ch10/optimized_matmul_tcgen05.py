@@ -63,7 +63,6 @@ class OptimizedMatmulTCGen05Benchmark(VerificationPayloadMixin, BaseBenchmark):
             with torch.no_grad():
                 # Match baseline math: baseline kernel treats B as (N, K) and computes A @ B^T
                 self.output = torch.matmul(self.A, self.B.transpose(0, 1))
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

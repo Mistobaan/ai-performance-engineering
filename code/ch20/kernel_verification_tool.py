@@ -15,13 +15,6 @@ guarantees.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
-
 import torch
 import torch.nn.functional as F
 from typing import Optional, List, Tuple, Dict, Any
@@ -284,8 +277,6 @@ class BaselineKernelVerificationBenchmark(VerificationPayloadMixin, BaseBenchmar
             if self.test_kernel is None:
                 raise RuntimeError("setup() must initialize test kernel")
             self.output = self.test_kernel(self._verify_input)[:32, :32].contiguous()
-        
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self._verify_input is None or self.output is None:

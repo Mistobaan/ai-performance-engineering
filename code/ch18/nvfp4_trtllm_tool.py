@@ -87,7 +87,6 @@ class NVFP4TRTLLMBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     self.output = first if isinstance(first, torch.Tensor) else torch.as_tensor(first)
                 except Exception:
                     self.output = torch.tensor([float(len(outputs))], device=self.device)
-            torch.cuda.synchronize(self.device)
             if self.output is None:
                 raise RuntimeError("TRT-LLM generate did not produce output")
             return {}
@@ -102,7 +101,6 @@ class NVFP4TRTLLMBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     self.output = self.linear(self.inputs)
             except Exception:
                 self.output = self.linear(self.inputs)
-        torch.cuda.synchronize(self.device)
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output")
         return {}

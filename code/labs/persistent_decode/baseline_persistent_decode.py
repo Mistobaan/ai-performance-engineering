@@ -60,7 +60,6 @@ class BaselinePersistentDecodeBenchmark(VerificationPayloadMixin, BaseBenchmark)
         with self._nvtx_range("baseline_per_token"):
             for t in range(self.seq_len):
                 self._decode_step(t)
-            self._synchronize()
             if self.inputs is not None:
                 # Capture a slice of the output tensor
                 self.output = self.inputs.out[:1, : min(8, self.inputs.out.shape[1])].detach().float().clone()

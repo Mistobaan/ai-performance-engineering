@@ -13,15 +13,11 @@ Compare with baseline_paged_attention.py which uses naive O(n²) attention.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig

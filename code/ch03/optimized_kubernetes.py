@@ -125,7 +125,6 @@ class OptimizedKubernetesBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.cur_slot, self.next_slot = self.next_slot, self.cur_slot
         self.batch_idx += 1
         self._prefetch_slot(self.next_slot)
-        self._synchronize()
         self._payload_data = data
         self._payload_target = target
 

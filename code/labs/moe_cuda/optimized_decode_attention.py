@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from arch_config import prefer_sdpa_backends
+from core.benchmark.cuda_event_timing import elapsed_ms
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from core.profiling.nvtx_helper import get_nvtx_enabled, nvtx_range
@@ -57,6 +58,7 @@ class OptimizedDecodeAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark)
             tokens_per_iteration=float(tokens),
         )
         self._history: Dict[str, List[float]] = {"latency_ms": []}
+        self._pending_timing_pair: Optional[tuple[torch.cuda.Event, torch.cuda.Event]] = None
 
     def setup(self) -> None:
         if not torch.cuda.is_available():
@@ -105,15 +107,17 @@ class OptimizedDecodeAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark)
         enable_nvtx = get_nvtx_enabled(self.get_config())
         with nvtx_range("moe_cuda_decode_optimized", enable=enable_nvtx):
             with torch.inference_mode():
-                start = self._record_start()
+                start_event = torch.cuda.Event(enable_timing=True)
+                end_event = torch.cuda.Event(enable_timing=True)
+                start_event.record()
                 q = self._cached_bf16(self.q, cache="_q_bf16", version="_q_version")
                 k = self._cached_bf16(self.k, cache="_k_bf16", version="_k_version")
                 v = self._cached_bf16(self.v, cache="_v_bf16", version="_v_version")
                 with prefer_sdpa_backends():
                     attn = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0, is_causal=False)
                 attn_out = attn.transpose(1, 2).reshape(self.batch, 1, self.num_heads * self.head_dim)
-                torch.cuda.synchronize(self.device)
-                self._history["latency_ms"].append(self._record_stop(start))
+                end_event.record()
+                self._pending_timing_pair = (start_event, end_event)
                 self.output = attn_out.detach().float().clone()
         if self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")
@@ -123,9 +127,18 @@ class OptimizedDecodeAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark)
             device="cpu",
         )
         self._payload_meta = meta
-        return {"decode_ms": self._history["latency_ms"]}
+        return None
+
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, List[float]]]:
+        if self._pending_timing_pair is None:
+            return None
+        latency_ms = elapsed_ms(self._pending_timing_pair)
+        self._pending_timing_pair = None
+        self._history["latency_ms"].append(latency_ms)
+        return {"decode_ms": [latency_ms]}
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         meta = self._payload_meta
         self._set_verification_payload(
             inputs={"meta": meta, "q": self.q, "k": self.k, "v": self.v},
@@ -156,6 +169,7 @@ class OptimizedDecodeAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark)
         return self._workload
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        self.finalize_iteration_metrics()
         if not self._history["latency_ms"]:
             return None
         return {

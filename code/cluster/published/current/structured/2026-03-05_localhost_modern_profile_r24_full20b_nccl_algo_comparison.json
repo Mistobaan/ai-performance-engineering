@@ -1,0 +1,34 @@
+{
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "hosts": [
+    "localhost"
+  ],
+  "gpus_per_node": 1,
+  "total_ranks": 1,
+  "algorithms_tested": [
+    {
+      "algo": "Ring",
+      "status": "ok",
+      "peak_busbw_gbps": 0.0,
+      "output": "/home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_ring.json"
+    },
+    {
+      "algo": "Tree",
+      "status": "ok",
+      "peak_busbw_gbps": 0.0,
+      "output": "/home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_tree.json"
+    },
+    {
+      "algo": "NVLS",
+      "status": "ok",
+      "peak_busbw_gbps": 0.0,
+      "output": "/home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_nvls.json"
+    },
+    {
+      "algo": "auto",
+      "status": "ok",
+      "peak_busbw_gbps": 0.0,
+      "output": "/home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_auto.json"
+    }
+  ]
+}

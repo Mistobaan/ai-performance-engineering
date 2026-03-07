@@ -129,7 +129,6 @@ class OptimizedPersistentDecodeTritonBenchmark(VerificationPayloadMixin, BaseBen
                 num_warps=2,
                 num_stages=1,
             )
-            self._synchronize()
         self.output = self.inputs.out[:1, : min(8, self.inputs.out.shape[1])].detach().float().clone()
         if self.inputs is None or self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")

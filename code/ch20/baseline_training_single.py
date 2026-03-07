@@ -68,7 +68,6 @@ class BaselineTrainingSingleBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 loss = self.criterion(outputs, self.targets)
                 loss.backward()
                 self.optimizer.step()
-            self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.model is None or self.inputs is None or self.targets is None:

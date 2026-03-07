@@ -26,6 +26,7 @@ from core.harness.benchmark_harness import (
     BenchmarkHarness,
     BenchmarkMode,
 )
+from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -167,7 +168,7 @@ class MoELayer(nn.Module):
         return output, metrics
 
 
-class DeepSeekR1MoEOptimization(BaseBenchmark):
+class DeepSeekR1MoEOptimization(VerificationPayloadMixin, BaseBenchmark):
     """DeepSeek-R1 style MoE optimization benchmark."""
     
     def __init__(
@@ -185,6 +186,7 @@ class DeepSeekR1MoEOptimization(BaseBenchmark):
         self.num_experts = num_experts
         self.top_k = top_k
         self._last_metrics: Dict[str, Any] = {}
+        self.output: Optional[torch.Tensor] = None
 
         logger.info(f"DeepSeek-R1 MoE Optimization")
         logger.info(f"  Experts: {num_experts}, Top-K: {top_k}")
@@ -213,16 +215,24 @@ class DeepSeekR1MoEOptimization(BaseBenchmark):
 
     def benchmark_fn(self) -> None:
         """Execute MoE forward pass."""
-        self._synchronize()
-        start = time.perf_counter()
+        use_cuda_timing = self.device.type == "cuda"
+        if use_cuda_timing:
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            start_event.record()
+        else:
+            start_time = time.perf_counter()
 
         # Forward pass
         output, metrics = self.moe_layer(self.input)
+        self.output = output[:1, : min(4, output.shape[1]), : min(8, output.shape[2])].detach().float().clone()
 
-        self._synchronize()
-        end = time.perf_counter()
-
-        elapsed_ms = (end - start) * 1000
+        if use_cuda_timing:
+            end_event.record()
+            end_event.synchronize()
+            elapsed_ms = start_event.elapsed_time(end_event)
+        else:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
         # Calculate throughput
         tokens_per_sec = (self.batch_size * self.seq_length) / (elapsed_ms / 1000)
@@ -238,6 +248,24 @@ class DeepSeekR1MoEOptimization(BaseBenchmark):
             "throughput": tokens_per_sec,
             **{k: v.item() if torch.is_tensor(v) else v for k, v in metrics.items()}
         }
+        if self.output is None:
+            raise RuntimeError("benchmark_fn() did not produce output")
+
+    def capture_verification_payload(self) -> None:
+        if self.output is None:
+            raise RuntimeError("benchmark_fn() must run before capture_verification_payload()")
+        self._set_verification_payload(
+            inputs={"input": self.input.detach()},
+            output=self.output,
+            batch_size=self.batch_size,
+            parameter_count=sum(p.numel() for p in self.moe_layer.parameters()),
+            precision_flags={
+                "fp16": False,
+                "bf16": True,
+                "tf32": torch.backends.cuda.matmul.allow_tf32 if self.device.type == "cuda" else False,
+            },
+            output_tolerance=(0.1, 1.0),
+        )
 
     def get_custom_metrics(self) -> Dict[str, Any]:
         return self._last_metrics
@@ -246,6 +274,7 @@ class DeepSeekR1MoEOptimization(BaseBenchmark):
         """Clean up resources."""
         del self.moe_layer
         del self.input
+        self.output = None
         super().teardown()
 
 

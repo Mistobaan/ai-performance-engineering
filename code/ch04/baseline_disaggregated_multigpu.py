@@ -126,7 +126,6 @@ class BaselineDisaggregatedBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     dist.all_reduce(decode_output, op=dist.ReduceOp.SUM)
                     decode_output = decode_output / self.world_size
                 self.output = decode_output.detach()
-        self._synchronize()
                 
             # Baseline: No separation - both phases interfere with each other
                 # This leads to poor GPU utilization and latency spikes

@@ -458,6 +458,7 @@ class FP8PerChannelDemoBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self._last = 0.0
         self.output = None
         self._verify_input = None
+        self._payload_verify_input = None
         
         tokens = self.batch_size * self.seq_len
         self._workload = WorkloadMetadata(
@@ -476,6 +477,14 @@ class FP8PerChannelDemoBenchmark(VerificationPayloadMixin, BaseBenchmark):
             dtype=torch.float32,
             device=str(self.device),
         )
+        self._verify_input = torch.randn(
+            self.batch_size,
+            self.seq_len,
+            self.in_features,
+            device=self.device,
+            dtype=torch.float32,
+        )
+        self._payload_verify_input = self._verify_input.detach().clone()
         # Warmup
         _ = self.demo_benchmark.measure_throughput(num_warmup=5, num_iterations=3)
         torch.cuda.synchronize(self.device)
@@ -484,20 +493,12 @@ class FP8PerChannelDemoBenchmark(VerificationPayloadMixin, BaseBenchmark):
         """Benchmark: Per-channel FP8 forward pass."""
         results = self.demo_benchmark.measure_throughput(num_warmup=5, num_iterations=1)
         self._last = results.get("per_channel", {}).get("elapsed_ms", 0.0)
-        self._synchronize()
-        verify_input = torch.randn(
-            self.batch_size,
-            self.seq_len,
-            self.in_features,
-            device=self.device,
-            dtype=torch.float32,
-        )
-        self._verify_input = verify_input
         if self.demo_benchmark is None or not hasattr(self.demo_benchmark, "per_channel_linear"):
             raise RuntimeError("Demo benchmark not initialized")
+        if self._verify_input is None:
+            raise RuntimeError("Verification input not initialized")
         with torch.no_grad():
-            self.output = self.demo_benchmark.per_channel_linear(verify_input).detach().float().clone()
-        self._payload_verify_input = verify_input
+            self.output = self.demo_benchmark.per_channel_linear(self._verify_input).detach().float().clone()
 
     def capture_verification_payload(self) -> None:
         verify_input = self._payload_verify_input
@@ -517,6 +518,8 @@ class FP8PerChannelDemoBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def teardown(self) -> None:
         """Teardown: Clean up resources."""
         self.demo_benchmark = None
+        self._verify_input = None
+        self._payload_verify_input = None
         torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:

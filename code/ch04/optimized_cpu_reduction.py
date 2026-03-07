@@ -97,7 +97,6 @@ class OptimizedGpuReductionBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.output.copy_(self._reduction_buffer)
             self.output.div_(self.num_shards)
         
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.input is None or self.output is None:

@@ -228,10 +228,16 @@ class NsightAutomation:
             pythonpath_entries.insert(0, str(stub_dir))
             # Keep user-site packages out of profiler child processes.
             env.setdefault("PYTHONNOUSERSITE", "1")
-        # Some host images ship Transformer Engine in non-PyPI layouts that
-        # trip its import-time sanity assertions during profiled subprocesses.
-        # This disables those packaging assertions while preserving runtime behavior.
-        env.setdefault("NVTE_PROJECT_BUILDING", "1")
+        # Do not force NVTE_PROJECT_BUILDING by default. On pinned serving-stack
+        # environments this can trigger Transformer Engine ABI/symbol mismatches
+        # during vLLM imports in profiler subprocesses.
+        force_nvte_project_building = str(
+            env.get("AISP_PROFILE_FORCE_NVTE_PROJECT_BUILDING", "")
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if force_nvte_project_building:
+            env["NVTE_PROJECT_BUILDING"] = "1"
+        else:
+            env.pop("NVTE_PROJECT_BUILDING", None)
         existing = env.get("PYTHONPATH", "")
         if existing:
             pythonpath_entries.append(existing)

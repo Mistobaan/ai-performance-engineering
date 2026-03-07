@@ -12,7 +12,7 @@ FP4 checks use the same Torch/DeepGEMM binary provenance as orig_parity.
 Options:
   --venv-dir <path>              Python venv directory (required)
   --requirements-file <path>     Optional requirements file to install first
-  --parity-image <ref>           Source image (default: cfregly/cluster_perf_orig_parity:latest)
+  --parity-image <ref>           Source image (default: cluster_perf_orig_parity:latest)
   --expected-torch-version <v>   Expected torch.__version__
   --expected-cuda-version <v>    Expected torch.version.cuda
   --expected-cudnn-version <v>   Expected torch.backends.cudnn.version()
@@ -23,7 +23,7 @@ EOF
 
 VENV_DIR=""
 REQUIREMENTS_FILE=""
-PARITY_IMAGE="${PARITY_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+PARITY_IMAGE="${PARITY_IMAGE:-cluster_perf_orig_parity:latest}"
 EXPECTED_TORCH_VERSION="2.10.0a0+a36e1d39eb.nv26.01.42222806"
 EXPECTED_CUDA_VERSION="13.1"
 EXPECTED_CUDNN_VERSION="91701"
@@ -110,6 +110,18 @@ lib_patterns = (
     "/usr/lib/*/*/libucc.so*",
     "/usr/local/lib/libucc.so*",
     "/opt/**/lib/libucc.so*",
+    "/usr/local/lib/libuc*.so*",
+    "/usr/lib/*/libuc*.so*",
+    "/usr/lib/*/*/libuc*.so*",
+    "/opt/**/lib/libuc*.so*",
+    "/usr/local/lib/libmkl*.so*",
+    "/usr/local/lib/libiomp*.so*",
+    "/usr/lib/*/libmkl*.so*",
+    "/usr/lib/*/*/libmkl*.so*",
+    "/usr/lib/*/libiomp*.so*",
+    "/usr/lib/*/*/libiomp*.so*",
+    "/opt/**/lib/libmkl*.so*",
+    "/opt/**/lib/libiomp*.so*",
 )
 runtime_libs = set()
 for pattern in lib_patterns:
@@ -225,7 +237,7 @@ if [[ ! -d "$TORCH_LIB_DIR" ]]; then
   exit 2
 fi
 
-for pattern in "libcudnn*.so*" "libnvpl_*.so*" "libucc.so*"; do
+for pattern in "libcudnn*.so*" "libnvpl_*.so*" "libucc.so*" "libuc*.so*" "libmkl*.so*" "libiomp*.so*"; do
   for existing in "${TORCH_LIB_DIR}/"${pattern}; do
     [[ -e "$existing" ]] || continue
     rm -f "$existing"
@@ -243,7 +255,7 @@ import re
 import sys
 
 lib_dir = pathlib.Path(sys.argv[1])
-prefix_re = re.compile(r"^(lib(?:cudnn[^.]*|ucc|nvpl_[^.]+))\.so\.(\d+)(?:\..+)?$")
+prefix_re = re.compile(r"^(lib(?:cudnn[^.]*|ucc|uc[spmt][^.]*|nvpl_[^.]+|mkl[^.]*|iomp[^.]*))\.so\.(\d+)(?:\..+)?$")
 for path in sorted(lib_dir.glob("lib*.so.*")):
     if path.is_symlink():
         continue
@@ -254,12 +266,15 @@ for path in sorted(lib_dir.glob("lib*.so.*")):
     major = m.group(2)
     major_link = lib_dir / f"{prefix}.so.{major}"
     bare_link = lib_dir / f"{prefix}.so"
-    if major_link.exists() or major_link.is_symlink():
-        major_link.unlink()
-    os.symlink(path.name, major_link)
+    bare_target = path.name
+    if path.name != major_link.name:
+        if major_link.exists() or major_link.is_symlink():
+            major_link.unlink()
+        os.symlink(path.name, major_link)
+        bare_target = major_link.name
     if bare_link.exists() or bare_link.is_symlink():
         bare_link.unlink()
-    os.symlink(major_link.name, bare_link)
+    os.symlink(bare_target, bare_link)
 PY
 
 TMP_NVBW="${TMP_DIR}/nvbandwidth"

@@ -30,6 +30,7 @@ class Example:
     name: str
     path: Path
     description: str
+    module_name: Optional[str] = None
     default_args: List[str] = field(default_factory=list)
     tags: List[str] = field(default_factory=list)
     requires_modules: List[str] = field(default_factory=list)
@@ -70,6 +71,7 @@ def _example(
     description: str,
     *,
     default_args: Optional[Iterable[str]] = None,
+    module_name: Optional[str] = None,
     tags: Optional[Iterable[str]] = None,
     requires_modules: Optional[Iterable[str]] = None,
     optional_modules: Optional[Iterable[str]] = None,
@@ -89,6 +91,7 @@ def _example(
         name=name,
         path=Path(path),
         description=description,
+        module_name=module_name,
         default_args=list(default_args or []),
         tags=sorted(set(tags or [])),
         requires_modules=sorted(set(requires_modules or [])),
@@ -116,9 +119,9 @@ def _format_chapter_tag(chapter: str) -> str:
 
 
 def _discover_cuda_examples(existing_names: Optional[Iterable[str]] = None) -> List[Example]:
-    # core/scripts/ is now in code/, so __file__ is .../code/core/scripts/example_registry.py
-    # parents[0] = .../code/scripts, parents[1] = .../code
-    code_root = Path(__file__).resolve().parents[1]
+    # __file__ is .../code/core/scripts/harness/example_registry.py
+    # parents[0] = harness, [1] = scripts, [2] = core, [3] = code
+    code_root = Path(__file__).resolve().parents[3]
     existing = set(existing_names or [])
     discovered: List[Example] = []
 
@@ -464,6 +467,7 @@ EXAMPLES: List[Example] = [
         name="ch15_disaggregated_inference_multigpu",
         path="ch15/disaggregated_inference_multigpu.py",
         description="Disaggregated inference and pipeline parallel patterns.",
+        module_name="ch15.disaggregated_inference_multigpu",
         tags=["ch15", "inference", "pipeline"],
         requires_modules=["torch", "numpy"],
         requires_cuda=True,
@@ -644,6 +648,7 @@ EXAMPLES: List[Example] = [
     _example(
         name="ch20_ai_kernel_generator",
         path="ch20/ai_kernel_generator.py",
+        module_name="ch20.ai_kernel_generator",
         description="AI-assisted CUDA kernel generation workflow.",
         tags=["ch20", "automation", "kernel"],
         requires_modules=["torch"],

@@ -116,7 +116,6 @@ class OptimizedTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchma
                 for stream in self.streams:
                     current.wait_stream(stream)
 
-        torch.cuda.synchronize()
         assert self.host_output is not None
         self.host_output.copy_(self.device_output_rows, non_blocking=False)
 

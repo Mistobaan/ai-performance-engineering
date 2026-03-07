@@ -299,6 +299,7 @@ class OptimizedTmaPrefillDecodeBenchmark(VerificationPayloadMixin, BaseBenchmark
         self.graph_mode = graph_mode or GraphMode.from_str(os.getenv("PD_GRAPH_MODE"))
         self.max_capture_seq = max_capture_seq or int(os.getenv("PD_MAX_CAPTURE_SEQ", self.seq_len))
         self._history: dict[str, list[float]] = {}
+        self._pending_iteration: dict[str, object] | None = None
         self._tma_ext: object | None = None
         self.register_workload_metadata(tokens_per_iteration=tokens_per_iteration())
         self.output: torch.Tensor | None = None
@@ -374,14 +375,15 @@ class OptimizedTmaPrefillDecodeBenchmark(VerificationPayloadMixin, BaseBenchmark
             evt.record(stream)
             events.append(evt)
             if len(events) > self.cfg.max_in_flight:
-                events.pop(0).synchronize()
+                stream.wait_event(events.pop(0))
 
         if async_only:
             return events
 
         # Drain remaining work.
+        current_stream = torch.cuda.current_stream()
         for evt in events:
-            evt.synchronize()
+            current_stream.wait_event(evt)
         return None
 
     def _decode_graph(self) -> None:
@@ -412,12 +414,14 @@ class OptimizedTmaPrefillDecodeBenchmark(VerificationPayloadMixin, BaseBenchmark
                     start.record(self.decode_stream)
                     self.full_graph.replay()
                     end.record(self.decode_stream)
-            torch.cuda.synchronize()
-            total_ms = start.elapsed_time(end)
-            self._history.setdefault("ttft_ms", []).append(total_ms)
-            self._history.setdefault("decode_ms", []).append(total_ms)
-            self._history.setdefault("per_token_ms", []).append(total_ms / max(1, self.seq_len))
-            self._history.setdefault("graph_path", []).append("full_graph")
+            torch.cuda.current_stream().wait_stream(self.decode_stream)
+            self._pending_iteration = {
+                "path": "full_graph",
+                "start": start,
+                "prefill_end": end,
+                "decode_start": start,
+                "decode_end": end,
+            }
             if self.inputs is not None:
                 self.output = self.inputs.out[:1, : min(8, self.inputs.out.shape[1])]
             else:
@@ -440,19 +444,42 @@ class OptimizedTmaPrefillDecodeBenchmark(VerificationPayloadMixin, BaseBenchmark
                 end_decode.record(self.decode_stream)
         if pref_events:
             for evt in pref_events:
-                evt.synchronize()
+                torch.cuda.current_stream().wait_event(evt)
         end_prefill.record()
-        torch.cuda.synchronize()
-        ttft_ms = start_prefill.elapsed_time(end_prefill)
-        decode_ms = start_decode.elapsed_time(end_decode)
-        self._history.setdefault("ttft_ms", []).append(ttft_ms)
-        self._history.setdefault("decode_ms", []).append(decode_ms)
-        self._history.setdefault("per_token_ms", []).append(decode_ms / max(1, self.seq_len))
-        self._history.setdefault("graph_path", []).append("piecewise_graph")
+        torch.cuda.current_stream().wait_stream(self.decode_stream)
+        self._pending_iteration = {
+            "path": "piecewise_graph",
+            "start": start_prefill,
+            "prefill_end": end_prefill,
+            "decode_start": start_decode,
+            "decode_end": end_decode,
+        }
         if self.inputs is not None:
             self.output = self.inputs.out[:1, : min(8, self.inputs.out.shape[1])]
         else:
             raise RuntimeError("Inputs not initialized for verification")
+
+    def finalize_iteration_metrics(self) -> dict[str, list[float]] | None:
+        if not self._pending_iteration:
+            return None
+
+        start = self._pending_iteration["start"]
+        prefill_end = self._pending_iteration["prefill_end"]
+        decode_start = self._pending_iteration["decode_start"]
+        decode_end = self._pending_iteration["decode_end"]
+        graph_path = str(self._pending_iteration["path"])
+        self._pending_iteration = None
+
+        ttft_ms = float(start.elapsed_time(prefill_end))
+        decode_ms = float(decode_start.elapsed_time(decode_end))
+        self._history.setdefault("ttft_ms", []).append(ttft_ms)
+        self._history.setdefault("decode_ms", []).append(decode_ms)
+        self._history.setdefault("per_token_ms", []).append(decode_ms / max(1, self.seq_len))
+        self._history.setdefault("graph_path", []).append(graph_path)
+        return {
+            "ttft_times_ms": [ttft_ms],
+            "tpot_times_ms": [(decode_ms / max(1, self.seq_len))] * self.seq_len,
+        }
 
     def capture_verification_payload(self) -> None:
         if self.inputs is None or self.output is None:

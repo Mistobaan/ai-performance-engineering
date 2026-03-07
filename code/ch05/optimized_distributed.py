@@ -72,7 +72,6 @@ class OptimizedDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
             else:
                 result = local_result
             _ = result
-            self._synchronize()
         self.output = result.detach().clone()
 
     def capture_verification_payload(self) -> None:

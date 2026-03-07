@@ -5,17 +5,11 @@ Models vLLM-style async scheduling and stream interval buffering.
 
 from __future__ import annotations
 
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from typing import Optional, Tuple, Dict
 
 import torch
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
@@ -25,6 +19,8 @@ from ch16.runtime_scheduler_common import RuntimeSchedulerWorkload, SchedulerSce
 
 class OptimizedRuntimeSchedulerBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Optimized: overlap CPU prep with GPU compute + stream interval batching."""
+
+    allowed_benchmark_fn_antipatterns = ("sync",)
 
     def __init__(self) -> None:
         super().__init__()

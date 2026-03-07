@@ -33,6 +33,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 HOSTS=""
 GPUS_PER_NODE=""
@@ -84,7 +86,9 @@ if ! [[ "$ITERS" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_STRUCT_DIR"
 SUMMARY_PATH="${OUT_STRUCT_DIR}/${RUN_ID}_nccl_env_sensitivity.json"
 TMP_RESULTS_FILE="$(mktemp "${OUT_STRUCT_DIR}/${RUN_ID}_nccl_env_sensitivity_profiles_XXXXXX.jsonl")"

@@ -15,6 +15,7 @@ class BaselineDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Baseline: CPU-staged reduction across all visible GPUs."""
 
     multi_gpu_required = True
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
 
     def __init__(self):
         super().__init__()
@@ -53,9 +54,7 @@ class BaselineDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
             cpu_total = 0.0
             for tensor in self.data:
                 cpu_total += float(tensor.cpu().sum())
-                torch.cuda.synchronize(tensor.device)
             self.output = torch.tensor(cpu_total, device=f"cuda:{self.device_ids[0]}")
-            self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.output is None or not self.data:

@@ -184,7 +184,6 @@ class OptimizedTEFP8Benchmark(VerificationPayloadMixin, BaseBenchmark):
             # Store output for verification
             with torch.no_grad():
                 self.output = self.model(current_input).detach().clone()
-        self._synchronize()
         if self._verify_input is None or self.output is None:
             raise RuntimeError("Verification input/output not initialized")
 

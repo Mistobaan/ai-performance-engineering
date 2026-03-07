@@ -17,8 +17,8 @@ find the peak achievable TFLOPS, revealing tile/wave quantization effects
 unique to each GPU.
 
 Outputs (per host):
-  results/structured/<run_id>_<label>_mamf.csv       (all shapes)
-  results/structured/<run_id>_<label>_mamf_summary.json (best shape + stats)
+  runs/<run_id>/structured/<run_id>_<label>_mamf.csv       (all shapes)
+  runs/<run_id>/structured/<run_id>_<label>_mamf_summary.json (best shape + stats)
 
 Options:
   --run-id <id>          RUN_ID prefix (default: YYYY-MM-DD)
@@ -35,6 +35,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 HOSTS=""
 LABELS=""
@@ -134,6 +136,11 @@ if [[ -n "$SSH_KEY" ]]; then
   SSH_OPTS+=(-i "$SSH_KEY")
 fi
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+LOCAL_STRUCTURED_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+REMOTE_STRUCTURED_DIR="$(cluster_structured_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+mkdir -p "$LOCAL_STRUCTURED_DIR"
+
 run_remote() {
   local host="$1"
   shift
@@ -159,8 +166,8 @@ for idx in "${!HOST_ARR[@]}"; do
     # Run all GPUs simultaneously for straggler detection
     pids=()
     for gpu in $(seq 0 $((GPUS_PER_NODE - 1))); do
-      out_csv="results/structured/${RUN_ID}_${label}_gpu${gpu}_mamf.csv"
-      out_json="results/structured/${RUN_ID}_${label}_gpu${gpu}_mamf_summary.json"
+      out_csv="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu${gpu}_mamf.csv"
+      out_json="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu${gpu}_mamf_summary.json"
 
       # Each worker is constrained to one physical GPU via CUDA_VISIBLE_DEVICES.
       # Inside that namespace the visible device index is always 0.
@@ -195,8 +202,8 @@ for idx in "${!HOST_ARR[@]}"; do
   else
     # Sequential per-GPU (safer, less resource contention)
     for gpu in $(seq 0 $((GPUS_PER_NODE - 1))); do
-      out_csv="results/structured/${RUN_ID}_${label}_gpu${gpu}_mamf.csv"
-      out_json="results/structured/${RUN_ID}_${label}_gpu${gpu}_mamf_summary.json"
+      out_csv="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu${gpu}_mamf.csv"
+      out_json="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu${gpu}_mamf_summary.json"
 
       echo "== ${label} GPU${gpu} =="
 
@@ -237,12 +244,11 @@ for idx in "${!HOST_ARR[@]}"; do
 
   # Fetch results back to the driver for plotting/reporting.
   if [[ "$host" != "localhost" && "$host" != "$(hostname)" ]]; then
-    mkdir -p "${ROOT_DIR}/results/structured"
     for gpu in $(seq 0 $((GPUS_PER_NODE - 1))); do
       for suffix in "mamf.csv" "mamf_summary.json"; do
-        remote_path="results/structured/${RUN_ID}_${label}_gpu${gpu}_${suffix}"
-        scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${remote_path}" \
-          "${ROOT_DIR}/results/structured/" 2>/dev/null || true
+        remote_path="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu${gpu}_${suffix}"
+        scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${remote_path}" \
+          "${LOCAL_STRUCTURED_DIR}/" 2>/dev/null || true
       done
     done
   fi
@@ -263,9 +269,9 @@ for idx in "${!HOST_ARR[@]}"; do
     label="$(sanitize_label "$host")"
   fi
   for gpu in $(seq 0 $((GPUS_PER_NODE - 1))); do
-    json_path="results/structured/${RUN_ID}_${label}_gpu${gpu}_mamf_summary.json"
-    if [[ -f "${ROOT_DIR}/${json_path}" ]]; then
-      mamf=$(python3 -c "import json; d=json.load(open('${ROOT_DIR}/${json_path}')); print(f\"{d['mamf_tflops']:.1f} TFLOPS @ {d['best_shape']['m']}x{d['best_shape']['k']}x{d['best_shape']['n']}\")" 2>/dev/null || echo "parse error")
+    json_path="${LOCAL_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu${gpu}_mamf_summary.json"
+    if [[ -f "${json_path}" ]]; then
+      mamf=$(python3 -c "import json; d=json.load(open('${json_path}')); print(f\"{d['mamf_tflops']:.1f} TFLOPS @ {d['best_shape']['m']}x{d['best_shape']['k']}x{d['best_shape']['n']}\")" 2>/dev/null || echo "parse error")
       echo "  ${label}_gpu${gpu}: ${mamf}"
     fi
   done

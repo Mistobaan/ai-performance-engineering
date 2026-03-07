@@ -161,7 +161,6 @@ class FlashSDPLabBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with nvtx_range(nvtx_label, enable=enable_nvtx):
             out = self.model(self.inputs)
         self.output = out.detach()
-        torch.cuda.synchronize(self.device)
         if self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")
 

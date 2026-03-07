@@ -94,7 +94,6 @@ class OptimizedMemoryBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     self.device_buffer.uniform_(0.0, 255.0)
                     self.graph.replay()
                 self.output = self.graph_output.clone()
-        self._synchronize()
         if self.output is None or self.device_buffer is None:
             raise RuntimeError("benchmark_fn() must produce output")
 

@@ -1,0 +1,303 @@
+{
+  "app_clocks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 1965,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1155
+      },
+      "global_rank": 0,
+      "local_rank": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 595.5993599999999
+      },
+      "node": "ai-book-dev",
+      "physical_gpu": 0
+    }
+  ],
+  "command": "mpirun --hostfile /home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_comparison_hosts.txt --map-by ppr:1:node --bind-to none --mca routed direct -np 1 -x NCCL_DEBUG=WARN -x PATH=/home/cfregly/.local/bin:/home/cfregly/.local/bin:/usr/local/cuda-13.0/bin:/home/cfregly/.codex/tmp/arg0/codex-arg04IiGvj:/home/cfregly/.cursor-server/bin/linux-x64/7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/bin/remote-cli:/home/cfregly/.local/bin:/home/cfregly/.local/bin:/home/cfregly/.local/bin:/usr/local/cuda/bin:/usr/local/cuda-13.0/bin:/home/cfregly/.cursor-server/bin/linux-x64/7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/bin/remote-cli:/home/cfregly/.local/bin:/home/cfregly/.local/bin:/usr/local/cuda-13.0/bin:/usr/local/cuda-13.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/cfregly/.cursor-server/extensions/openai.chatgpt-0.4.79-linux-x64/bin/linux-x86_64 -x LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:/usr/local/cuda-13.0/lib64/stubs:/usr/local/cuda-13.0/lib64:/usr/local/cuda-13.0/lib64/stubs:/usr/local/cuda-13.0/lib64:/usr/local/cuda-13.0/lib64/stubs -x REQUIRE_CLOCK_LOCK=1 -x NCCL_ALGO=NVLS /home/cfregly/ai-performance-engineering/code/cluster/env/venv/bin/python /home/cfregly/ai-performance-engineering/code/cluster/scripts/nccl_lock_wrapper.py -- /home/cfregly/ai-performance-engineering/code/cluster/tools/nccl-tests/build/all_reduce_perf -b 1K -e 16G -f 2 -g 1 -w 5 -n 20 ",
+  "gpus_per_node": 1,
+  "hosts": [
+    "localhost"
+  ],
+  "log_summary": {
+    "collnet": {
+      "lines": [],
+      "seen": false
+    },
+    "errors": {
+      "lines": [],
+      "nvls_init_failure": false
+    },
+    "mnnvl": {
+      "mnnvl": null,
+      "nNodes": null
+    },
+    "nvls": {
+      "channels": null,
+      "comm_lines": 0
+    },
+    "sharp": {
+      "lines": [],
+      "seen": false
+    }
+  },
+  "raw_log": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_nvls.log",
+  "results": [
+    {
+      "algbw_gbps": 0.16,
+      "busbw_gbps": 0.0,
+      "count": 256,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 1024,
+      "time_us": 6.22
+    },
+    {
+      "algbw_gbps": 0.32,
+      "busbw_gbps": 0.0,
+      "count": 512,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 2048,
+      "time_us": 6.33
+    },
+    {
+      "algbw_gbps": 0.64,
+      "busbw_gbps": 0.0,
+      "count": 1024,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 4096,
+      "time_us": 6.43
+    },
+    {
+      "algbw_gbps": 1.11,
+      "busbw_gbps": 0.0,
+      "count": 2048,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 8192,
+      "time_us": 7.41
+    },
+    {
+      "algbw_gbps": 2.16,
+      "busbw_gbps": 0.0,
+      "count": 4096,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 16384,
+      "time_us": 7.58
+    },
+    {
+      "algbw_gbps": 4.95,
+      "busbw_gbps": 0.0,
+      "count": 8192,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 32768,
+      "time_us": 6.62
+    },
+    {
+      "algbw_gbps": 9.76,
+      "busbw_gbps": 0.0,
+      "count": 16384,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 65536,
+      "time_us": 6.72
+    },
+    {
+      "algbw_gbps": 20.51,
+      "busbw_gbps": 0.0,
+      "count": 32768,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 131072,
+      "time_us": 6.39
+    },
+    {
+      "algbw_gbps": 41.92,
+      "busbw_gbps": 0.0,
+      "count": 65536,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 262144,
+      "time_us": 6.25
+    },
+    {
+      "algbw_gbps": 84.35,
+      "busbw_gbps": 0.0,
+      "count": 131072,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 524288,
+      "time_us": 6.22
+    },
+    {
+      "algbw_gbps": 147.11,
+      "busbw_gbps": 0.0,
+      "count": 262144,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 1048576,
+      "time_us": 7.13
+    },
+    {
+      "algbw_gbps": 296.33,
+      "busbw_gbps": 0.0,
+      "count": 524288,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 2097152,
+      "time_us": 7.08
+    },
+    {
+      "algbw_gbps": 574.55,
+      "busbw_gbps": 0.0,
+      "count": 1048576,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 4194304,
+      "time_us": 7.3
+    },
+    {
+      "algbw_gbps": 989.14,
+      "busbw_gbps": 0.0,
+      "count": 2097152,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 8388608,
+      "time_us": 8.48
+    },
+    {
+      "algbw_gbps": 1400.4,
+      "busbw_gbps": 0.0,
+      "count": 4194304,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 16777216,
+      "time_us": 11.98
+    },
+    {
+      "algbw_gbps": 1929.1,
+      "busbw_gbps": 0.0,
+      "count": 8388608,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 33554432,
+      "time_us": 17.39
+    },
+    {
+      "algbw_gbps": 2289.1,
+      "busbw_gbps": 0.0,
+      "count": 16777216,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 67108864,
+      "time_us": 29.32
+    },
+    {
+      "algbw_gbps": 2522.1,
+      "busbw_gbps": 0.0,
+      "count": 33554432,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 134217728,
+      "time_us": 53.22
+    },
+    {
+      "algbw_gbps": 2680.1,
+      "busbw_gbps": 0.0,
+      "count": 67108864,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 268435456,
+      "time_us": 100.16
+    },
+    {
+      "algbw_gbps": 2708.7,
+      "busbw_gbps": 0.0,
+      "count": 134217728,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 536870912,
+      "time_us": 198.2
+    },
+    {
+      "algbw_gbps": 2785.1,
+      "busbw_gbps": 0.0,
+      "count": 268435456,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 1073741824,
+      "time_us": 385.53
+    },
+    {
+      "algbw_gbps": 2826.0,
+      "busbw_gbps": 0.0,
+      "count": 536870912,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 2147483648,
+      "time_us": 759.91
+    },
+    {
+      "algbw_gbps": 2845.2,
+      "busbw_gbps": 0.0,
+      "count": 1073741824,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 4294967296,
+      "time_us": 1509.54
+    },
+    {
+      "algbw_gbps": 2858.6,
+      "busbw_gbps": 0.0,
+      "count": 2147483648,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 8589934592,
+      "time_us": 3004.98
+    },
+    {
+      "algbw_gbps": 2864.4,
+      "busbw_gbps": 0.0,
+      "count": 4294967296,
+      "dtype": "float",
+      "redop": "sum",
+      "root": -1,
+      "size_bytes": 17179869184,
+      "time_us": 5997.81
+    }
+  ],
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "total_ranks": 1
+}

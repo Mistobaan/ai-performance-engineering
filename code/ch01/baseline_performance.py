@@ -158,8 +158,6 @@ class BaselinePerformanceBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     loss = torch.nn.functional.cross_entropy(logits, target)
                     (loss / group_size).backward()
                 self.optimizer.step()
-        if self.device.type == "cuda":
-            torch.cuda.synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.model is None or self._verify_input is None:

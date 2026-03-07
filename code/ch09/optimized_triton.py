@@ -108,7 +108,6 @@ class OptimizedTritonBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 BLOCK_SIZE=1024,
             )
             self.output = self._output_buffer
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

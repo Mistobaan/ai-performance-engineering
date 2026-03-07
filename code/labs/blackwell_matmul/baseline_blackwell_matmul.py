@@ -32,10 +32,8 @@ class BaselineGraceBlackwellBenchmark(GraceBlackwellMatmulBenchmark):
             reference_runner=None,
         )
 
-
-
-def get_benchmark(size: int = 2048) -> GraceBlackwellMatmulBenchmark:
-    return BaselineGraceBlackwellBenchmark(size=size)
+def get_benchmark() -> GraceBlackwellMatmulBenchmark:
+    return BaselineGraceBlackwellBenchmark()
 
 
 if __name__ == "__main__":

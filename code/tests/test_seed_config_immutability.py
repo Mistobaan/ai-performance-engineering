@@ -6,6 +6,7 @@ reseed RNGs during perf runs.
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -162,5 +163,68 @@ def test_seed_mutation_is_detected_in_torchrun_runs(tmp_path: Path):
     result = harness.benchmark(TorchrunSeedMutateBenchmark(script))
 
     assert result.errors, "Expected torchrun seed mutation to fail"
+    joined = "\n".join(result.errors).lower()
+    assert "seed mutation detected" in joined
+
+
+class TorchrunSeedMutateModuleBenchmark(_CpuBenchmarkBase):
+    def __init__(self, module_name: str, pythonpath_root: Path) -> None:
+        super().__init__()
+        self._module_name = module_name
+        self._pythonpath_root = pythonpath_root
+
+    def setup(self) -> None:  # pragma: no cover - not executed in torchrun mode
+        self.input_tensor = torch.zeros(1, device=self.device)
+
+    def benchmark_fn(self) -> None:  # pragma: no cover - not executed in torchrun mode
+        if self.input_tensor is None:
+            raise RuntimeError("setup() must set input_tensor")
+        self.output = self.input_tensor
+
+    def get_torchrun_spec(self, config: BenchmarkConfig) -> TorchrunLaunchSpec:
+        existing = os.environ.get("PYTHONPATH", "")
+        entries = [str(self._pythonpath_root)]
+        if existing:
+            entries.append(existing)
+        return TorchrunLaunchSpec(
+            module_name=self._module_name,
+            script_args=[],
+            env={"PYTHONPATH": os.pathsep.join(entries)},
+            parse_rank0_only=True,
+            multi_gpu_required=False,
+            name="torchrun_seed_mutate_module",
+            config_arg_map={},
+        )
+
+
+def test_seed_mutation_is_detected_in_torchrun_module_runs(tmp_path: Path):
+    if shutil.which("torchrun") is None:
+        pytest.skip("torchrun not available in PATH")
+
+    pkg = tmp_path / "benchpkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "seed_mutate_module.py").write_text(
+        "import torch\n"
+        "torch.manual_seed(123)\n"
+        "print('done')\n",
+        encoding="utf-8",
+    )
+
+    config = BenchmarkConfig(
+        device=torch.device("cpu"),
+        iterations=1,
+        warmup=1,
+        enable_profiling=False,
+        enable_memory_tracking=False,
+        use_subprocess=False,
+        launch_via=LaunchVia.TORCHRUN,
+        nproc_per_node=1,
+        multi_gpu_required=False,
+    )
+    harness = BenchmarkHarness(mode=BenchmarkMode.CUSTOM, config=config)
+    result = harness.benchmark(TorchrunSeedMutateModuleBenchmark("benchpkg.seed_mutate_module", tmp_path))
+
+    assert result.errors, "Expected torchrun module seed mutation to fail"
     joined = "\n".join(result.errors).lower()
     assert "seed mutation detected" in joined

@@ -103,7 +103,6 @@ class BandwidthSuiteMultiGPU(VerificationPayloadMixin, BaseBenchmark):
             for chunk_list in self.chunk_pairs:
                 for src_chunk, dst_chunk in chunk_list:
                     dst_chunk.copy_(src_chunk, non_blocking=False)
-                    torch.cuda.synchronize(dst_chunk.device)
         elapsed = time.perf_counter() - start
         self.last_bandwidth_gbps = (total_bytes / max(elapsed, 1e-9)) / 1e9
 

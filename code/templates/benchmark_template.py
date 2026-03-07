@@ -3,6 +3,10 @@
 Copy this file into your chapter directory and fill in the benchmark-specific
 details. The mixin enforces the required verification methods so new benchmarks
 fail fast if verification payloads are missing.
+
+Run standalone checks from the repo root via ``python -m chXX.your_benchmark``
+or ``python -m cli.aisp bench ...``. Do not add local ``sys.path`` surgery to
+benchmark files.
 """
 
 from __future__ import annotations
@@ -47,7 +51,13 @@ class MyBenchmark(VerificationPayloadMixin, BaseBenchmark):
             torch.cuda.synchronize()
 
     def benchmark_fn(self) -> None:
-        """Function to benchmark. Must be callable with no args."""
+        """Function to benchmark.
+
+        Keep this hot path async and minimal:
+        - do not synchronize
+        - do not regenerate random inputs
+        - do not move tensors back to CPU for metrics/logging
+        """
         if self.model is None or self.input_data is None:
             raise RuntimeError("setup() must initialize model and inputs before benchmarking")
 
@@ -64,6 +74,15 @@ class MyBenchmark(VerificationPayloadMixin, BaseBenchmark):
             parameter_count=sum(p.numel() for p in self.model.parameters()),
             output_tolerance=(1e-4, 1e-4),
         )
+
+    def get_input_signature(self):
+        return super().get_input_signature()
+
+    def get_verify_output(self):
+        return super().get_verify_output()
+
+    def get_output_tolerance(self):
+        return super().get_output_tolerance()
 
     def teardown(self) -> None:
         """Cleanup phase."""

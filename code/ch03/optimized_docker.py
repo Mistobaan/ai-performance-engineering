@@ -128,7 +128,6 @@ class OptimizedDockerBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
             self.optimizer.step()
-            torch.cuda.synchronize()
         
         # Store output for verification
         self.output = out.detach()

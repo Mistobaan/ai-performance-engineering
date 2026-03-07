@@ -134,9 +134,9 @@ class OptimizedStreamsBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 with torch.cuda.stream(self.stream_compute):
                     self.results[i] = self._compute(self.device_data[i])
             
-            # Synchronize both streams
-            self.stream_compute.synchronize()
-            self.stream_h2d.synchronize()
+            current = torch.cuda.current_stream(device=self.device)
+            current.wait_stream(self.stream_compute)
+            current.wait_stream(self.stream_h2d)
     
     def teardown(self) -> None:
         """Teardown: Clean up resources."""

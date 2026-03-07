@@ -25,6 +25,8 @@ from core.harness.benchmark_harness import (  # noqa: E402
 class BaselineNCCLQuantizationBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Baseline: Simulate per-rank CPU-side quantization with serialized copies."""
 
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
+
     def __init__(self):
         super().__init__()
         self.tensor = None
@@ -73,7 +75,6 @@ class BaselineNCCLQuantizationBenchmark(VerificationPayloadMixin, BaseBenchmark)
                 self.tensor[idx].copy_(dq.to(self.device))
             self._last = total
             self.output = self.tensor.detach().clone()
-        self._synchronize()
         if self.output is None or self.tensor is None:
             raise RuntimeError("benchmark_fn() must produce output")
 

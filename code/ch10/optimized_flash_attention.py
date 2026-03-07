@@ -220,7 +220,6 @@ class OptimizedFlashAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 # This is the same pipelining concept from Ch10 applied to attention
                 self.output = self.model(self.input, is_causal=self.use_causal)
         
-        self._synchronize()
         if self.output is None or self.input is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

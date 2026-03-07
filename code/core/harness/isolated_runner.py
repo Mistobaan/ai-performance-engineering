@@ -25,16 +25,19 @@ Protocol:
 
 from __future__ import annotations
 
+import copy
 import gc
 import io
 import json
+import os
+import signal
 import statistics
 import sys
 import time
 import traceback
 from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 # Add repo root to path for imports
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -80,6 +83,92 @@ def reset_cuda_state() -> None:
         pass
     
     gc.collect()
+
+
+def _safe_read_text(path: Path) -> Optional[str]:
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+
+def _collect_descendant_pids(root_pid: int) -> List[int]:
+    parent_to_children: Dict[int, Set[int]] = {}
+    try:
+        proc_entries = list(Path("/proc").iterdir())
+    except Exception:
+        return []
+
+    for proc_dir in proc_entries:
+        if not proc_dir.name.isdigit():
+            continue
+        stat_text = _safe_read_text(proc_dir / "stat")
+        if not stat_text:
+            continue
+        rparen = stat_text.rfind(")")
+        if rparen < 0:
+            continue
+        tail = stat_text[rparen + 1 :].strip().split()
+        if len(tail) < 2:
+            continue
+        try:
+            pid = int(proc_dir.name)
+            ppid = int(tail[1])
+        except ValueError:
+            continue
+        parent_to_children.setdefault(ppid, set()).add(pid)
+
+    descendants: List[int] = []
+    stack: List[int] = [int(root_pid)]
+    seen: Set[int] = {int(root_pid)}
+    while stack:
+        parent = stack.pop()
+        for child in parent_to_children.get(parent, set()):
+            if child in seen:
+                continue
+            seen.add(child)
+            descendants.append(child)
+            stack.append(child)
+    descendants.sort()
+    return descendants
+
+
+def _signal_pids(pids: Iterable[int], sig: int) -> None:
+    for pid in pids:
+        try:
+            os.kill(int(pid), sig)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            continue
+
+
+def _wait_for_exit(pids: Iterable[int], timeout_seconds: float) -> Set[int]:
+    pending: Set[int] = {int(pid) for pid in pids}
+    deadline = time.time() + max(timeout_seconds, 0.0)
+    while pending and time.time() < deadline:
+        exited: Set[int] = set()
+        for pid in pending:
+            if not Path(f"/proc/{pid}").exists():
+                exited.add(pid)
+        pending -= exited
+        if pending:
+            time.sleep(0.05)
+    return pending
+
+
+def _reap_descendant_processes(grace_seconds: float = 5.0) -> None:
+    """Aggressively reap child processes before exiting this isolated runner."""
+    root_pid = os.getpid()
+    descendants = _collect_descendant_pids(root_pid)
+    if not descendants:
+        return
+
+    _signal_pids(descendants, signal.SIGTERM)
+    remaining = _wait_for_exit(descendants, timeout_seconds=grace_seconds)
+    if remaining:
+        _signal_pids(sorted(remaining), signal.SIGKILL)
+        _wait_for_exit(sorted(remaining), timeout_seconds=2.0)
 
 
 def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -160,6 +249,64 @@ def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
             mode = BenchmarkMode(mode_str) if mode_str else BenchmarkMode.CUSTOM
             harness = BenchmarkHarness(mode=mode, config=config)
 
+            # Capture verification artifacts at teardown-time to preserve the exact
+            # timing-run state before benchmark.teardown() mutates benchmark fields.
+            capture_state: Dict[str, Any] = {
+                "captured": False,
+                "error": None,
+                "verify_output": None,
+                "output_tolerance": None,
+                "input_signature": None,
+            }
+
+            original_teardown = benchmark.teardown
+
+            def _capture_verification_artifacts() -> None:
+                if capture_state["captured"]:
+                    return
+                try:
+                    verify_output_obj = benchmark.get_verify_output()
+                    output_tol_obj = benchmark.get_output_tolerance()
+                    signature_obj = benchmark.get_input_signature()
+
+                    import torch  # local import after module load
+
+                    if isinstance(verify_output_obj, torch.Tensor):
+                        capture_state["verify_output"] = verify_output_obj.detach().cpu().clone()
+                    elif isinstance(verify_output_obj, dict):
+                        tensor_map: Dict[str, torch.Tensor] = {}
+                        for name, tensor in verify_output_obj.items():
+                            if not isinstance(tensor, torch.Tensor):
+                                raise TypeError(
+                                    f"verify_output['{name}'] must be a torch.Tensor, got {type(tensor)}"
+                                )
+                            tensor_map[name] = tensor.detach().cpu().clone()
+                        capture_state["verify_output"] = tensor_map
+                    else:
+                        raise TypeError(
+                            "get_verify_output() must return torch.Tensor or Dict[str, torch.Tensor], "
+                            f"got {type(verify_output_obj)}"
+                        )
+
+                    capture_state["output_tolerance"] = (
+                        float(output_tol_obj[0]),
+                        float(output_tol_obj[1]),
+                    )
+                    capture_state["input_signature"] = (
+                        signature_obj.to_dict()
+                        if hasattr(signature_obj, "to_dict")
+                        else copy.deepcopy(signature_obj)
+                    )
+                    capture_state["captured"] = True
+                except Exception as exc:
+                    capture_state["error"] = f"Failed to capture verification artifacts pre-teardown: {exc}"
+
+            def _wrapped_teardown() -> None:
+                _capture_verification_artifacts()
+                original_teardown()
+
+            benchmark.teardown = _wrapped_teardown  # type: ignore[method-assign]
+
             # Run through the real harness (includes all protections)
             bench_result = harness.benchmark(benchmark, name=benchmark_name)
 
@@ -172,10 +319,16 @@ def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "errors": bench_result.errors,
                 }
 
-            # Strictly extract verification artifacts from the timing run
-            verify_output = benchmark.get_verify_output()
-            output_tol = benchmark.get_output_tolerance()
-            signature = benchmark.get_input_signature()
+            if not capture_state["captured"]:
+                _capture_verification_artifacts()
+            if capture_state["error"]:
+                raise RuntimeError(capture_state["error"])
+
+            # Strictly extract verification artifacts captured from the timing run
+            verify_output = capture_state["verify_output"]
+            output_tol = capture_state["output_tolerance"]
+            signature = capture_state["input_signature"]
+            import torch  # local import after module load
 
             def _tensor_nbytes(t: "torch.Tensor") -> int:
                 return int(t.numel() * t.element_size())
@@ -189,8 +342,6 @@ def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "dtype": str(t.dtype),
                     "data": t.detach().cpu().float().tolist(),
                 }
-
-            import torch  # local import after module load
 
             if isinstance(verify_output, torch.Tensor):
                 if verify_output_max_bytes and _tensor_nbytes(verify_output) > verify_output_max_bytes:
@@ -230,7 +381,7 @@ def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 "result_json": bench_result.model_dump_json(),
                 "verify_output": verify_output_data,
                 "output_tolerance": {"rtol": float(output_tol[0]), "atol": float(output_tol[1])},
-                "input_signature": signature.to_dict() if hasattr(signature, "to_dict") else signature,
+                "input_signature": signature,
                 "errors": bench_result.errors or [],
             }
             return result_payload
@@ -243,7 +394,15 @@ def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
     
     stdout_buffer = io.StringIO()
     with redirect_stdout(stdout_buffer):
-        result = _execute()
+        try:
+            result = _execute()
+        finally:
+            # Strict isolation contract: never leak child processes (e.g., vLLM workers)
+            # into subsequent benchmark subprocesses.
+            try:
+                _reap_descendant_processes()
+            except Exception:
+                pass
     captured = stdout_buffer.getvalue().strip()
     if captured:
         try:

@@ -7,6 +7,8 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 LABEL="$(hostname -s)"
 LOG_FILE=""
@@ -33,7 +35,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$LOG_FILE" ]]; then
-  LOG_FILE="${ROOT_DIR}/results/raw/activity/${RUN_ID}_shell.log"
+  resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+  LOG_FILE="${CLUSTER_RAW_DIR_EFFECTIVE}/activity/${RUN_ID}_shell.log"
 fi
 
 mkdir -p "$(dirname "$LOG_FILE")"

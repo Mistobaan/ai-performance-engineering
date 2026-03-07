@@ -15,12 +15,6 @@ continuous batching state remains consistent across tensor-parallel workers.
 from __future__ import annotations
 
 from core.utils import compile_utils as _compile_utils_patch  # noqa: F401
-import pathlib
-import sys
-
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
 
 import argparse
 import json

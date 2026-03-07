@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from core.benchmark.cuda_event_timing import elapsed_ms
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from core.profiling.nvtx_helper import get_nvtx_enabled, nvtx_range
@@ -37,6 +38,7 @@ class BaselineDecodeAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
             tokens_per_iteration=float(tokens),
         )
         self._history: Dict[str, List[float]] = {"latency_ms": []}
+        self._pending_timing_pair: Optional[tuple[torch.cuda.Event, torch.cuda.Event]] = None
 
     def setup(self) -> None:
         if not torch.cuda.is_available():
@@ -64,7 +66,9 @@ class BaselineDecodeAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
         enable_nvtx = get_nvtx_enabled(self.get_config())
         with nvtx_range("moe_cuda_decode_naive", enable=enable_nvtx):
             with torch.inference_mode():
-                start = self._record_start()
+                start_event = torch.cuda.Event(enable_timing=True)
+                end_event = torch.cuda.Event(enable_timing=True)
+                start_event.record()
                 q = self.q
                 k = self.k
                 v = self.v
@@ -73,8 +77,8 @@ class BaselineDecodeAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 probs = torch.softmax(scores, dim=-1)
                 attn = torch.matmul(probs, v)
                 attn_out = attn.transpose(1, 2).reshape(self.batch, 1, self.num_heads * self.head_dim)
-                torch.cuda.synchronize(self.device)
-                self._history["latency_ms"].append(self._record_stop(start))
+                end_event.record()
+                self._pending_timing_pair = (start_event, end_event)
                 self.output = attn_out.detach().float().clone()
         if self.output is None:
             raise RuntimeError("benchmark_fn() did not produce output")
@@ -84,9 +88,18 @@ class BaselineDecodeAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
             device="cpu",
         )
         self._payload_meta = meta
-        return {"decode_ms": self._history["latency_ms"]}
+        return None
+
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, List[float]]]:
+        if self._pending_timing_pair is None:
+            return None
+        latency_ms = elapsed_ms(self._pending_timing_pair)
+        self._pending_timing_pair = None
+        self._history["latency_ms"].append(latency_ms)
+        return {"decode_ms": [latency_ms]}
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         meta = self._payload_meta
         self._set_verification_payload(
             inputs={"meta": meta, "q": self.q, "k": self.k, "v": self.v},
@@ -111,6 +124,7 @@ class BaselineDecodeAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
         return self._workload
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        self.finalize_iteration_metrics()
         if not self._history["latency_ms"]:
             return None
         return {

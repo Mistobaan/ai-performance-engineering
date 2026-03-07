@@ -290,7 +290,6 @@ class PersistentMatmulTMABenchmark(VerificationPayloadMixin, BaseBenchmark):
             num_warps=NUM_WARPS,
             num_stages=NUM_STAGES,
         )
-        self._synchronize()
         if self.c is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

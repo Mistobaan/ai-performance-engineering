@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from core.harness.benchmark_harness import (  # noqa: E402
     BaseBenchmark,
     BenchmarkConfig,
     WorkloadMetadata,
 )
+from core.benchmark.cuda_event_timing import elapsed_ms, elapsed_ms_list
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.profiling.nvtx_helper import get_nvtx_enabled, nvtx_range  # noqa: E402
 
@@ -74,6 +69,8 @@ class BaselinePrefillDecodeMonolithicBenchmark(VerificationPayloadMixin, BaseBen
         self.output: Optional[torch.Tensor] = None
         self.parameter_count: int = 0
         self._verification_payload = None
+        self._pending_ttft_pair: Optional[tuple[torch.cuda.Event, torch.cuda.Event]] = None
+        self._pending_tpot_pairs: List[tuple[torch.cuda.Event, torch.cuda.Event]] = []
 
     def setup(self) -> None:
         torch.manual_seed(42)
@@ -93,32 +90,44 @@ class BaselinePrefillDecodeMonolithicBenchmark(VerificationPayloadMixin, BaseBen
 
         with nvtx_range("inference_monolithic", enable=enable_nvtx):
             with torch.no_grad():
-                request_start = self._record_start()
-
-                torch.cuda.synchronize(self.device)
-                prefill_start = self._record_start()
+                request_start = torch.cuda.Event(enable_timing=True)
+                prefill_end = torch.cuda.Event(enable_timing=True)
+                request_start.record()
                 kv_cache = self.model.prefill(self.prompt)
-                torch.cuda.synchronize(self.device)
-                ttft_ms = self._record_stop(request_start)
+                prefill_end.record()
 
                 num_tokens = 16
-                tpot_times_ms: List[float] = []
+                token_event_pairs: List[tuple[torch.cuda.Event, torch.cuda.Event]] = []
                 token_output = kv_cache
                 for _ in range(num_tokens):
-                    token_start = self._record_start()
+                    token_start = torch.cuda.Event(enable_timing=True)
+                    token_end = torch.cuda.Event(enable_timing=True)
+                    token_start.record()
                     token_output = self.model.decode(token_output[:, -1:, :], num_tokens=1)
-                    torch.cuda.synchronize(self.device)
-                    tpot_times_ms.append(self._record_stop(token_start))
+                    token_end.record()
+                    token_event_pairs.append((token_start, token_end))
                 self.output = token_output
 
-                self._history["ttft"].append(ttft_ms)
-                self._history["tpot"].extend(tpot_times_ms)
-                return {
-                    "ttft_times_ms": [ttft_ms],
-                    "tpot_times_ms": tpot_times_ms,
-                }
+                self._pending_ttft_pair = (request_start, prefill_end)
+                self._pending_tpot_pairs = token_event_pairs
+                return {}
+
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, List[float]]]:
+        if self._pending_ttft_pair is None:
+            return None
+        ttft_ms = elapsed_ms(self._pending_ttft_pair)
+        tpot_times_ms = elapsed_ms_list(self._pending_tpot_pairs)
+        self._pending_ttft_pair = None
+        self._pending_tpot_pairs = []
+        self._history["ttft"].append(ttft_ms)
+        self._history["tpot"].extend(tpot_times_ms)
+        return {
+            "ttft_times_ms": [ttft_ms],
+            "tpot_times_ms": tpot_times_ms,
+        }
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         if self.prompt is None or self.output is None:
             raise RuntimeError("setup() and benchmark_fn() must be called before capture_verification_payload()")
         dtype = self.output.dtype
@@ -150,6 +159,7 @@ class BaselinePrefillDecodeMonolithicBenchmark(VerificationPayloadMixin, BaseBen
         return self._workload
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        self.finalize_iteration_metrics()
         if not self._history["ttft"]:
             return None
         return {
@@ -158,6 +168,7 @@ class BaselinePrefillDecodeMonolithicBenchmark(VerificationPayloadMixin, BaseBen
         }
 
     def validate_result(self) -> Optional[str]:
+        self.finalize_iteration_metrics()
         if not self._history["ttft"]:
             return "No TTFT samples recorded"
         if not self._history["tpot"]:

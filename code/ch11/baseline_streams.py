@@ -95,11 +95,9 @@ class BaselineStreamsBenchmark(VerificationPayloadMixin, BaseBenchmark):
             for i in range(self.num_chunks):
                 # Transfer data from host to device (blocking)
                 self.device_data[i].copy_(self.host_data[i])
-                self._synchronize()  # Wait for transfer to complete
                 
                 # Compute on device
                 self.results[i] = self._compute(self.device_data[i])
-                self._synchronize()  # Wait for compute to complete
     
     def teardown(self) -> None:
         """Teardown: Clean up resources."""

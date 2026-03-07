@@ -13,7 +13,7 @@ Options:
   --label <label>      Label for artifact names (default: hostname -s)
   --runtime <mode>     host|container (default: host)
   --image <image>      Container image for runtime=container
-                       (default: cfregly/cluster_perf_orig_parity:latest or $CONTAINER_IMAGE)
+                       (default: cluster_perf_orig_parity:latest or $CONTAINER_IMAGE)
   --compat-lib-dir <path>
                        Optional CUDA compat library directory for runtime=host
                        (must contain libcuda.so.1 and libnvidia-ptxjitcompiler.so.1)
@@ -32,14 +32,56 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+CODE_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"
+# shellcheck source=../lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 LABEL="$(hostname -s)"
 RUNTIME="host"
-CONTAINER_IMAGE="${CONTAINER_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+CONTAINER_IMAGE="${CONTAINER_IMAGE:-cluster_perf_orig_parity:latest}"
 COMPAT_IMAGE="${COMPAT_IMAGE:-$CONTAINER_IMAGE}"
 NVBW_BIN="${NVBW_BIN:-nvbandwidth}"
 NVBW_COMPAT_LIB_DIR="${NVBW_COMPAT_LIB_DIR:-}"
 QUICK=0
+QUEUE_RUNNER_LOCK_PATH="${AISP_CLUSTER_SUITE_QUEUE_LOCK_PATH:-${CODE_ROOT}/artifacts/parallel_runs/queue.runner.lock}"
+QUEUE_RUNNER_LOCK_TIMEOUT_SEC="${AISP_CLUSTER_SUITE_QUEUE_LOCK_TIMEOUT_SEC:-0}"
+QUEUE_RUNNER_LOCK_FD=18
+QUEUE_RUNNER_LOCK_HELD=0
+
+acquire_queue_runner_lock() {
+  if [[ "${AISP_CLUSTER_SUITE_QUEUE_LOCK_HELD:-0}" == "1" ]]; then
+    echo "INFO: parent suite lock is already held; skipping nested queue lock acquisition."
+    QUEUE_RUNNER_LOCK_HELD=0
+    return 0
+  fi
+  local lock_path="$QUEUE_RUNNER_LOCK_PATH"
+  local timeout_sec="$QUEUE_RUNNER_LOCK_TIMEOUT_SEC"
+  mkdir -p "$(dirname "$lock_path")"
+  if ! command -v flock >/dev/null 2>&1; then
+    echo "ERROR: flock is required for strict suite/benchmark mutual exclusion." >&2
+    exit 3
+  fi
+  eval "exec ${QUEUE_RUNNER_LOCK_FD}>\"${lock_path}\""
+  if [[ "$timeout_sec" =~ ^[0-9]+$ ]] && [[ "$timeout_sec" -gt 0 ]]; then
+    if ! flock -w "$timeout_sec" "$QUEUE_RUNNER_LOCK_FD"; then
+      echo "ERROR: queue lock busy at ${lock_path}; refusing overlapping run." >&2
+      exit 3
+    fi
+  else
+    if ! flock -n "$QUEUE_RUNNER_LOCK_FD"; then
+      echo "ERROR: queue lock busy at ${lock_path}; refusing overlapping run." >&2
+      exit 3
+    fi
+  fi
+  QUEUE_RUNNER_LOCK_HELD=1
+  printf '{"owner":"run_nvbandwidth_bundle.sh","pid":%s,"ts":"%s"}\n' "$$" "$(date -Iseconds)" >"${lock_path}" || true
+}
+
+release_queue_runner_lock() {
+  if [[ "$QUEUE_RUNNER_LOCK_HELD" -eq 1 && -n "${QUEUE_RUNNER_LOCK_FD:-}" ]]; then
+    flock -u "$QUEUE_RUNNER_LOCK_FD" || true
+  fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -65,8 +107,10 @@ if [[ "$RUNTIME" == "container" && -z "$CONTAINER_IMAGE" ]]; then
   exit 1
 fi
 
-RAW_DIR="${ROOT_DIR}/results/raw/${RUN_ID}_${LABEL}_nvbandwidth"
-STRUCT_DIR="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+
+RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}/${RUN_ID}_${LABEL}_nvbandwidth"
+STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$RAW_DIR" "$STRUCT_DIR"
 
 RAW_LOG="${RAW_DIR}/nvbandwidth.log"
@@ -108,6 +152,9 @@ echo "SUMMARY_JSON=${SUMMARY_JSON}"
 echo "SUMS_CSV=${SUMS_CSV}"
 echo "LOCK_META=${LOCK_META}"
 echo ""
+
+trap release_queue_runner_lock EXIT
+acquire_queue_runner_lock
 
 run_host_nvbandwidth() {
   local -a run_cmd=()

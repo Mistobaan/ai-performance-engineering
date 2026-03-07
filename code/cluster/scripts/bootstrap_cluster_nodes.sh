@@ -11,7 +11,7 @@ Bootstraps nodes so cluster checks are reproducible:
   2) Optionally installs missing system packages required by checks
   3) Ensures env/venv exists and installs Python deps (torch + plotting deps)
   4) Optionally syncs Cluster Perf standalone compute suite for FP4 checks
-  5) Writes per-node bootstrap status JSON in results/structured/
+  5) Writes per-node bootstrap status JSON under runs/<run_id>/structured/
 
 Options:
   --run-id <id>              RUN_ID prefix (default: YYYY-MM-DD)
@@ -35,7 +35,7 @@ Options:
                                - standalone/compute/ directory
                                - parent directory containing a single suite root
   --host-parity-image <ref>  Source image for host-only orig-parity binaries
-                             (default: cfregly/cluster_perf_orig_parity:latest)
+                             (default: cluster_perf_orig_parity:latest)
   --torch-index-url <url>    Legacy fallback torch index (default: https://pypi.ngc.nvidia.com)
   --torch-version <ver>      Expected torch version after host parity install
                              (default: 2.10.0a0+a36e1d39eb.nv26.01.42222806)
@@ -43,6 +43,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 HOSTS=""
@@ -62,7 +64,8 @@ TORCH_CUDA_VERSION="13.1"
 TORCH_CUDNN_VERSION="91701"
 TORCH_NCCL_VERSION="2.29.2"
 DEEP_GEMM_VERSION="2.3.0+0f5f266"
-HOST_PARITY_IMAGE="${HOST_PARITY_IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+HOST_PARITY_IMAGE="${HOST_PARITY_IMAGE:-cluster_perf_orig_parity:latest}"
+HOST_PARITY_IMAGE_RESOLVED=0
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
@@ -160,6 +163,10 @@ if [[ -n "$SYNC_SUITE_DIR" ]]; then
   SYNC_SUITE_DIR="$resolved_suite_dir"
 fi
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+
 IFS=',' read -r -a HOST_ARR <<<"$HOSTS"
 IFS=',' read -r -a LABEL_ARR <<<"$LABELS"
 if [[ -n "$LABELS" && "${#LABEL_ARR[@]}" -ne "${#HOST_ARR[@]}" ]]; then
@@ -216,6 +223,18 @@ run_host_cmd() {
   fi
 }
 
+run_host_venv_python() {
+  local host="$1"
+  local venv_py="$2"
+  local python_snippet="$3"
+  local runtime_env_file="${4:-${REMOTE_ROOT}/env/venv/orig_parity_runtime_env.sh}"
+  local q_venv_py q_python_snippet q_runtime_env_file
+  printf -v q_venv_py '%q' "$venv_py"
+  printf -v q_python_snippet '%q' "$python_snippet"
+  printf -v q_runtime_env_file '%q' "$runtime_env_file"
+  run_host_cmd "$host" "if [[ -f ${q_runtime_env_file} ]]; then source ${q_runtime_env_file}; fi; ${q_venv_py} -c ${q_python_snippet}"
+}
+
 is_local_host() {
   local host="$1"
   local hn hn_s
@@ -231,6 +250,21 @@ ensure_parity_image_on_host() {
   local host="$1"
   local q_parity_image
   printf -v q_parity_image '%q' "$HOST_PARITY_IMAGE"
+
+  if [[ "$HOST_PARITY_IMAGE_RESOLVED" -eq 0 ]]; then
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "ERROR: docker is required locally to resolve parity image ${HOST_PARITY_IMAGE}." >&2
+      return 1
+    fi
+    if ! docker image inspect "$HOST_PARITY_IMAGE" >/dev/null 2>&1; then
+      echo "INFO: local parity image ${HOST_PARITY_IMAGE} missing; building from repo Dockerfile"
+      if ! "${ROOT_DIR}/scripts/repro/build_cluster_perf_image.sh" --profile orig_parity --tag "$HOST_PARITY_IMAGE"; then
+        echo "ERROR: failed to build parity image ${HOST_PARITY_IMAGE} locally." >&2
+        return 1
+      fi
+    fi
+    HOST_PARITY_IMAGE_RESOLVED=1
+  fi
 
   if run_host_cmd "$host" "docker image inspect ${q_parity_image} >/dev/null 2>&1"; then
     return 0
@@ -248,13 +282,17 @@ ensure_parity_image_on_host() {
     fi
   fi
 
-  echo "INFO: pulling parity image on host ${host}: ${HOST_PARITY_IMAGE}"
-  run_host_cmd "$host" "docker pull ${q_parity_image} >/dev/null"
-  run_host_cmd "$host" "docker image inspect ${q_parity_image} >/dev/null 2>&1"
+  if is_local_host "$host"; then
+    run_host_cmd "$host" "docker image inspect ${q_parity_image} >/dev/null 2>&1"
+    return 0
+  fi
+
+  echo "ERROR: parity image ${HOST_PARITY_IMAGE} was not resolved on ${host} after streaming local cache." >&2
+  return 1
 }
 
-mkdir -p "${ROOT_DIR}/results/raw" "${ROOT_DIR}/results/structured"
-LOG_DIR="${ROOT_DIR}/results/raw/${RUN_ID}_bootstrap_nodes"
+mkdir -p "${OUT_RAW_DIR}" "${OUT_STRUCT_DIR}"
+LOG_DIR="${OUT_RAW_DIR}/${RUN_ID}_bootstrap_nodes"
 mkdir -p "$LOG_DIR"
 
 check_cmd_path() {
@@ -445,11 +483,11 @@ write_status_json() {
   nvbandwidth_path="$(check_cmd_path "$host" "nvbandwidth")"
 
   venv_py="${REMOTE_ROOT}/env/venv/bin/python"
-  torch_version="$(run_host_cmd "$host" "${venv_py} -c \"import torch; print(torch.__version__)\" 2>/dev/null || true" | tr -d '\r' | head -n1 | xargs || true)"
-  torch_cuda_available="$(run_host_cmd "$host" "${venv_py} -c \"import torch; print(int(torch.cuda.is_available()))\" 2>/dev/null || true" | tr -d '\r' | head -n1 | xargs || true)"
-  matplotlib_version="$(run_host_cmd "$host" "${venv_py} -c \"import matplotlib; print(matplotlib.__version__)\" 2>/dev/null || true" | tr -d '\r' | head -n1 | xargs || true)"
-  numpy_version="$(run_host_cmd "$host" "${venv_py} -c \"import numpy; print(numpy.__version__)\" 2>/dev/null || true" | tr -d '\r' | head -n1 | xargs || true)"
-  deep_gemm_version="$(run_host_cmd "$host" "${venv_py} -c \"import importlib.metadata as m; print(m.version('deep_gemm'))\" 2>/dev/null || true" | tr -d '\r' | head -n1 | xargs || true)"
+  torch_version="$(run_host_venv_python "$host" "$venv_py" "import torch; print(torch.__version__)" 2>/dev/null | tr -d '\r' | head -n1 | xargs || true)"
+  torch_cuda_available="$(run_host_venv_python "$host" "$venv_py" "import torch; print(int(torch.cuda.is_available()))" 2>/dev/null | tr -d '\r' | head -n1 | xargs || true)"
+  matplotlib_version="$(run_host_venv_python "$host" "$venv_py" "import matplotlib; print(matplotlib.__version__)" 2>/dev/null | tr -d '\r' | head -n1 | xargs || true)"
+  numpy_version="$(run_host_venv_python "$host" "$venv_py" "import numpy; print(numpy.__version__)" 2>/dev/null | tr -d '\r' | head -n1 | xargs || true)"
+  deep_gemm_version="$(run_host_venv_python "$host" "$venv_py" "import importlib.metadata as m; print(m.version('deep_gemm'))" 2>/dev/null | tr -d '\r' | head -n1 | xargs || true)"
 
   python3 - <<'PY' "$out_path" "$host" "$label" "$SYNC_CODE" "$INSTALL_SYSTEM_PACKAGES" "$INSTALL_PYTHON_DEPS" "$installed_pkgs" "$REMOTE_ROOT" "$python3_path" "$pip3_path" "$docker_path" "$nvidia_smi_path" "$nvcc_path" "$mpirun_path" "$ib_write_bw_path" "$ibstat_path" "$iperf3_path" "$numactl_path" "$fio_path" "$jq_path" "$wget_path" "$curl_path" "$ncu_path" "$nsys_path" "$dcgmi_path" "$nvbandwidth_path" "$venv_py" "$torch_version" "$torch_cuda_available" "$matplotlib_version" "$numpy_version" "$deep_gemm_version"
 import json
@@ -597,7 +635,7 @@ for idx in "${!HOST_ARR[@]}"; do
       install_python_deps_on_host "$host"
     fi
 
-    out_json="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_bootstrap_status.json"
+    out_json="${OUT_STRUCT_DIR}/${RUN_ID}_${label}_bootstrap_status.json"
     write_status_json "$out_json" "$host" "$label" "$installed_pkgs"
     echo "status_json: ${out_json}"
   } | tee "$host_log"

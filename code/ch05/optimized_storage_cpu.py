@@ -14,6 +14,8 @@ from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, Workl
 
 class OptimizedStorageGdsBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Simulated GPU Direct Storage path."""
+
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
     
     def __init__(self):
         super().__init__()
@@ -47,7 +49,6 @@ class OptimizedStorageGdsBenchmark(VerificationPayloadMixin, BaseBenchmark):
             # Simulated direct GPU I/O by avoiding round-trips; in real GDS we'd use kvikio/cufile.
             cpu_data = self.data.cpu()
             self.data = cpu_data.to(self.device, non_blocking=True)
-            self._synchronize()
         self.output = self.data.sum().unsqueeze(0)
 
     def capture_verification_payload(self) -> None:

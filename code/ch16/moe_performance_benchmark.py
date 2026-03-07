@@ -11,12 +11,6 @@ tokens/second as well as per-iteration latency.
 from __future__ import annotations
 
 from core.utils import compile_utils as _compile_utils_patch  # noqa: F401
-import pathlib
-import sys
-
-_EXTRAS_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-if str(_EXTRAS_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_EXTRAS_REPO_ROOT))
 
 import argparse
 import json

@@ -56,7 +56,6 @@ class BaselineMatmulBenchmark(VerificationPayloadMixin, BaseBenchmark):
             raise RuntimeError("Matrices not initialized")
         with self._nvtx_range("matmul_baseline_fp32"):
             self._chunked_matmul()
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

@@ -16,16 +16,10 @@ Baseline behavior:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Optional
 
 import torch
 import torch.nn as nn
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
@@ -144,7 +138,6 @@ class BaselineMoERouterUniformBenchmark(VerificationPayloadMixin, BaseBenchmark)
                 out_flat = self.expert(flat)
                 self.output = out_flat.view(self.batch, self.seq, self.hidden_size)
 
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.output is None or self._verify_probe is None or self._verify_meta is None:

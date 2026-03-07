@@ -254,6 +254,8 @@ class SpeculativeDecoder:
 class VLLMMoEInferenceBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Optimized MoE inference benchmark with paged KV cache + speculative decode."""
 
+    allowed_benchmark_fn_antipatterns = ("sync",)
+
     def __init__(self) -> None:
         super().__init__()
         self.config = self._build_config()
@@ -305,6 +307,8 @@ class VLLMMoEInferenceBenchmark(VerificationPayloadMixin, BaseBenchmark):
             "graph_path": [],
         }
         self._iteration = 0
+        self._router_prefix_cache_lengths: List[int] = []
+        self._router_devnull = None
         self._mem_logger: Optional[GpuMemoryLogger] = None
         self._mem_log_path: Optional[Path] = None
         self._nvlink_warned: bool = False
@@ -381,6 +385,9 @@ class VLLMMoEInferenceBenchmark(VerificationPayloadMixin, BaseBenchmark):
             draft_model=self.draft_model,
             config=self.spec_config,
         )
+        prefix_period = max(1, cfg.context_window // 4)
+        self._router_prefix_cache_lengths = [idx % prefix_period for idx in range(cfg.batch_size)]
+        self._router_devnull = open(os.devnull, "w")
         # Force eager path so verification can capture decode tokens deterministically.
         self.graph_mode = GraphMode.EAGER
         self._refresh_router_metrics()
@@ -616,15 +623,20 @@ class VLLMMoEInferenceBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
         router_assignments = {"prefill": 0, "decode": 0}
         prompt_stub = [0] * cfg.context_window
-        prefix_cache = torch.randint(0, max(1, cfg.context_window // 4), (cfg.batch_size,))
-        with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull):
+        if not self._router_prefix_cache_lengths:
+            raise RuntimeError("setup() must initialize router prefix-cache lengths")
+        if self._router_devnull is None:
+            raise RuntimeError("setup() must initialize router stdout sink")
+        with contextlib.redirect_stdout(self._router_devnull):
             for idx in range(cfg.batch_size):
                 req = Request(
                     id=f"req-{self._iteration}-{idx}",
                     prompt_tokens=prompt_stub,
                     priority=Priority.STANDARD,
                     timestamp=time.time(),
-                    prefix_cached_length=int(prefix_cache[idx].item()),
+                    prefix_cached_length=self._router_prefix_cache_lengths[
+                        (idx + self._iteration) % len(self._router_prefix_cache_lengths)
+                    ],
                     expected_output_length=cfg.decode_tokens,
                 )
                 stage, _ = self.router.route_request(req)
@@ -755,6 +767,10 @@ class VLLMMoEInferenceBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.prompts = None
         self.paged_cache = None
         self.spec_decoder = None
+        self._router_prefix_cache_lengths = []
+        if self._router_devnull is not None:
+            self._router_devnull.close()
+            self._router_devnull = None
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         if self._mem_logger is not None:

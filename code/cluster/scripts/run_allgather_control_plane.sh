@@ -32,6 +32,10 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 LABEL="allgather_control_plane"
 HOSTS=""
@@ -79,6 +83,8 @@ fi
 if [[ -z "$REMOTE_ROOT" ]]; then
   REMOTE_ROOT="$ROOT_DIR"
 fi
+source_host_runtime_env_if_present "$ROOT_DIR"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
 
 if [[ -z "$GPUS_PER_NODE" ]]; then
   GPUS_PER_NODE="$(nvidia-smi -L | wc -l | tr -d ' ')"
@@ -108,10 +114,11 @@ done
 
 NNODES="${#HOST_ARR[@]}"
 MASTER_ADDR="${HOST_ARR[0]}"
-OUT_STRUCT_REL="results/structured/${RUN_ID}_${LABEL}.json"
-OUT_STRUCT="${ROOT_DIR}/${OUT_STRUCT_REL}"
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
-mkdir -p "${ROOT_DIR}/results/structured" "${OUT_RAW_DIR}"
+OUT_STRUCT="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}/${RUN_ID}_${LABEL}.json"
+OUT_STRUCT_REL="${OUT_STRUCT#${ROOT_DIR}/}"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+mkdir -p "${CLUSTER_STRUCTURED_DIR_EFFECTIVE}" "${OUT_RAW_DIR}"
+REMOTE_OUT_STRUCT="$(cluster_structured_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")/${RUN_ID}_${LABEL}.json"
 
 DEVICE_LIST="$(seq 0 $((GPUS_PER_NODE - 1)) | paste -sd, -)"
 
@@ -155,6 +162,8 @@ echo "========================================"
 
 PIDS=()
 fail=0
+HOST_RUNTIME_REMOTE_PREFIX="$(host_runtime_remote_prefix "$REMOTE_ROOT")"
+REMOTE_ARTIFACT_ENV="$(cluster_artifact_env_prefix_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
 for idx in "${!HOST_ARR[@]}"; do
   host="${HOST_ARR[$idx]}"
   log_path="${OUT_RAW_DIR}/${RUN_ID}_${LABEL}_node${idx}.log"
@@ -173,11 +182,11 @@ for idx in "${!HOST_ARR[@]}"; do
     "${REMOTE_ROOT}/scripts/allgather_control_plane_bench.py"
     --iters "${ITERS}"
     --warmup "${WARMUP}"
-    --output "${REMOTE_ROOT}/${OUT_STRUCT_REL}"
+    --output "${REMOTE_OUT_STRUCT}"
   )
 
   launch_str="$(printf '%q ' "${launch_cmd[@]}")"
-  env_prefix="cd $(printf '%q' "${REMOTE_ROOT}") && NCCL_DEBUG=WARN"
+  env_prefix="cd $(printf '%q' "${REMOTE_ROOT}") && ${HOST_RUNTIME_REMOTE_PREFIX}${REMOTE_ARTIFACT_ENV} NCCL_DEBUG=WARN"
   if [[ -n "$SOCKET_IFNAME" ]]; then
     env_prefix+=" NCCL_SOCKET_IFNAME=$(printf '%q' "${SOCKET_IFNAME}") GLOO_SOCKET_IFNAME=$(printf '%q' "${SOCKET_IFNAME}")"
   fi
@@ -202,13 +211,13 @@ for pid in "${PIDS[@]}"; do
 done
 
 if [[ "$fail" -ne 0 ]]; then
-  echo "ERROR: control-plane benchmark failed; check results/raw logs." >&2
+  echo "ERROR: control-plane benchmark failed; check logs under ${OUT_RAW_DIR}." >&2
   exit 1
 fi
 
 if [[ ! -f "$OUT_STRUCT" ]]; then
   if ! is_local_host "${MASTER_ADDR}"; then
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${MASTER_ADDR}:${REMOTE_ROOT}/${OUT_STRUCT_REL}" "$OUT_STRUCT" >/dev/null
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${MASTER_ADDR}:${REMOTE_OUT_STRUCT}" "$OUT_STRUCT" >/dev/null
   fi
 fi
 

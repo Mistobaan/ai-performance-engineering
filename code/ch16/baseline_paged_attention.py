@@ -11,17 +11,11 @@ via scaled_dot_product_attention for O(n) memory and fused kernels.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import (
@@ -131,7 +125,6 @@ class BaselinePagedAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with nvtx_range("baseline_paged_attention", enable=enable_nvtx):
             with torch.no_grad():
                 self.output = self._forward_naive()
-            torch.cuda.synchronize(self.device)
         if self._verify_input is None:
             raise RuntimeError("Verification input missing")
         parameter_count = 0

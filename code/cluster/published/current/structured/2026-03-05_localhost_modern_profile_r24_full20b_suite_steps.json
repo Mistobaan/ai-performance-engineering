@@ -1,0 +1,570 @@
+[
+  {
+    "name": "preflight_services",
+    "start_time": "2026-03-05T01:28:22+00:00",
+    "end_time": "2026-03-05T01:28:22+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/preflight_services.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/preflight_cluster_services.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly"
+  },
+  {
+    "name": "discovery",
+    "start_time": "2026-03-05T01:28:22+00:00",
+    "end_time": "2026-03-05T01:28:25+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/discovery.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/collect_discovery_and_tcp_sysctl.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --labels localhost"
+  },
+  {
+    "name": "quick_friction_all_nodes",
+    "start_time": "2026-03-05T01:28:25+00:00",
+    "end_time": "2026-03-05T01:29:48+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/quick_friction_all_nodes.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_quick_friction_all_nodes.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --checks uv_torch_install\\,pip_torch_install\\,ngc_pull\\,torch_import\\,hf_download\\,ip_owner\\,speedtest --timeout-sec 900 --torch-version 2.5.1 --torch-index-url https://download.pytorch.org/whl/cu124 --ngc-image nvcr.io/nvidia/pytorch:24.05-py3 --hf-model openai-community/gpt2 --hf-local-dir-base /tmp --allow-failed-checks uv_torch_install\\,ip_owner\\,speedtest --labels localhost"
+  },
+  {
+    "name": "monitoring_expectations_all_nodes",
+    "start_time": "2026-03-05T01:29:48+00:00",
+    "end_time": "2026-03-05T01:30:08+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/monitoring_expectations_all_nodes.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/collect_monitoring_expectations_all_nodes.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --checks kubectl_pods\\,kubectl_top_nodes\\,kubectl_top_pods\\,nvidia_dmon\\,nvidia_nvlink\\,dcgmi_discovery\\,dcgmi_dmon\\,dmesg_tail --k8s-mode auto --sample-count 20 --dmesg-lines 400 --timeout-sec 180 --labels localhost"
+  },
+  {
+    "name": "hang_triage_bundle",
+    "start_time": "2026-03-05T01:30:08+00:00",
+    "end_time": "2026-03-05T01:30:08+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/hang_triage_bundle.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/collect_hang_triage_bundle.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --labels localhost"
+  },
+  {
+    "name": "connectivity_probe",
+    "start_time": "2026-03-05T01:30:08+00:00",
+    "end_time": "2026-03-05T01:30:16+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/connectivity_probe.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_torchrun_connectivity_probe.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --gpus-per-node 1 --master-port 29504 --barrier-iters 5 --payload-bytes 8388608 --timeout-sec 120"
+  },
+  {
+    "name": "nccl_single_node",
+    "start_time": "2026-03-05T01:30:16+00:00",
+    "end_time": "2026-03-05T01:30:23+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/nccl_single_node.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_nccl_all_reduce.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b_node1 --hosts localhost --label localhost"
+  },
+  {
+    "name": "nccl_env_sensitivity",
+    "start_time": "2026-03-05T01:30:23+00:00",
+    "end_time": "2026-03-05T01:31:05+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/nccl_env_sensitivity.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_nccl_env_sensitivity.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --gpus-per-node 1 --min-bytes 1M --max-bytes 64M --warmup 5 --iters 20"
+  },
+  {
+    "name": "vllm_serve_sweep",
+    "start_time": "2026-03-05T01:31:05+00:00",
+    "end_time": "2026-03-05T01:48:07+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_serve_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --concurrency-range 32\\ 64\\ 128\\ 256\\ 512 --repeats 3 --port 8888"
+  },
+  {
+    "name": "vllm_serve_sweep",
+    "start_time": "2026-03-05T01:48:09+00:00",
+    "end_time": "2026-03-05T02:05:44+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_serve_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --concurrency-range 32\\ 64\\ 128\\ 256\\ 512 --repeats 3 --port 8888"
+  },
+  {
+    "name": "vllm_serve_sweep",
+    "start_time": "2026-03-05T02:05:46+00:00",
+    "end_time": "2026-03-05T02:32:50+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_serve_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --concurrency-range 32\\ 64\\ 128\\ 256\\ 512 --repeats 3 --port 8888"
+  },
+  {
+    "name": "vllm_serve_sweep",
+    "start_time": "2026-03-05T02:32:52+00:00",
+    "end_time": "2026-03-05T02:51:02+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_serve_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --concurrency-range 32\\ 64\\ 128\\ 256\\ 512 --repeats 3 --port 8888"
+  },
+  {
+    "name": "vllm_serve_sweep",
+    "start_time": "2026-03-05T02:51:04+00:00",
+    "end_time": "2026-03-05T03:17:50+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_serve_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --concurrency-range 32\\ 64\\ 128\\ 256\\ 512 --repeats 3 --port 8888"
+  },
+  {
+    "name": "vllm_serve_sweep",
+    "start_time": "2026-03-05T03:17:52+00:00",
+    "end_time": "2026-03-05T03:35:40+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_serve_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --concurrency-range 32\\ 64\\ 128\\ 256\\ 512 --repeats 3 --port 8888"
+  },
+  {
+    "name": "vllm_serve_sweep",
+    "start_time": "2026-03-05T03:35:42+00:00",
+    "end_time": "2026-03-05T03:45:51+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_serve_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --concurrency-range 32\\ 64\\ 128\\ 256\\ 512 --repeats 3 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T03:45:51+00:00",
+    "end_time": "2026-03-05T04:27:18+00:00",
+    "exit_code": 137,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "gemm_sanity",
+    "start_time": "2026-03-05T04:27:18+00:00",
+    "end_time": "2026-03-05T04:27:27+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/gemm_sanity.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_gemm_sanity_all_nodes.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --labels localhost"
+  },
+  {
+    "name": "gpu_stream_all_nodes",
+    "start_time": "2026-03-05T04:27:27+00:00",
+    "end_time": "2026-03-05T04:27:34+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/gpu_stream_all_nodes.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_gpu_stream_bench_all_nodes.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --device 0 --size-mb 1024 --iters 40 --warmup 10 --dtype fp32 --labels localhost"
+  },
+  {
+    "name": "allreduce_stability",
+    "start_time": "2026-03-05T04:27:34+00:00",
+    "end_time": "2026-03-05T04:27:43+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/allreduce_stability.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_allreduce_stability.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --label allreduce_stability --payload-gib 2.0 --iters 200 --warmup 20"
+  },
+  {
+    "name": "nccl_alltoall_single_node",
+    "start_time": "2026-03-05T04:27:43+00:00",
+    "end_time": "2026-03-05T04:27:52+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/nccl_alltoall_single_node.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_nccl_all_to_all.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b_node1_alltoall --hosts localhost --label localhost --min-bytes 1M --max-bytes 64M --iters 20 --warmup 5"
+  },
+  {
+    "name": "nccl_algo_comparison",
+    "start_time": "2026-03-05T04:27:52+00:00",
+    "end_time": "2026-03-05T04:28:28+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/nccl_algo_comparison.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_nccl_algo_comparison.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --algos Ring\\,Tree\\,NVLS\\,auto"
+  },
+  {
+    "name": "train_step_single_node",
+    "start_time": "2026-03-05T04:28:28+00:00",
+    "end_time": "2026-03-05T04:28:56+00:00",
+    "exit_code": 1,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/train_step_single_node.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_torchrun_transformer_train_step.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --ssh-user cfregly --gpus-per-node 1 --master-port 29510 --steps 30 --warmup-steps 5 --batch-size 2 --seq-len 2048 --hidden 4096 --layers 24 --heads 32 --mlp-ratio 4 --precision bf16 --fsdp 1 --lr 1e-4 --hosts localhost --label localhost_single_node"
+  },
+  {
+    "name": "fio_all_nodes",
+    "start_time": "2026-03-05T04:28:56+00:00",
+    "end_time": "2026-03-05T04:39:06+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/fio_all_nodes.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_fio_all_nodes.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --test-dir /tmp --runtime 30 --repeats 3 --labels localhost"
+  },
+  {
+    "name": "nvbandwidth_all_nodes",
+    "start_time": "2026-03-05T04:39:06+00:00",
+    "end_time": "2026-03-05T04:39:06+00:00",
+    "exit_code": 3,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/nvbandwidth_all_nodes.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_nvbandwidth_bundle_all_nodes.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --runtime host --labels localhost --nvbw-bin nvbandwidth"
+  },
+  {
+    "name": "plot_nccl_single_node",
+    "start_time": "2026-03-05T04:39:06+00:00",
+    "end_time": "2026-03-05T04:39:07+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_nccl_single_node.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_nccl.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_node1_nccl.json --out-dir /home/cfregly/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-03-05_localhost_modern_profile_r24_full20b_node1"
+  },
+  {
+    "name": "plot_nccl_alltoall_single_node",
+    "start_time": "2026-03-05T04:39:07+00:00",
+    "end_time": "2026-03-05T04:39:08+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_nccl_alltoall_single_node.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_nccl.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_node1_alltoall_nccl_alltoall.json --out-dir /home/cfregly/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-03-05_localhost_modern_profile_r24_full20b_node1_alltoall"
+  },
+  {
+    "name": "plot_nccl_env_sensitivity",
+    "start_time": "2026-03-05T04:39:08+00:00",
+    "end_time": "2026-03-05T04:39:08+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_nccl_env_sensitivity.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_nccl_env_sensitivity.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json --output /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.png --title NCCL\\ Env\\ Sensitivity\\ 2026-03-05_localhost_modern_profile_r24_full20b"
+  },
+  {
+    "name": "plot_vllm_serve",
+    "start_time": "2026-03-05T04:39:08+00:00",
+    "end_time": "2026-03-05T04:39:09+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_vllm_serve.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_vllm_serve_sweep.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv --out-dir /home/cfregly/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-03-05_localhost_modern_profile_r24_full20b_localhost"
+  },
+  {
+    "name": "analyze_vllm_slo_goodput",
+    "start_time": "2026-03-05T04:39:09+00:00",
+    "end_time": "2026-03-05T04:39:09+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/analyze_vllm_slo_goodput.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/analyze_vllm_slo_goodput.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_sweep.csv --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --slo-p99-ttft-ms 2000 --slo-p99-tpot-ms 200 --output-json /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_slo_goodput.json --output-csv /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_slo_goodput.csv"
+  },
+  {
+    "name": "plot_vllm_slo_goodput",
+    "start_time": "2026-03-05T04:39:09+00:00",
+    "end_time": "2026-03-05T04:39:10+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_vllm_slo_goodput.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_vllm_goodput_slo.py --input-json /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_slo_goodput.json --out-dir /home/cfregly/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-03-05_localhost_modern_profile_r24_full20b_localhost"
+  },
+  {
+    "name": "plot_gemm_sanity",
+    "start_time": "2026-03-05T04:39:10+00:00",
+    "end_time": "2026-03-05T04:39:11+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_gemm_sanity.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_gemm_bar.py --inputs /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_gemm_gpu_sanity.csv --output /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_gemm_gpu_sanity.png --filter-m 16384"
+  },
+  {
+    "name": "plot_allreduce_stability",
+    "start_time": "2026-03-05T04:39:11+00:00",
+    "end_time": "2026-03-05T04:39:12+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_allreduce_stability.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_allreduce_stability.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_allreduce_stability.json --output /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_allreduce_stability.png"
+  },
+  {
+    "name": "plot_nccl_algo_comparison",
+    "start_time": "2026-03-05T04:39:12+00:00",
+    "end_time": "2026-03-05T04:39:13+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_nccl_algo_comparison.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_nccl_algo_comparison.py --inputs /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_auto.json /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_comparison.json /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_nvls.json /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_ring.json /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_tree.json --output /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_nccl_algo_comparison.png --title NCCL\\ Algorithm\\ Comparison\\ 2026-03-05_localhost_modern_profile_r24_full20b"
+  },
+  {
+    "name": "plot_fio_2026-03-05_localhost_modern_profile_r24_full20b_localhost_fio",
+    "start_time": "2026-03-05T04:39:13+00:00",
+    "end_time": "2026-03-05T04:39:13+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_fio_2026-03-05_localhost_modern_profile_r24_full20b_localhost_fio.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_fio.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_fio.json --out /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_fio.png"
+  },
+  {
+    "name": "plot_gpu_stream_2026-03-05_localhost_modern_profile_r24_full20b_localhost_gpu_stream",
+    "start_time": "2026-03-05T04:39:14+00:00",
+    "end_time": "2026-03-05T04:39:14+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_gpu_stream_2026-03-05_localhost_modern_profile_r24_full20b_localhost_gpu_stream.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_gpu_stream.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_gpu_stream.json --out /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_gpu_stream.png"
+  },
+  {
+    "name": "plot_nvlink_topology_2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta",
+    "start_time": "2026-03-05T04:39:14+00:00",
+    "end_time": "2026-03-05T04:39:15+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_nvlink_topology_2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_nvlink_topology.py --meta /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta.json --fig-out /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.png --summary-out /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_meta_nvlink_topology.json"
+  },
+  {
+    "name": "plot_cluster_story_dashboard",
+    "start_time": "2026-03-05T04:39:15+00:00",
+    "end_time": "2026-03-05T04:39:16+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_cluster_story_dashboard.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_cluster_story_dashboard.py --run-id 2026-03-05_localhost_modern_profile_r24_full20b --structured-dir /home/cfregly/ai-performance-engineering/code/cluster/results/structured --node-labels localhost --fig-out /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_cluster_story_dashboard.png --summary-out /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_node_parity_summary.json"
+  },
+  {
+    "name": "plot_operator_checks_dashboard",
+    "start_time": "2026-03-05T04:39:16+00:00",
+    "end_time": "2026-03-05T04:39:17+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_operator_checks_dashboard.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_operator_checks_dashboard.py --run-id 2026-03-05_localhost_modern_profile_r24_full20b --structured-dir /home/cfregly/ai-performance-engineering/code/cluster/results/structured --node-labels localhost --fig-out /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.png --summary-out /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json"
+  },
+  {
+    "name": "build_cluster_scorecard",
+    "start_time": "2026-03-05T04:39:17+00:00",
+    "end_time": "2026-03-05T04:39:17+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/build_cluster_scorecard.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/build_cluster_scorecard.py --run-id 2026-03-05_localhost_modern_profile_r24_full20b --primary-label localhost --structured-dir /home/cfregly/ai-performance-engineering/code/cluster/results/structured"
+  },
+  {
+    "name": "build_mlperf_alignment",
+    "start_time": "2026-03-05T04:39:17+00:00",
+    "end_time": "2026-03-05T04:39:17+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/build_mlperf_alignment.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/build_mlperf_alignment.py --run-id 2026-03-05_localhost_modern_profile_r24_full20b --structured-dir /home/cfregly/ai-performance-engineering/code/cluster/results/structured"
+  },
+  {
+    "name": "analyze_benchmark_coverage",
+    "start_time": "2026-03-05T04:39:17+00:00",
+    "end_time": "2026-03-05T04:39:17+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/analyze_benchmark_coverage.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/analyze_benchmark_coverage.py --run-id 2026-03-05_localhost_modern_profile_r24_full20b --structured-dir /home/cfregly/ai-performance-engineering/code/cluster/results/structured"
+  },
+  {
+    "name": "validate_required_artifacts",
+    "start_time": "2026-03-05T04:39:17+00:00",
+    "end_time": "2026-03-05T04:39:17+00:00",
+    "exit_code": 1,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/validate_required_artifacts.log",
+    "command": "validate_required_artifacts"
+  },
+  {
+    "name": "manifest_refresh",
+    "start_time": "2026-03-05T04:39:17+00:00",
+    "end_time": "2026-03-05T04:39:17+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/manifest_refresh.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/scripts/write_manifest.py --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --include-figures --labels localhost"
+  },
+  {
+    "name": "render_localhost_field_report_package",
+    "start_time": "2026-03-05T04:39:18+00:00",
+    "end_time": "2026-03-05T04:39:18+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/render_localhost_field_report_package.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/scripts/render_localhost_field_report_package.py --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --report /home/cfregly/ai-performance-engineering/code/cluster/field-report-localhost.md --notes /home/cfregly/ai-performance-engineering/code/cluster/field-report-localhost-notes.md"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T14:25:11+00:00",
+    "end_time": "2026-03-05T14:32:25+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T14:32:27+00:00",
+    "end_time": "2026-03-05T14:37:10+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T14:37:12+00:00",
+    "end_time": "2026-03-05T14:40:41+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T14:40:43+00:00",
+    "end_time": "2026-03-05T14:43:44+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T14:43:46+00:00",
+    "end_time": "2026-03-05T14:53:54+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T14:53:56+00:00",
+    "end_time": "2026-03-05T14:58:58+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T14:59:00+00:00",
+    "end_time": "2026-03-05T15:02:46+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T15:02:48+00:00",
+    "end_time": "2026-03-05T15:06:08+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T15:06:10+00:00",
+    "end_time": "2026-03-05T15:16:34+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T15:16:36+00:00",
+    "end_time": "2026-03-05T15:21:55+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T15:21:58+00:00",
+    "end_time": "2026-03-05T15:26:03+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T15:26:05+00:00",
+    "end_time": "2026-03-05T15:29:41+00:00",
+    "exit_code": 75,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "vllm_request_rate_sweep",
+    "start_time": "2026-03-05T15:29:43+00:00",
+    "end_time": "2026-03-05T15:33:17+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/vllm_request_rate_sweep.log",
+    "command": "env VLLM_SWEEP_MAX_POINTS_PER_RUN=1 /home/cfregly/ai-performance-engineering/code/cluster/scripts/repro/run_vllm_serve_request_rate_sweep_container.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --model openai/gpt-oss-20b --isl 1024 --osl 1024 --request-rate-range 1\\ 2\\ 4\\ 8\\ 16 --repeats 3 --max-concurrency 256 --port 8888"
+  },
+  {
+    "name": "train_step_single_node",
+    "start_time": "2026-03-05T15:33:17+00:00",
+    "end_time": "2026-03-05T15:33:57+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/train_step_single_node.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_torchrun_transformer_train_step.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --ssh-user cfregly --gpus-per-node 1 --master-port 29510 --steps 30 --warmup-steps 5 --batch-size 2 --seq-len 2048 --hidden 4096 --layers 24 --heads 32 --mlp-ratio 4 --precision bf16 --fsdp 1 --lr 1e-4 --hosts localhost --label localhost_single_node"
+  },
+  {
+    "name": "nvbandwidth_all_nodes",
+    "start_time": "2026-03-05T15:33:57+00:00",
+    "end_time": "2026-03-05T15:34:24+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/nvbandwidth_all_nodes.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_nvbandwidth_bundle_all_nodes.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --hosts localhost --ssh-user cfregly --runtime host --labels localhost --nvbw-bin nvbandwidth"
+  },
+  {
+    "name": "analyze_vllm_request_rate_slo_goodput",
+    "start_time": "2026-03-05T15:34:24+00:00",
+    "end_time": "2026-03-05T15:34:24+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/analyze_vllm_request_rate_slo_goodput.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/analyze_vllm_request_rate_slo_goodput.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_request_rate_sweep.csv --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --slo-p99-ttft-ms 2000 --slo-p99-tpot-ms 200 --output-json /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_request_rate_slo_goodput.json --output-csv /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_request_rate_slo_goodput.csv"
+  },
+  {
+    "name": "plot_vllm_request_rate_sweep",
+    "start_time": "2026-03-05T15:34:24+00:00",
+    "end_time": "2026-03-05T15:34:25+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_vllm_request_rate_sweep.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_vllm_request_rate_sweep.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_serve_request_rate_sweep.csv --out-dir /home/cfregly/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-03-05_localhost_modern_profile_r24_full20b_localhost"
+  },
+  {
+    "name": "plot_vllm_request_rate_slo_goodput",
+    "start_time": "2026-03-05T15:34:25+00:00",
+    "end_time": "2026-03-05T15:34:26+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_vllm_request_rate_slo_goodput.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_vllm_request_rate_slo_goodput.py --input-json /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_vllm_request_rate_slo_goodput.json --out-dir /home/cfregly/ai-performance-engineering/code/cluster/docs/figures --run-id 2026-03-05_localhost_modern_profile_r24_full20b_localhost"
+  },
+  {
+    "name": "plot_nvbandwidth_2026-03-05_localhost_modern_profile_r24_full20b_localhost_nvbandwidth",
+    "start_time": "2026-03-05T15:34:26+00:00",
+    "end_time": "2026-03-05T15:34:27+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_nvbandwidth_2026-03-05_localhost_modern_profile_r24_full20b_localhost_nvbandwidth.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_nvbandwidth_sums.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_nvbandwidth_sums.csv --out /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_nvbandwidth_sums.png --title nvbandwidth\\ SUM\\ metrics\\ 2026-03-05_localhost_modern_profile_r24_full20b_localhost_nvbandwidth"
+  },
+  {
+    "name": "plot_train_step_single",
+    "start_time": "2026-03-05T15:34:27+00:00",
+    "end_time": "2026-03-05T15:34:27+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_train_step_single.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_torchrun_train_step.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_single_node_torchrun_train_step.json --out /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_localhost_single_node_torchrun_train_step.png"
+  },
+  {
+    "name": "validate_required_artifacts",
+    "start_time": "2026-03-05T15:34:27+00:00",
+    "end_time": "2026-03-05T15:34:28+00:00",
+    "exit_code": 1,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/validate_required_artifacts.log",
+    "command": "validate_required_artifacts"
+  },
+  {
+    "name": "validate_required_artifacts",
+    "start_time": "2026-03-05T15:35:24+00:00",
+    "end_time": "2026-03-05T15:35:25+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/validate_required_artifacts.log",
+    "command": "validate_required_artifacts"
+  },
+  {
+    "name": "build_coverage_delta",
+    "start_time": "2026-03-05T15:39:48+00:00",
+    "end_time": "2026-03-05T15:39:48+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/build_coverage_delta.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/build_coverage_delta.py --run-id 2026-03-05_localhost_modern_profile_r24_full20b --baseline-run-id 2026-03-04_localhost_modern_profile_r22_fastcanon --structured-dir /home/cfregly/ai-performance-engineering/code/cluster/results/structured"
+  },
+  {
+    "name": "allreduce_latency_comp",
+    "start_time": "2026-03-05T15:42:39+00:00",
+    "end_time": "2026-03-05T15:42:48+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/allreduce_latency_comp.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_allreduce_latency_comp.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label allreduce_latency_comp --hosts localhost --ssh-user cfregly --payload-gib 4.0 --chunks 1000 --iters 5 --warmup 1"
+  },
+  {
+    "name": "allgather_control_plane",
+    "start_time": "2026-03-05T15:42:48+00:00",
+    "end_time": "2026-03-05T15:42:58+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/allgather_control_plane.log",
+    "command": "/home/cfregly/ai-performance-engineering/code/cluster/scripts/run_allgather_control_plane.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label allgather_control_plane --hosts localhost --ssh-user cfregly --iters 2000 --warmup 200"
+  },
+  {
+    "name": "plot_allreduce_latency_comp",
+    "start_time": "2026-03-05T15:42:59+00:00",
+    "end_time": "2026-03-05T15:43:00+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_allreduce_latency_comp.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_allreduce_latency_comp.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_allreduce_latency_comp.json --output /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_allreduce_latency_comp.png"
+  },
+  {
+    "name": "plot_allgather_control_plane",
+    "start_time": "2026-03-05T15:43:00+00:00",
+    "end_time": "2026-03-05T15:43:00+00:00",
+    "exit_code": 0,
+    "log_path": "/home/cfregly/ai-performance-engineering/code/cluster/results/raw/2026-03-05_localhost_modern_profile_r24_full20b_suite/plot_allgather_control_plane.log",
+    "command": "python3 /home/cfregly/ai-performance-engineering/code/cluster/analysis/plot_allgather_control_plane.py --input /home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_allgather_control_plane.json --output /home/cfregly/ai-performance-engineering/code/cluster/docs/figures/2026-03-05_localhost_modern_profile_r24_full20b_allgather_control_plane.png"
+  }
+]

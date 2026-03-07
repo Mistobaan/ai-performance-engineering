@@ -7,15 +7,9 @@ keeping verification aligned with the baseline output.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Optional
 
 import torch
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata  # noqa: E402
@@ -59,7 +53,6 @@ class CUDAGraphRouterBenchmark(VerificationPayloadMixin, BaseBenchmark):
             # Flip route between iterations to emulate a conditional branch.
             self.route_flag ^= 1
             self._extension.graph_replay(self.data, self.iterations)
-        self._synchronize()
         if self.data is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

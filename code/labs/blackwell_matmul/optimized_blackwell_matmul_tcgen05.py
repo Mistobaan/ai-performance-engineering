@@ -83,13 +83,9 @@ class Tcgen05Cta2GraceBlackwellBenchmark(GraceBlackwellMatmulBenchmark):
         except Exception as exc:
             raise RuntimeError(f"SKIPPED: tcgen05 inline extension unavailable ({exc})") from exc
 
-
-
-def get_benchmark(size: int = 2048, *, cta2: bool = False) -> GraceBlackwellMatmulBenchmark:
+def get_benchmark() -> GraceBlackwellMatmulBenchmark:
     """Factory for discover_benchmarks()."""
-    if cta2:
-        return Tcgen05Cta2GraceBlackwellBenchmark(size=size)
-    return Tcgen05GraceBlackwellBenchmark(size=size)
+    return Tcgen05GraceBlackwellBenchmark()
 
 
 if __name__ == "__main__":

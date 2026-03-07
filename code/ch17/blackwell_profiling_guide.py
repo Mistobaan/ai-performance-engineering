@@ -12,19 +12,12 @@ import csv
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import torch
 import torch.profiler as profiler
 from core.profiling.nvtx_helper import standardize_nvtx_label
-
-_EXTRAS_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_EXTRAS_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_EXTRAS_REPO_ROOT))
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class NsightSystemsProfiler:

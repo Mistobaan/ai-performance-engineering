@@ -73,7 +73,6 @@ class OptimizedAdaptiveBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 torch.cuda.current_stream().wait_stream(self.prefetch_stream)
                 transformed = self._transform(slice_buf)
                 self.output[start : start + span].copy_(transformed, non_blocking=True)
-            self._synchronize()
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

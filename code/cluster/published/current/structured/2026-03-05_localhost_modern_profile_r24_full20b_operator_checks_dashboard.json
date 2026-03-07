@@ -1,0 +1,97 @@
+{
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "node_labels": [
+    "localhost"
+  ],
+  "sources": {
+    "quick_friction": {
+      "localhost": "/home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json"
+    },
+    "monitoring_expectations": {
+      "localhost": "/home/cfregly/ai-performance-engineering/code/cluster/results/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json"
+    }
+  },
+  "quick_friction": {
+    "localhost": {
+      "status": "ok",
+      "failed_checks": [
+        "uv_torch_install"
+      ],
+      "speedtest": {
+        "download_mbps": 1160.0438800370878,
+        "upload_mbps": 723.8402585725809,
+        "ping_ms": 20.605
+      },
+      "tool_paths": {
+        "curl": "/usr/bin/curl",
+        "docker": "/usr/bin/docker",
+        "hf": "/usr/local/bin/hf",
+        "huggingface_cli": "/usr/local/bin/huggingface-cli",
+        "python3": "/usr/bin/python3",
+        "speedtest": "/usr/bin/speedtest-cli",
+        "uv": null,
+        "whois": "/usr/bin/whois"
+      }
+    }
+  },
+  "monitoring_expectations": {
+    "localhost": {
+      "status": "ok",
+      "k8s": {
+        "control_plane_enabled": false,
+        "detected": false,
+        "kubeconfig_candidates": [
+          "/home/cfregly/.kube/config",
+          "/etc/kubernetes/admin.conf",
+          "/etc/rancher/k3s/k3s.yaml",
+          "/var/snap/microk8s/current/credentials/client.config"
+        ],
+        "kubeconfig_present": false,
+        "mode": "auto",
+        "reasons": []
+      },
+      "skipped_checks": [
+        "kubectl_pods",
+        "kubectl_top_nodes",
+        "kubectl_top_pods"
+      ],
+      "effective_checks": [
+        "nvidia_dmon",
+        "nvidia_nvlink",
+        "dcgmi_discovery",
+        "dcgmi_dmon",
+        "dmesg_tail"
+      ],
+      "categories": {
+        "control_plane": {
+          "checks": [],
+          "ok_checks": [],
+          "status": "not_applicable"
+        },
+        "gpu_telemetry": {
+          "checks": [
+            "nvidia_dmon",
+            "nvidia_nvlink",
+            "dcgmi_discovery",
+            "dcgmi_dmon"
+          ],
+          "ok_checks": [
+            "nvidia_dmon",
+            "nvidia_nvlink",
+            "dcgmi_discovery"
+          ],
+          "status": "ok"
+        },
+        "system_signals": {
+          "checks": [
+            "dmesg_tail"
+          ],
+          "ok_checks": [
+            "dmesg_tail"
+          ],
+          "status": "ok"
+        }
+      }
+    }
+  }
+}

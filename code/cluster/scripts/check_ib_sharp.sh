@@ -29,7 +29,7 @@ Options:
   --nccl-warmup <n>         nccl-tests warmup iters (default: 5)
   --nccl-iters <n>          nccl-tests measure iters (default: 20)
 
-Outputs (results/structured/):
+Outputs (runs/<run_id>/structured/):
   - ${RUN_ID}_ib_sharp_check.json (summary)
   - ${RUN_ID}_ib_sharp_stack_<host>.txt (per-host evidence)
   - ${RUN_ID}_nccl_collnet_all_reduce_<label>.json (forced CollNet NCCL parse)
@@ -37,8 +37,11 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
 
 RUN_ID="$(date +%Y-%m-%d_%H%M%S)_ib_sharp_check"
 HOSTS=""
@@ -86,6 +89,9 @@ if [[ -z "$HOSTS" ]]; then
   exit 2
 fi
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW_DIR" "$OUT_STRUCT_DIR"
 
 IFS=',' read -r -a HOST_ARR <<<"$HOSTS"

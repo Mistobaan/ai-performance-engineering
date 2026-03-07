@@ -15,6 +15,8 @@ from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, Workl
 
 class BaselineStorageCpuBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """CPU-mediated I/O - double copy overhead (storage→CPU→GPU)."""
+
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
     
     def __init__(self):
         super().__init__()
@@ -49,7 +51,6 @@ class BaselineStorageCpuBenchmark(VerificationPayloadMixin, BaseBenchmark):
             np.save(self.filepath, cpu_data)
             cpu_loaded = np.load(self.filepath)
             self.data = torch.from_numpy(cpu_loaded).to(self.device)
-            self._synchronize()
         self.output = self.data.sum().unsqueeze(0)
 
     def capture_verification_payload(self) -> None:

@@ -28,6 +28,10 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 HOSTS=""
 GPUS_PER_NODE=""
@@ -137,9 +141,11 @@ fi
 if [[ -z "$GPUS_PER_NODE" ]]; then
   GPUS_PER_NODE="$(nvidia-smi -L | wc -l | tr -d ' ')"
 fi
+source_host_runtime_env_if_present "$ROOT_DIR"
 
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW_DIR" "$OUT_STRUCT_DIR"
 
 SCRIPT_PATH="${ROOT_DIR}/scripts/torchrun_allreduce_sanity.py"
@@ -193,6 +199,8 @@ if [[ -n "$SSH_KEY" ]]; then
   SSH_OPTS+=(-i "$SSH_KEY")
 fi
 
+HOST_RUNTIME_REMOTE_PREFIX="$(host_runtime_remote_prefix "$ROOT_DIR")"
+
 for host in "${HOST_ARR[@]}"; do
   if ! ssh "${SSH_OPTS[@]}" "ubuntu@${host}" "sudo -n true >/dev/null"; then
     echo "ERROR: GPU clock locking is required, but passwordless sudo is not available on ${host}." >&2
@@ -233,7 +241,7 @@ for idx in "${!HOST_ARR[@]}"; do
   if [[ "$idx" -eq 0 ]]; then
     remote_env="${remote_env} OUTPUT_JSON=${OUTPUT_JSON}"
   fi
-  ssh "${SSH_OPTS[@]}" "ubuntu@${host}" "cd ${ROOT_DIR} && ${remote_env} ${cmd[*]}" 2>&1 | tee "$log_path" &
+  ssh "${SSH_OPTS[@]}" "ubuntu@${host}" "cd ${ROOT_DIR} && ${HOST_RUNTIME_REMOTE_PREFIX}${remote_env} ${cmd[*]}" 2>&1 | tee "$log_path" &
   PIDS+=($!)
 done
 

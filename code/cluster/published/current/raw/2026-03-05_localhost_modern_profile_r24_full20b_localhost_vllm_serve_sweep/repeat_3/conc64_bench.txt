@@ -1,0 +1,36 @@
+Namespace(subparser='bench', bench_type='serve', dispatch_function=<function BenchmarkServingSubcommand.cmd at 0x727339c31e40>, trust_remote_code=False, seed=0, num_prompts=640, dataset_name='random', no_stream=False, dataset_path=None, no_oversample=False, skip_chat_template=False, enable_multimodal_chat=False, disable_shuffle=False, custom_output_len=256, spec_bench_output_len=256, spec_bench_category=None, sonnet_input_len=550, sonnet_output_len=150, sonnet_prefix_len=200, sharegpt_output_len=None, blazedit_min_distance=0.0, blazedit_max_distance=1.0, asr_max_audio_len_sec=inf, asr_min_audio_len_sec=0.0, random_input_len=1024, random_output_len=128, random_range_ratio=0.0, random_prefix_len=0, random_batch_size=1, no_reranker=False, random_mm_base_items_per_request=1, random_mm_num_mm_items_range_ratio=0.0, random_mm_limit_mm_per_prompt={'image': 255, 'video': 1}, random_mm_bucket_config={(256, 256, 1): 0.5, (720, 1280, 1): 0.5, (720, 1280, 16): 0.0}, hf_subset=None, hf_split=None, hf_name=None, hf_output_len=None, prefix_repetition_prefix_len=256, prefix_repetition_suffix_len=256, prefix_repetition_num_prefixes=10, prefix_repetition_output_len=128, label=None, backend='vllm', base_url='http://localhost:8888', host='127.0.0.1', port=8000, endpoint='/v1/completions', header=None, max_concurrency=64, model='openai/gpt-oss-20b', input_len=1024, output_len=1024, tokenizer=None, tokenizer_mode='auto', use_beam_search=False, logprobs=None, request_rate=inf, burstiness=1.0, disable_tqdm=False, num_warmups=0, profile=False, save_result=True, save_detailed=False, append_result=False, metadata=None, result_dir='/results', result_filename='conc64_isl1024_osl1024_tp1.json', ignore_eos=False, percentile_metrics=None, metric_percentiles='99', goodput=None, request_id_prefix='bench-3c0be471-', top_p=None, top_k=None, min_p=None, temperature=None, frequency_penalty=None, presence_penalty=None, repetition_penalty=None, served_model_name=None, lora_modules=None, ramp_up_strategy=None, ramp_up_start_rps=None, ramp_up_end_rps=None, ready_check_timeout_sec=0, extra_body=None, skip_tokenizer_init=False, insecure=False)
+INFO 03-05 03:10:37 [datasets.py:626] Sampling input_len from [1024, 1024] and output_len from [1024, 1024]
+WARNING: vllm bench serve no longer sets temperature==0 (greedy) in requests by default. The default will be determined on the server side and can be model/API specific. For the old behavior, include --temperature=0.
+Starting initial single prompt test run...
+Skipping endpoint ready check.
+Starting main benchmark run...
+Traffic request rate: inf
+Burstiness factor: 1.0 (Poisson process)
+Maximum request concurrency: 64
+  0%|          | 0/640 [00:00<?, ?it/s]  0%|          | 1/640 [00:43<7:39:13, 43.12s/it]  0%|          | 2/640 [00:43<3:09:37, 17.83s/it]  4%|▍         | 25/640 [00:43<09:02,  1.13it/s]   8%|▊         | 49/640 [00:43<03:37,  2.71it/s] 10%|█         | 64/640 [01:00<03:32,  2.71it/s] 10%|█         | 65/640 [01:25<11:21,  1.19s/it] 10%|█         | 66/640 [01:26<11:01,  1.15s/it] 13%|█▎        | 81/640 [01:26<06:29,  1.44it/s] 16%|█▋        | 104/640 [01:26<03:20,  2.67it/s] 19%|█▉        | 120/640 [01:26<02:13,  3.88it/s] 20%|██        | 128/640 [01:40<02:11,  3.88it/s] 20%|██        | 129/640 [02:08<09:54,  1.16s/it] 20%|██        | 130/640 [02:08<09:36,  1.13s/it] 22%|██▏       | 140/640 [02:09<06:32,  1.27it/s] 25%|██▌       | 160/640 [02:09<03:21,  2.38it/s] 29%|██▊       | 183/640 [02:09<01:49,  4.16it/s] 30%|███       | 192/640 [02:20<01:47,  4.16it/s] 30%|███       | 193/640 [02:50<07:59,  1.07s/it] 30%|███       | 194/640 [02:51<07:46,  1.05s/it] 32%|███▏      | 203/640 [02:51<05:33,  1.31it/s] 35%|███▍      | 223/640 [02:51<02:51,  2.44it/s] 37%|███▋      | 239/640 [02:51<01:48,  3.70it/s] 40%|███▉      | 255/640 [02:51<01:10,  5.47it/s] 40%|████      | 256/640 [03:10<01:10,  5.47it/s] 40%|████      | 257/640 [03:33<08:29,  1.33s/it] 40%|████      | 258/640 [03:33<08:10,  1.28s/it] 42%|████▏     | 267/640 [03:33<05:23,  1.15it/s] 45%|████▍     | 287/640 [03:33<02:30,  2.35it/s] 48%|████▊     | 310/640 [03:33<01:17,  4.27it/s] 50%|█████     | 320/640 [03:50<01:14,  4.27it/s] 50%|█████     | 321/640 [04:15<05:43,  1.08s/it] 50%|█████     | 322/640 [04:15<05:32,  1.05s/it] 52%|█████▏    | 331/640 [04:15<03:55,  1.31it/s] 55%|█████▍    | 351/640 [04:15<01:57,  2.45it/s] 57%|█████▋    | 366/640 [04:15<01:15,  3.64it/s] 60%|██████    | 384/640 [04:30<01:10,  3.64it/s] 60%|██████    | 385/640 [04:56<04:10,  1.02it/s] 60%|██████    | 386/640 [04:56<04:03,  1.04it/s] 62%|██████▏   | 394/640 [04:56<03:00,  1.36it/s] 63%|██████▎   | 402/640 [04:57<02:11,  1.81it/s] 66%|██████▌   | 422/640 [04:57<01:03,  3.43it/s] 68%|██████▊   | 437/640 [04:57<00:39,  5.12it/s] 70%|███████   | 448/640 [05:10<00:37,  5.12it/s] 70%|███████   | 449/640 [05:38<03:29,  1.10s/it] 70%|███████   | 450/640 [05:38<03:22,  1.06s/it] 72%|███████▏  | 459/640 [05:38<02:17,  1.31it/s] 74%|███████▍  | 473/640 [05:38<01:17,  2.15it/s] 77%|███████▋  | 494/640 [05:39<00:37,  3.92it/s] 80%|████████  | 512/640 [05:50<00:32,  3.92it/s] 80%|████████  | 513/640 [06:21<02:05,  1.01it/s] 80%|████████  | 514/640 [06:21<02:01,  1.04it/s] 82%|████████▏ | 522/640 [06:21<01:27,  1.35it/s] 83%|████████▎ | 530/640 [06:21<01:01,  1.79it/s] 86%|████████▌ | 550/640 [06:21<00:26,  3.37it/s] 89%|████████▉ | 572/640 [06:22<00:11,  5.80it/s] 90%|█████████ | 576/640 [06:40<00:11,  5.80it/s] 90%|█████████ | 577/640 [07:04<01:14,  1.18s/it] 90%|█████████ | 578/640 [07:04<01:10,  1.14s/it] 92%|█████████▏| 587/640 [07:04<00:42,  1.24it/s] 93%|█████████▎| 594/640 [07:04<00:28,  1.64it/s] 96%|█████████▌| 614/640 [07:04<00:07,  3.28it/s]100%|██████████| 640/640 [07:05<00:00,  1.51it/s]
+tip: install termplotlib and gnuplot to plot the metrics
+============ Serving Benchmark Result ============
+Successful requests:                     640       
+Failed requests:                         0         
+Maximum request concurrency:             64        
+Benchmark duration (s):                  425.01    
+Total input tokens:                      655360    
+Total generated tokens:                  655360    
+Request throughput (req/s):              1.51      
+Output token throughput (tok/s):         1542.00   
+Peak output token throughput (tok/s):    1601.00   
+Peak concurrent requests:                128.00    
+Total token throughput (tok/s):          3083.99   
+---------------Time to First Token----------------
+Mean TTFT (ms):                          224.36    
+Median TTFT (ms):                        197.93    
+P99 TTFT (ms):                           725.73    
+-----Time per Output Token (excl. 1st token)------
+Mean TPOT (ms):                          41.30     
+Median TPOT (ms):                        41.30     
+P99 TPOT (ms):                           41.98     
+---------------Inter-token Latency----------------
+Mean ITL (ms):                           41.31     
+Median ITL (ms):                         40.96     
+P99 ITL (ms):                            50.70     
+==================================================

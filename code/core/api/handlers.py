@@ -674,7 +674,12 @@ def ai_tools(_: Dict[str, Any]) -> Dict[str, Any]:
         ],
         "optimization": ["optimize", "recommend", "optimize_roi", "optimize_techniques"],
         "distributed": ["distributed_plan", "distributed_nccl", "cluster_slurm", "launch_plan"],
-        "cluster": ["cluster_eval_suite", "cluster_validate_field_report"],
+        "cluster": [
+            "cluster_eval_suite",
+            "cluster_common_eval",
+            "cluster_build_canonical_package",
+            "cluster_validate_field_report",
+        ],
         "inference": [
             "inference_vllm",
             "inference_quantization",
@@ -812,6 +817,88 @@ def cluster_validate_field_report(params: Dict[str, Any]) -> Dict[str, Any]:
         runbook=runbook,
         canonical_run_id=canonical_run_id,
         allow_run_id=allow_run_id,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def cluster_build_canonical_package(params: Dict[str, Any]) -> Dict[str, Any]:
+    from core.cluster import build_canonical_package
+
+    canonical_run_id = _parse_str_param(params, "canonical_run_id")
+    if not canonical_run_id:
+        raise ValueError("canonical_run_id is required")
+    comparison_run_ids = _parse_list_param(params, "comparison_run_ids")
+    historical_run_ids = _parse_list_param(params, "historical_run_ids")
+    output_dir = _parse_str_param(params, "output_dir")
+    timeout_seconds = _parse_int_param(params, "timeout_seconds", 300, minimum=1, maximum=3600)
+
+    return build_canonical_package(
+        canonical_run_id=canonical_run_id,
+        comparison_run_ids=comparison_run_ids,
+        historical_run_ids=historical_run_ids,
+        output_dir=output_dir,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def cluster_promote_run(params: Dict[str, Any]) -> Dict[str, Any]:
+    from core.cluster import promote_cluster_run
+
+    run_id = _parse_str_param(params, "run_id")
+    if not run_id:
+        raise ValueError("run_id is required")
+    label = _parse_str_param(params, "label") or "localhost"
+    allow_run_ids = _parse_list_param(params, "allow_run_ids")
+    publish_report_path = _parse_str_param(params, "publish_report_path")
+    publish_notes_path = _parse_str_param(params, "publish_notes_path")
+    skip_render_localhost_report = bool(params.get("skip_render_localhost_report", False))
+    skip_validate_localhost_report = bool(params.get("skip_validate_localhost_report", False))
+    cleanup = bool(params.get("cleanup", False))
+    timeout_seconds = _parse_int_param(params, "timeout_seconds", 300, minimum=1, maximum=3600)
+
+    return promote_cluster_run(
+        run_id=run_id,
+        label=label,
+        allow_run_ids=allow_run_ids,
+        publish_report_path=publish_report_path,
+        publish_notes_path=publish_notes_path,
+        skip_render_localhost_report=skip_render_localhost_report,
+        skip_validate_localhost_report=skip_validate_localhost_report,
+        cleanup=cleanup,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def cluster_common_eval(params: Dict[str, Any]) -> Dict[str, Any]:
+    from core.cluster import run_cluster_common_eval
+
+    preset = str(params.get("preset", "core-system"))
+    run_id = _parse_str_param(params, "run_id")
+    hosts = _parse_list_param(params, "hosts")
+    labels = _parse_list_param(params, "labels")
+    ssh_user = _parse_str_param(params, "ssh_user")
+    ssh_key = _parse_str_param(params, "ssh_key")
+    oob_if = _parse_str_param(params, "oob_if")
+    socket_ifname = _parse_str_param(params, "socket_ifname")
+    nccl_ib_hca = _parse_str_param(params, "nccl_ib_hca")
+    primary_label = _parse_str_param(params, "primary_label")
+    coverage_baseline_run_id = _parse_str_param(params, "coverage_baseline_run_id")
+    extra_args = _parse_list_param(params, "extra_args")
+    timeout_seconds = _parse_optional_int_param(params, "timeout_seconds", minimum=1)
+
+    return run_cluster_common_eval(
+        preset=preset,
+        run_id=run_id,
+        hosts=hosts,
+        labels=labels,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        oob_if=oob_if,
+        socket_ifname=socket_ifname,
+        nccl_ib_hca=nccl_ib_hca,
+        primary_label=primary_label,
+        coverage_baseline_run_id=coverage_baseline_run_id,
+        extra_args=extra_args,
         timeout_seconds=timeout_seconds,
     )
 

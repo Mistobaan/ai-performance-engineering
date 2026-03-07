@@ -102,6 +102,27 @@ _ROUTES: List[ApiRoute] = [
     ),
     ApiRoute(
         "POST",
+        "/api/cluster/common-eval",
+        "cluster.common_eval",
+        handlers.cluster_common_eval,
+        mcp_tool="cluster_common_eval",
+    ),
+    ApiRoute(
+        "POST",
+        "/api/cluster/build-canonical-package",
+        "cluster.build_canonical_package",
+        handlers.cluster_build_canonical_package,
+        mcp_tool="cluster_build_canonical_package",
+    ),
+    ApiRoute(
+        "POST",
+        "/api/cluster/promote-run",
+        "cluster.promote_run",
+        handlers.cluster_promote_run,
+        mcp_tool="cluster_promote_run",
+    ),
+    ApiRoute(
+        "POST",
         "/api/cluster/validate-field-report",
         "cluster.validate_field_report",
         handlers.cluster_validate_field_report,

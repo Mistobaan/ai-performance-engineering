@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -243,15 +244,13 @@ def main() -> int:
     if not labels:
         raise SystemExit("ERROR: --node-labels resolved to an empty set")
 
-    fig_out = (
-        Path(args.fig_out).resolve()
-        if args.fig_out
-        else (root_dir / "docs/figures" / f"{args.run_id}_operator_checks_dashboard.png")
-    )
+    default_fig_dir = Path(os.environ.get("CLUSTER_FIGURES_DIR", root_dir / "docs/figures"))
+    default_structured_dir = Path(os.environ.get("CLUSTER_RESULTS_STRUCTURED_DIR", root_dir / "results/structured"))
+    fig_out = Path(args.fig_out).resolve() if args.fig_out else (default_fig_dir / f"{args.run_id}_operator_checks_dashboard.png")
     summary_out = (
         Path(args.summary_out).resolve()
         if args.summary_out
-        else (root_dir / "results/structured" / f"{args.run_id}_operator_checks_dashboard.json")
+        else (default_structured_dir / f"{args.run_id}_operator_checks_dashboard.json")
     )
     fig_out.parent.mkdir(parents=True, exist_ok=True)
     summary_out.parent.mkdir(parents=True, exist_ok=True)
@@ -333,4 +332,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

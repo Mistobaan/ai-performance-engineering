@@ -1,6 +1,8 @@
 import shutil
 import subprocess
 import sys
+import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -99,3 +101,54 @@ def test_torchrun_required_demo_runs_under_aisp_demos():
         timeout=120,
     )
     assert result.returncode == 0
+
+
+def test_module_backed_demo_launches_via_python_module(monkeypatch):
+    import core.demos.demos_commands as demos_commands
+
+    recorded = {}
+
+    def fake_run(cmd, env=None):
+        recorded["cmd"] = cmd
+        recorded["env"] = env
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(demos_commands.subprocess, "run", fake_run)
+
+    exit_code = demos_commands._run_demo("ch11-stream-overlap", ["--iterations", "1"])
+
+    assert exit_code == 0
+    assert recorded["cmd"][:3] == [sys.executable, "-m", "ch11.stream_overlap_demo"]
+    assert recorded["cmd"][3:] == ["--iterations", "1"]
+    assert str(demos_commands.REPO_ROOT) in recorded["env"]["PYTHONPATH"].split(os.pathsep)
+
+
+def test_module_backed_torchrun_demo_launches_via_module(monkeypatch):
+    import core.demos.demos_commands as demos_commands
+
+    recorded = {}
+
+    def fake_run(cmd, env=None):
+        recorded["cmd"] = cmd
+        recorded["env"] = env
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(demos_commands.subprocess, "run", fake_run)
+    monkeypatch.setattr(demos_commands.shutil, "which", lambda name: "/usr/bin/torchrun" if name == "torchrun" else None)
+
+    exit_code = demos_commands._run_demo(
+        "ch15-tensor-parallel",
+        ["--batch", "1"],
+        nproc_per_node=2,
+    )
+
+    assert exit_code == 0
+    assert recorded["cmd"][:5] == [
+        "/usr/bin/torchrun",
+        "--nproc_per_node",
+        "2",
+        "-m",
+        "ch15.tensor_parallel_demo",
+    ]
+    assert recorded["cmd"][5:] == ["--batch", "1"]
+    assert str(demos_commands.REPO_ROOT) in recorded["env"]["PYTHONPATH"].split(os.pathsep)

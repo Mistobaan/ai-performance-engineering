@@ -7,20 +7,10 @@ Example:
 
 from __future__ import annotations
 
-import pathlib
-import sys
-
-_EXTRAS_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-if str(_EXTRAS_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_EXTRAS_REPO_ROOT))
-
 import argparse
 from pathlib import Path
 
 import torch
-
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ch16.gpt_large_benchmark import (
     GPTConfig,

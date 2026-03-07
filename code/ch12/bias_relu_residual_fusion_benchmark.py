@@ -13,15 +13,9 @@ Outputs:
 from __future__ import annotations
 
 import json
-import sys
 from datetime import datetime
-from pathlib import Path
 
 import torch
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from ch12.cuda_extensions import load_bias_relu_residual_extension
 

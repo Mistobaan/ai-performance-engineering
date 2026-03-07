@@ -7,12 +7,15 @@ from typing import Optional
 
 import torch
 
+from core.benchmark.wrapper_utils import attach_benchmark_metadata
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
 from ch04.verification_payload_mixin import VerificationPayloadMixin
 
 
 class SingleGPUTransferBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Single-GPU transfer microbenchmark with optional pipelining."""
+
+    allowed_benchmark_fn_antipatterns = ("sync",)
 
     def __init__(
         self,
@@ -120,10 +123,3 @@ class SingleGPUTransferBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def get_custom_metrics(self) -> Optional[dict]:
         return {"p2p_bandwidth_gbps": float(self.last_bandwidth_gbps or 0.0)}
-
-
-def attach_benchmark_metadata(bench: BaseBenchmark, module_file: str) -> BaseBenchmark:
-    """Ensure subprocess runner calls get_benchmark() for parameterized benchmarks."""
-    bench._module_file_override = module_file
-    bench._factory_name_override = "get_benchmark"
-    return bench

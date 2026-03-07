@@ -7,7 +7,6 @@ small cache tensor. Keeps dependencies minimal so it can run in the harness.
 from __future__ import annotations
 
 import sys
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional
 
@@ -22,29 +21,13 @@ from core.harness.benchmark_harness import BaseBenchmark, WorkloadMetadata  # no
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.profiling.nvtx_helper import get_nvtx_enabled, nvtx_range  # noqa: E402
 
-# Use new SDPA API when available
-try:
-    from torch.nn.attention import sdpa_kernel, SDPBackend
-    _FLASH_BACKENDS = [SDPBackend.FLASH_ATTENTION]
-    _NEW_SDPA_API = True
-except ImportError:
-    sdpa_kernel = None  # type: ignore[assignment]
-    SDPBackend = None  # type: ignore[assignment]
-    _FLASH_BACKENDS = []
-    _NEW_SDPA_API = False
-
-
-def _flash_sdpa_context():
-    """Return context manager for flash attention backend."""
-    if _NEW_SDPA_API and sdpa_kernel is not None:
-        return sdpa_kernel(_FLASH_BACKENDS)
-    return nullcontext()
-
-
 class OptimizedPagedAttnBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def __init__(self) -> None:
         super().__init__()
         self.qkv: Optional[torch.Tensor] = None
+        self.q: Optional[torch.Tensor] = None
+        self.k: Optional[torch.Tensor] = None
+        self.v: Optional[torch.Tensor] = None
         self.output = None
         self._workload = WorkloadMetadata(tokens_per_iteration=0.0)
         self._verification_payload = None
@@ -56,29 +39,38 @@ class OptimizedPagedAttnBenchmark(VerificationPayloadMixin, BaseBenchmark):
         b, h, s, d = 4, 16, 2048, 64
         # Optimized path keeps BF16 and will force flash SDPA.
         self.qkv = torch.randn(b, h, s, 3, d, device=self.device, dtype=torch.bfloat16)
+        # Cache contiguous Q/K/V views once so benchmark_fn avoids repeated slicing work.
+        self.q = self.qkv[:, :, :, 0].contiguous()
+        self.k = self.qkv[:, :, :, 1].contiguous()
+        self.v = self.qkv[:, :, :, 2].contiguous()
         # Aggressive warmup: run flash SDPA multiple times to fully JIT-compile.
         # Flash attention has heavier first-call overhead than the math path.
-        q = self.qkv[:, :, :, 0]
-        k = self.qkv[:, :, :, 1]
-        v = self.qkv[:, :, :, 2]
-        with _flash_sdpa_context():
-            for _ in range(10):
-                _ = F.scaled_dot_product_attention(q, k, v)
-                torch.cuda.synchronize(self.device)
+        q = self.q
+        k = self.k
+        v = self.v
+        if q is None or k is None or v is None:
+            raise RuntimeError("FAIL FAST: QKV cache initialization failed")
+        if not torch.cuda.is_available():
+            raise RuntimeError("FAIL FAST: paged attention benchmark requires CUDA")
+        # Set SDPA backend policy once to remove per-iteration context overhead.
+        torch.backends.cuda.enable_flash_sdp(True)
+        torch.backends.cuda.enable_math_sdp(False)
+        torch.backends.cuda.enable_mem_efficient_sdp(False)
+        if hasattr(torch.backends.cuda, "enable_cudnn_sdp"):
+            torch.backends.cuda.enable_cudnn_sdp(True)
+        if not torch.backends.cuda.flash_sdp_enabled():
+            raise RuntimeError("FAIL FAST: Flash SDPA backend is not enabled")
+        for _ in range(24):
+            _ = F.scaled_dot_product_attention(q, k, v)
+            torch.cuda.synchronize(self.device)
 
     def benchmark_fn(self) -> Optional[dict]:
-        if self.qkv is None:
-            raise RuntimeError("SKIPPED: paged attention buffers not initialized")
-        q = self.qkv[:, :, :, 0]
-        k = self.qkv[:, :, :, 1]
-        v = self.qkv[:, :, :, 2]
+        if self.q is None or self.k is None or self.v is None:
+            raise RuntimeError("FAIL FAST: paged attention buffers not initialized")
 
         enable_nvtx = get_nvtx_enabled(self.get_config())
-        # Force flash SDPA to highlight the fused path.
-        with _flash_sdpa_context():
-            with nvtx_range("paged_attn_vllm", enable=enable_nvtx):
-                self.output = F.scaled_dot_product_attention(q, k, v)
-        torch.cuda.synchronize(self.device)
+        with nvtx_range("paged_attn_vllm", enable=enable_nvtx):
+            self.output = F.scaled_dot_product_attention(self.q, self.k, self.v)
         if self.output is None or self.qkv is None:
             raise RuntimeError("benchmark_fn() must produce output")
         return {}

@@ -4,8 +4,8 @@ set -euo pipefail
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 LABEL="${LABEL:-$(hostname)}"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-OUT_RAW="${ROOT_DIR}/results/raw"
-OUT_STRUCTURED="${ROOT_DIR}/results/structured"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 
 APPLY=0
 INSTALL_BASE_PKGS=0
@@ -75,6 +75,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCTURED="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW" "$OUT_STRUCTURED"
 LOG_FILE="${OUT_RAW}/${RUN_ID}_${LABEL}_enable_stack.log"
 exec > >(tee -a "$LOG_FILE") 2>&1

@@ -7,18 +7,12 @@ prints a small summary (timing + speedup).
 from __future__ import annotations
 
 import argparse
-import sys
-from pathlib import Path
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 import torch
 
 from core.harness.benchmark_harness import BenchmarkConfig, BenchmarkHarness, BenchmarkMode
-from ch15.baseline_speculative_decoding import BaselineSpeculativeDecodingBenchmark
-from ch15.optimized_speculative_decoding import OptimizedSpeculativeDecodingBenchmark
+from ch15.baseline_speculative_decoding import get_benchmark as get_baseline_benchmark
+from ch15.optimized_speculative_decoding import get_benchmark as get_optimized_benchmark
 
 
 def _require_cuda() -> None:
@@ -54,8 +48,8 @@ def main() -> int:
     )
     harness = BenchmarkHarness(mode=BenchmarkMode.CUSTOM, config=config)
 
-    baseline = BaselineSpeculativeDecodingBenchmark()
-    optimized = OptimizedSpeculativeDecodingBenchmark()
+    baseline = get_baseline_benchmark()
+    optimized = get_optimized_benchmark()
 
     baseline_result = harness.benchmark(baseline, name="speculative_decode_baseline")
     optimized_result = harness.benchmark(optimized, name="speculative_decode_optimized")

@@ -93,7 +93,6 @@ class BaselinePrecisionMixedBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 loss.backward()
                 self.optimizer.step()
             self.output = outputs.detach().clone()
-        self._synchronize()
         if self._verify_input is None or self.output is None:
             raise RuntimeError("Verification input/output not initialized")
 

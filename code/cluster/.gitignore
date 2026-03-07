@@ -9,6 +9,10 @@ env/venv/
 # - Keep `results/structured/` and `docs/figures/` trackable (they're part of the case study).
 # - Ignore the very noisy/raw logs by default.
 results/raw/
+runs/
+canonical_package/
+artifacts/
+archive/
 
 # Harness benchmark outputs (ephemeral; we re-generate these often)
 results/benchmark_events*.jsonl

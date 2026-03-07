@@ -10,13 +10,7 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import time
-from pathlib import Path
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 import torch
 import torch.distributed as dist

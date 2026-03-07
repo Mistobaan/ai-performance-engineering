@@ -81,7 +81,12 @@ class BaselineTinyGemmBenchmark(VerificationPayloadMixin, BaseBenchmark):
         return self._workload
 
     def get_config(self) -> BenchmarkConfig:
-        return BenchmarkConfig(iterations=6, warmup=6)
+        return BenchmarkConfig(
+            iterations=6,
+            warmup=6,
+            timing_method="wall_clock",
+            full_device_sync=True,
+        )
 
 
 def get_benchmark() -> BaseBenchmark:

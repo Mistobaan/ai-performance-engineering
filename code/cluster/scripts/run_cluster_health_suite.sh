@@ -79,8 +79,15 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
+CODE_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"
+QUEUE_RUNNER_LOCK_PATH="${AISP_CLUSTER_SUITE_QUEUE_LOCK_PATH:-${CODE_ROOT}/artifacts/parallel_runs/queue.runner.lock}"
+QUEUE_RUNNER_LOCK_TIMEOUT_SEC="${AISP_CLUSTER_SUITE_QUEUE_LOCK_TIMEOUT_SEC:-0}"
+QUEUE_RUNNER_LOCK_FD=19
 
 RUN_ID="$(date +%Y-%m-%d_%H%M%S)_cluster_health_suite"
 HOSTS=""
@@ -137,6 +144,35 @@ SKIP_NCCL=0
 SKIP_TORCHDIST=0
 SKIP_RUNTIME_CVE_CHECK=0
 
+acquire_queue_runner_lock() {
+  local lock_path="$QUEUE_RUNNER_LOCK_PATH"
+  local timeout_sec="$QUEUE_RUNNER_LOCK_TIMEOUT_SEC"
+  mkdir -p "$(dirname "$lock_path")"
+  if ! command -v flock >/dev/null 2>&1; then
+    echo "ERROR: flock is required for strict suite/benchmark mutual exclusion." >&2
+    exit 3
+  fi
+  eval "exec ${QUEUE_RUNNER_LOCK_FD}>\"${lock_path}\""
+  if [[ "$timeout_sec" =~ ^[0-9]+$ ]] && [[ "$timeout_sec" -gt 0 ]]; then
+    if ! flock -w "$timeout_sec" "$QUEUE_RUNNER_LOCK_FD"; then
+      echo "ERROR: queue lock busy at ${lock_path}; refusing overlapping run." >&2
+      exit 3
+    fi
+  else
+    if ! flock -n "$QUEUE_RUNNER_LOCK_FD"; then
+      echo "ERROR: queue lock busy at ${lock_path}; refusing overlapping run." >&2
+      exit 3
+    fi
+  fi
+  printf '{"owner":"run_cluster_health_suite.sh","pid":%s,"ts":"%s"}\n' "$$" "$(date -Iseconds)" >"${lock_path}" || true
+}
+
+release_queue_runner_lock() {
+  if [[ -n "${QUEUE_RUNNER_LOCK_FD:-}" ]]; then
+    flock -u "$QUEUE_RUNNER_LOCK_FD" || true
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --run-id) RUN_ID="$2"; shift 2 ;;
@@ -188,6 +224,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW_DIR" "$OUT_STRUCT_DIR"
 
 if [[ -n "$NCCL_NVLS_ENABLE" && "$NCCL_NVLS_ENABLE" != "0" && "$NCCL_NVLS_ENABLE" != "1" && "$NCCL_NVLS_ENABLE" != "2" ]]; then
@@ -375,6 +414,9 @@ LOCKFILE="${OUT_RAW_DIR}/cluster_health_suite.lock"
 NVLS_RECOVERY_JSONL="${OUT_RAW_DIR}/${RUN_ID}_${LABEL}_nvls_recovery.jsonl"
 NVLS_RECOVERY_JSON="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_nvls_recovery.json"
 : > "${NVLS_RECOVERY_JSONL}"
+
+trap release_queue_runner_lock EXIT
+acquire_queue_runner_lock
 
 exec 9>"$LOCKFILE"
 if ! flock -n 9; then

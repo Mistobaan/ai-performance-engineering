@@ -31,26 +31,7 @@ For REAL GPT-OSS models, see:
 - openai/gpt-oss-120b on HuggingFace (120B parameters)
 - openai/gpt-oss-20b on HuggingFace (20B parameters)
 """
-import pathlib
-import sys
-
-_EXTRAS_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-if str(_EXTRAS_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_EXTRAS_REPO_ROOT))
-
-from pathlib import Path
-
-import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-try:
-    from arch_config import prefer_flash_sdpa  # type: ignore
-except Exception:
-    from contextlib import nullcontext
-
-    def prefer_flash_sdpa():
-        return nullcontext()
+from core.harness.arch_config import prefer_flash_sdpa
 
 import json
 import time
@@ -59,7 +40,6 @@ from dataclasses import dataclass, replace
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from core.utils.compile_utils import enable_tf32, compile_model
 
 CURRENT_DEVICE_FLAVOR = "unknown"

@@ -62,7 +62,6 @@ class BaselineRackPrepBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with nvtx_range("baseline_rack_prep", enable=enable_nvtx):
             self.device_batch.copy_(self.host_batch, non_blocking=False)
             self.output = self.norm(self.device_batch)
-            self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

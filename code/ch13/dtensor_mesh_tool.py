@@ -50,7 +50,6 @@ class DTensorMeshBenchmark(VerificationPayloadMixin, BaseBenchmark):
         enable_nvtx = get_nvtx_enabled(self.get_config())
         with nvtx_range("dtensor_mesh", enable=enable_nvtx):
             self.output = (self.tensor * 2).redistribute(self.mesh, placements=self.tensor.placements)
-        torch.cuda.synchronize(self.device)
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
         input_local = self.tensor.to_local() if hasattr(self.tensor, "to_local") else self.tensor

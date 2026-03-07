@@ -77,7 +77,6 @@ class CapstoneMatmulBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def benchmark_fn(self) -> None:
         with self._nvtx_range(self._label):
             self._last_output = self._runner(self._lhs, self._rhs)
-        torch.cuda.synchronize(self.device)
 
     def teardown(self) -> None:
         self._last_output = None

@@ -154,6 +154,39 @@ export async function runClusterEvalSuite(params: Record<string, unknown>) {
   );
 }
 
+export async function runClusterCommonEval(params: Record<string, unknown>) {
+  return fetchAPI(
+    '/cluster/common-eval',
+    {
+      method: 'POST',
+      body: JSON.stringify(params),
+    },
+    { allowErrorResult: true }
+  );
+}
+
+export async function buildCanonicalPackage(params: Record<string, unknown>) {
+  return fetchAPI(
+    '/cluster/build-canonical-package',
+    {
+      method: 'POST',
+      body: JSON.stringify(params),
+    },
+    { allowErrorResult: true }
+  );
+}
+
+export async function promoteClusterRun(params: Record<string, unknown>) {
+  return fetchAPI(
+    '/cluster/promote-run',
+    {
+      method: 'POST',
+      body: JSON.stringify(params),
+    },
+    { allowErrorResult: true }
+  );
+}
+
 export async function validateFieldReport(params: Record<string, unknown>) {
   return fetchAPI(
     '/cluster/validate-field-report',

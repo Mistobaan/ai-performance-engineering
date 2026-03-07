@@ -85,7 +85,6 @@ class OptimizedOptimizerCentralNvlinkBenchmark(VerificationPayloadMixin, BaseBen
                 model.weight.data.copy_(master_w.to(model.weight.device, non_blocking=True))
                 model.bias.grad.zero_()
                 model.weight.grad.zero_()
-            self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if not self.models or not self.master_weights or not self.momentum or not self.inputs:

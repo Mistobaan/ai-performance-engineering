@@ -28,6 +28,11 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
 RUN_ID="$(date +%Y-%m-%d)"
 HOSTS=""
 GPUS_PER_NODE=""
@@ -150,8 +155,10 @@ if [[ -z "$GPUS_PER_NODE" ]]; then
   GPUS_PER_NODE="$(nvidia-smi -L | wc -l | tr -d ' ')"
 fi
 
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 HOSTFILE="${OUT_RAW_DIR}/${RUN_ID}_${LABEL}_hosts.txt"
 RAW_LOG="${OUT_RAW_DIR}/${RUN_ID}_${LABEL}_nccl_all_reduce.log"
 STRUCT_OUT="${OUT_STRUCT_DIR}/${RUN_ID}_nccl.json"

@@ -5,14 +5,13 @@ from __future__ import annotations
 from core.harness.benchmark_harness import BaseBenchmark
 
 from ch15.disaggregated_inference_single_common import (
-    DisaggregatedInferenceSingleGPUBenchmark,
+    OptimizedDisaggregatedInferenceSingleGPUBenchmark,
     attach_benchmark_metadata,
 )
 
 
 def get_benchmark() -> BaseBenchmark:
-    bench = DisaggregatedInferenceSingleGPUBenchmark(
-        use_host_staging=False,
+    bench = OptimizedDisaggregatedInferenceSingleGPUBenchmark(
         label="optimized_disaggregated_inference",
     )
     return attach_benchmark_metadata(bench, __file__)

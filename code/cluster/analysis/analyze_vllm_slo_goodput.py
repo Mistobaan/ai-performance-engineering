@@ -47,6 +47,11 @@ def _group_mean(rows: List[Dict[str, str]]) -> List[Dict[str, float]]:
         conc = int(_as_float(row.get("concurrency"), 0))
         if conc <= 0:
             continue
+        completed = int(_as_float(row.get("completed"), 0))
+        failed = int(_as_float(row.get("failed"), 0))
+        total_tok = _as_float(row.get("total_token_throughput"), 0.0)
+        if completed <= 0 or failed > 0 or total_tok <= 0.0:
+            continue
         bucket = grouped.setdefault(
             conc,
             {

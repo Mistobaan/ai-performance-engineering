@@ -28,6 +28,8 @@ class OffloadConfig:
 class NvlinkOffloadBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Measure H2D/D2H swap time for a KV-cache slice."""
 
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
+
     def __init__(self, cfg: Optional[OffloadConfig] = None, label: str = "nvlink_offload"):
         super().__init__()
         self.cfg = cfg or OffloadConfig(use_pinned=False, non_blocking=False, use_copy_stream=False)

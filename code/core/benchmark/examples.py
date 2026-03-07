@@ -9,6 +9,9 @@ This file demonstrates:
 
 Run validation:
     python -m core.benchmark.registry --validate
+
+Run chapter entrypoints from the repo root with ``python -m chXX.module``.
+Avoid local ``sys.path.insert(...)`` bootstrapping in benchmark/example files.
 """
 
 from __future__ import annotations
@@ -48,7 +51,6 @@ class SimpleBenchmark(BaseBenchmark):
     
     def benchmark_fn(self) -> None:
         _ = self.data @ self.data
-        self._synchronize()
     
     def teardown(self) -> None:
         self.data = None
@@ -130,7 +132,6 @@ class MLPInferenceBenchmark(InferenceBenchmarkBase):
     def benchmark_fn(self) -> None:
         with torch.no_grad():
             _ = self.model(self.data)
-        self._synchronize()
 
 
 class TransformerInferenceBenchmark(InferenceBenchmarkBase):
@@ -144,7 +145,6 @@ class TransformerInferenceBenchmark(InferenceBenchmarkBase):
     def benchmark_fn(self) -> None:
         with torch.no_grad():
             _ = self.model(self.data)
-        self._synchronize()
 
 
 # =============================================================================
@@ -199,7 +199,6 @@ class ParameterizedBenchmark(BaseBenchmark):
     
     def benchmark_fn(self) -> None:
         _ = self.data @ self.data
-        self._synchronize()
 
 
 # Create factory with custom parameters:
@@ -237,6 +236,4 @@ if __name__ == "__main__":
     bm = get_benchmark()
     print(f"Benchmark class: {type(bm).__name__}")
     print(f"Device: {bm.device}")
-
-
 

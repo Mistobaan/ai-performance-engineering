@@ -39,7 +39,6 @@ class OptimizedTcgen05WarpgroupSpecializationBenchmark(Tcgen05MatmulBenchmarkBas
         with self._nvtx_range(self.nvtx_label):
             with torch.no_grad():
                 self.output = self.extension.matmul_tcgen05_warpgroup_specialized(self.matrix_a, self.matrix_b)
-        self._synchronize()
 
 
 def get_benchmark() -> BaseBenchmark:

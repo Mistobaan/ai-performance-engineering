@@ -110,7 +110,7 @@ class OptimizedDdpNvlinkOverlapBenchmark(VerificationPayloadMixin, BaseBenchmark
                 reduction_results.append(self._async_reduce_to_root(ordered_grads))
 
             # Finalize reductions and apply updates
-            self.comm_stream.synchronize()
+            torch.cuda.current_stream(self.root_device).wait_stream(self.comm_stream)
             for model, root_buf in zip(self.models, reduction_results):
                 if root_buf.device != model.weight.device:
                     root_local = root_buf.to(model.weight.device, non_blocking=True)
@@ -122,7 +122,6 @@ class OptimizedDdpNvlinkOverlapBenchmark(VerificationPayloadMixin, BaseBenchmark
                     model.weight.grad.zero_()
                     model.bias.grad.zero_()
             self.output = self.models[0].weight.detach()
-            self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.output is None or not self._inputs:

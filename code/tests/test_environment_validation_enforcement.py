@@ -8,6 +8,7 @@ invalid (i.e., validate_environment() returns errors).
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import tempfile
 import textwrap
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 import pytest
+import torch
 
 from core.harness.benchmark_harness import BenchmarkConfig, BenchmarkHarness
 from core.harness.validity_checks import EnvironmentProbe, validate_environment
@@ -119,8 +121,9 @@ def test_environment_enforcement_numa_affinity_spans_nodes() -> None:
         _write_file(env_root, "/sys/devices/system/node/node0/cpulist", "0-1\n")
         _write_file(env_root, "/sys/devices/system/node/node1/cpulist", "2-3\n")
         probe = EnvironmentProbe(root=env_root, env={}, cpu_affinity={0, 2})
-        errors = _run_harness(env_root, probe=probe)
-        assert any("ENVIRONMENT INVALID" in e and "NUMA" in e for e in errors), errors
+        result = validate_environment(probe=probe)
+        assert result.is_valid, result
+        assert any("CPU affinity spans multiple NUMA nodes" in w for w in result.warnings), result.warnings
 
 
 def test_environment_enforcement_swap_enabled() -> None:
@@ -170,4 +173,209 @@ def test_environment_warning_virtualization_strict_loud_message() -> None:
         )
         assert result.is_valid, result
         assert not result.errors, result.errors
-        assert any("STRICT VALIDITY WARNING [VIRTUALIZATION]" in warning for warning in result.warnings), result.warnings
+        assert any("STRICT VALIDITY NOTICE [VIRTUALIZATION]" in notice for notice in result.notices), result.notices
+
+
+def test_environment_enforcement_foreign_gpu_processes_fail_fast(monkeypatch: pytest.MonkeyPatch) -> None:
+    import core.harness.validity_checks as validity_checks
+
+    monkeypatch.setattr(validity_checks.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(validity_checks.torch.cuda, "device_count", lambda: 1)
+    monkeypatch.setattr(validity_checks.torch.cuda, "current_device", lambda: 0)
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_tree_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid())},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_lineage_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid())},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_list_foreign_cuda_compute_processes",
+        lambda **kwargs: (
+            [{"pid": 4321, "process_name": "vllm", "used_memory_mb": 32768.0}],
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_pid_is_live_process",
+        lambda pid, proc_root=Path("/proc"): True,
+    )
+
+    result = validate_environment(
+        device=torch.device("cuda"),
+        probe=EnvironmentProbe(
+            root=Path("/"),
+            env={"AISP_FOREIGN_GPU_PROCESS_MIN_MB": "0"},
+        ),
+    )
+    assert any("Foreign CUDA compute process(es) detected on benchmark GPU" in err for err in result.errors), result.errors
+
+
+def test_environment_enforcement_foreign_gpu_processes_allow_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import core.harness.validity_checks as validity_checks
+
+    monkeypatch.setattr(validity_checks.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(validity_checks.torch.cuda, "device_count", lambda: 1)
+    monkeypatch.setattr(validity_checks.torch.cuda, "current_device", lambda: 0)
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_tree_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid())},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_lineage_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid())},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_list_foreign_cuda_compute_processes",
+        lambda **kwargs: (
+            [{"pid": 9876, "process_name": "vllm", "used_memory_mb": 12288.0}],
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_pid_is_live_process",
+        lambda pid, proc_root=Path("/proc"): True,
+    )
+
+    result = validate_environment(
+        device=torch.device("cuda"),
+        probe=EnvironmentProbe(
+            root=Path("/"),
+            env={
+                "AISP_ALLOW_FOREIGN_GPU_PROCESSES": "1",
+                "AISP_FOREIGN_GPU_PROCESS_MIN_MB": "0",
+            },
+        ),
+    )
+    assert not any("Foreign CUDA compute process(es) detected on benchmark GPU" in err for err in result.errors), result.errors
+    assert any("Foreign CUDA compute process(es) detected on benchmark GPU" in warning for warning in result.warnings), result.warnings
+
+
+def test_environment_enforcement_foreign_gpu_processes_ignore_owned_descendants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import core.harness.validity_checks as validity_checks
+
+    monkeypatch.setattr(validity_checks.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(validity_checks.torch.cuda, "device_count", lambda: 1)
+    monkeypatch.setattr(validity_checks.torch.cuda, "current_device", lambda: 0)
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_tree_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid()), 1111},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_lineage_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid())},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_list_foreign_cuda_compute_processes",
+        lambda **kwargs: (
+            [{"pid": 1111, "process_name": "VLLM::EngineCore", "used_memory_mb": 6114.0}],
+            None,
+        ),
+    )
+
+    result = validate_environment(
+        device=torch.device("cuda"),
+        probe=EnvironmentProbe(
+            root=Path("/"),
+            env={"AISP_FOREIGN_GPU_PROCESS_MIN_MB": "0"},
+        ),
+    )
+    assert not any("Foreign CUDA compute process(es) detected on benchmark GPU" in err for err in result.errors), result.errors
+    assert result.details.get("foreign_cuda_compute_processes") == [], result.details
+
+
+def test_environment_enforcement_foreign_gpu_processes_ignore_owned_ancestors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import core.harness.validity_checks as validity_checks
+
+    monkeypatch.setattr(validity_checks.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(validity_checks.torch.cuda, "device_count", lambda: 1)
+    monkeypatch.setattr(validity_checks.torch.cuda, "current_device", lambda: 0)
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_tree_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid())},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_lineage_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid()), 2222},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_list_foreign_cuda_compute_processes",
+        lambda **kwargs: (
+            [{"pid": 2222, "process_name": "python", "used_memory_mb": 612.0}],
+            None,
+        ),
+    )
+
+    result = validate_environment(
+        device=torch.device("cuda"),
+        probe=EnvironmentProbe(
+            root=Path("/"),
+            env={"AISP_FOREIGN_GPU_PROCESS_MIN_MB": "0"},
+        ),
+    )
+    assert not any("Foreign CUDA compute process(es) detected on benchmark GPU" in err for err in result.errors), result.errors
+    assert result.details.get("foreign_cuda_compute_processes") == [], result.details
+
+
+def test_environment_enforcement_foreign_gpu_processes_ignore_dead_pids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import core.harness.validity_checks as validity_checks
+
+    monkeypatch.setattr(validity_checks.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(validity_checks.torch.cuda, "device_count", lambda: 1)
+    monkeypatch.setattr(validity_checks.torch.cuda, "current_device", lambda: 0)
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_tree_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid())},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_collect_process_lineage_pids",
+        lambda _pid, proc_root=Path("/proc"): {int(os.getpid())},
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_list_foreign_cuda_compute_processes",
+        lambda **kwargs: (
+            [{"pid": 3333, "process_name": "python", "used_memory_mb": 2048.0}],
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        validity_checks,
+        "_pid_is_live_process",
+        lambda pid, proc_root=Path("/proc"): False,
+    )
+
+    result = validate_environment(
+        device=torch.device("cuda"),
+        probe=EnvironmentProbe(
+            root=Path("/"),
+            env={"AISP_FOREIGN_GPU_PROCESS_MIN_MB": "0"},
+        ),
+    )
+    assert not any("Foreign CUDA compute process(es) detected on benchmark GPU" in err for err in result.errors), result.errors
+    assert result.details.get("foreign_cuda_compute_processes") == [], result.details

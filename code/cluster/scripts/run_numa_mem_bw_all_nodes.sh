@@ -8,8 +8,8 @@ Usage:
 
 Runs NUMA memory bandwidth probe on each host (see run_numa_mem_bw.sh) and
 fetches the structured artifacts back to the driver:
-  results/structured/<run_id>_<label>_numa_mem_bw.json
-  results/structured/<run_id>_<label>_numa_mem_bw.csv
+  runs/<run_id>/structured/<run_id>_<label>_numa_mem_bw.json
+  runs/<run_id>/structured/<run_id>_<label>_numa_mem_bw.csv
 
 Options:
   --run-id <id>          RUN_ID prefix (default: YYYY-MM-DD)
@@ -29,6 +29,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 HOSTS=""
 LABELS=""
@@ -96,6 +98,11 @@ if [[ -n "$SSH_KEY" ]]; then
   SSH_OPTS+=(-i "$SSH_KEY")
 fi
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+LOCAL_STRUCTURED_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+REMOTE_STRUCTURED_DIR="$(cluster_structured_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+mkdir -p "$LOCAL_STRUCTURED_DIR"
+
 run_remote() {
   local host="$1"
   shift
@@ -114,8 +121,8 @@ for idx in "${!HOST_ARR[@]}"; do
     label="$(sanitize_label "$host")"
   fi
 
-  out_json="results/structured/${RUN_ID}_${label}_numa_mem_bw.json"
-  out_csv="results/structured/${RUN_ID}_${label}_numa_mem_bw.csv"
+  out_json="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_numa_mem_bw.json"
+  out_csv="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_numa_mem_bw.csv"
 
   echo "========================================"
   echo "NUMA mem BW: host=${host} label=${label}"
@@ -149,15 +156,13 @@ for idx in "${!HOST_ARR[@]}"; do
 
   # Fetch results back to the driver for plotting/reporting.
   if [[ "$host" != "localhost" && "$host" != "$(hostname)" ]]; then
-    mkdir -p "${ROOT_DIR}/results/structured"
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_json}" "${ROOT_DIR}/results/structured/" || {
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_json}" "${LOCAL_STRUCTURED_DIR}/" || {
       echo "WARNING: failed to fetch ${out_json} from ${host}" >&2
     }
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_csv}" "${ROOT_DIR}/results/structured/" || {
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_csv}" "${LOCAL_STRUCTURED_DIR}/" || {
       echo "WARNING: failed to fetch ${out_csv} from ${host}" >&2
     }
   fi
 done
 
 echo "Done."
-

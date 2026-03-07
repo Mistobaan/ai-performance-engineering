@@ -17,6 +17,11 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
 RUN_ID="$(date +%Y-%m-%d)"
 SIZES="8192,16384"
 DTYPE="bf16"
@@ -63,15 +68,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+
 if [[ "${AISP_CLOCK_LOCKED:-}" != "1" ]]; then
   export RUN_ID LABEL
-  LOCK_META_OUT="${ROOT_DIR}/results/structured/${RUN_ID}_${LABEL}_gemm_clock_lock.json"
+  LOCK_META_OUT="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}/${RUN_ID}_${LABEL}_gemm_clock_lock.json"
   exec "${ROOT_DIR}/scripts/run_with_gpu_clocks.sh" \
     --lock-meta-out "$LOCK_META_OUT" \
     -- "$0" "${ORIG_ARGS[@]}"
 fi
 
-OUT_DIR="${ROOT_DIR}/results/structured"
+OUT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_DIR"
 
 if [[ -z "$OUTPUT" ]]; then

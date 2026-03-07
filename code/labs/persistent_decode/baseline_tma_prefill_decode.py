@@ -78,7 +78,6 @@ class BaselineTmaPrefillDecodeBenchmark(VerificationPayloadMixin, BaseBenchmark)
             self._prefill_sequential()
         with self._nvtx_range("decode_baseline"):
             self._decode_host_loop()
-        self._synchronize()
         if self.inputs is not None:
             self.output = self.inputs.out[:1, : min(8, self.inputs.out.shape[1])].detach().float().clone()
         if self.inputs is None or self.output is None:

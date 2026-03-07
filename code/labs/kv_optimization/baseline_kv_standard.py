@@ -19,6 +19,7 @@ from core.harness.benchmark_harness import (
     BenchmarkConfig,
     BenchmarkMode,
 )
+from core.benchmark.cuda_event_timing import elapsed_ms
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.utils.logger import get_logger
 
@@ -59,6 +60,9 @@ class BaselineKVStandard(VerificationPayloadMixin, BaseBenchmark):
         self._last_metrics: Dict[str, Any] = {}
         self.precision_label = "bf16"
         self.output: Optional[torch.Tensor] = None
+        self._pending_timing_pair: Optional[Tuple[torch.cuda.Event, torch.cuda.Event]] = None
+        self._generated_k_steps: Optional[torch.Tensor] = None
+        self._generated_v_steps: Optional[torch.Tensor] = None
         self.register_workload_metadata(requests_per_iteration=1.0)
 
         hidden_size = num_heads * head_dim
@@ -88,6 +92,15 @@ class BaselineKVStandard(VerificationPayloadMixin, BaseBenchmark):
 
         # Current sequence lengths per batch
         self.seq_lengths = torch.zeros(self.batch_size, dtype=torch.long, device=self.device)
+        self._generated_k_steps = torch.randn(
+            self.num_decode_steps,
+            self.batch_size,
+            self.num_heads,
+            self.head_dim,
+            device=self.device,
+            dtype=torch.bfloat16,
+        )
+        self._generated_v_steps = torch.randn_like(self._generated_k_steps)
 
         logger.info("KV cache allocated")
 
@@ -122,53 +135,32 @@ class BaselineKVStandard(VerificationPayloadMixin, BaseBenchmark):
 
     def benchmark_fn(self) -> None:
         """Benchmark KV cache operations."""
-        import time
-
+        if self._generated_k_steps is None or self._generated_v_steps is None:
+            raise RuntimeError("setup() must precompute decode-step inputs before benchmarking")
         # Simulate decoding
         num_decode_steps = self.num_decode_steps
         self.seq_lengths.zero_()
 
-        self._synchronize()
-        start = time.perf_counter()
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()
 
-        for _ in range(num_decode_steps):
-            # Generate new K/V (simulating decode step)
-            new_k = torch.randn(
-                self.batch_size, self.num_heads, self.head_dim,
-                device=self.device, dtype=torch.bfloat16
-            )
-            new_v = torch.randn_like(new_k)
-
-            # Append to cache
-            if not torch.equal(self.seq_lengths, self.seq_lengths[0].expand_as(self.seq_lengths)):
-                raise RuntimeError("Baseline KV cache expects uniform sequence lengths")
-            pos = int(self.seq_lengths[0].item())
+        for pos in range(num_decode_steps):
+            new_k = self._generated_k_steps[pos]
+            new_v = self._generated_v_steps[pos]
             for layer_idx in range(self.active_layers):
                 self.append_kv(layer_idx, new_k, new_v, pos=pos)
             self.seq_lengths += 1
 
-        self._synchronize()
-        elapsed = time.perf_counter() - start
-
-        # Memory usage
-        memory_gb = torch.cuda.max_memory_allocated(self.device) / (1024**3)
-
-        tokens_per_sec = (self.batch_size * num_decode_steps) / elapsed
-
-        logger.info(f"Throughput: {tokens_per_sec:.2f} tokens/sec")
-        logger.info(f"Memory: {memory_gb:.2f} GB")
-
-        self._last_metrics = {
-            "latency_ms": elapsed * 1000,
-            "tokens_per_sec": tokens_per_sec,
-            "memory_gb": memory_gb,
-        }
+        end_event.record()
+        self._pending_timing_pair = (start_event, end_event)
 
         # Capture a slice of KV cache for verification (layer 0, first token/head window)
         view = self.kv_cache[:1, :1, :, :, : min(1, self.kv_cache.shape[4]), : min(8, self.kv_cache.shape[5])]
         self.output = view.detach().float().clone()
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         self._set_verification_payload(
             inputs={
                 "batch_size": torch.tensor([self.batch_size], dtype=torch.int64, device="cpu"),
@@ -181,7 +173,27 @@ class BaselineKVStandard(VerificationPayloadMixin, BaseBenchmark):
             output_tolerance=(0.1, 1.0),
         )
 
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, Any]]:
+        if self._pending_timing_pair is None:
+            return None
+        elapsed_ms_value = elapsed_ms(self._pending_timing_pair)
+        self._pending_timing_pair = None
+        elapsed_s = max(elapsed_ms_value, 1e-9) / 1000.0
+        memory_gb = torch.cuda.max_memory_allocated(self.device) / (1024**3)
+        tokens_per_sec = (self.batch_size * self.num_decode_steps) / elapsed_s
+
+        logger.info(f"Throughput: {tokens_per_sec:.2f} tokens/sec")
+        logger.info(f"Memory: {memory_gb:.2f} GB")
+
+        self._last_metrics = {
+            "latency_ms": elapsed_ms_value,
+            "tokens_per_sec": tokens_per_sec,
+            "memory_gb": memory_gb,
+        }
+        return None
+
     def get_custom_metrics(self) -> Dict[str, Any]:
+        self.finalize_iteration_metrics()
         return self._last_metrics
 
     def get_optimization_goal(self) -> str:
@@ -198,6 +210,8 @@ class BaselineKVStandard(VerificationPayloadMixin, BaseBenchmark):
     def teardown(self):
         """Clean up."""
         del self.kv_cache
+        self._generated_k_steps = None
+        self._generated_v_steps = None
         self.output = None
         super().teardown()
 

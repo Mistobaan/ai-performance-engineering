@@ -22,13 +22,15 @@ Options:
   --runtime <mode>       host|container (default: host)
   --image <image>        Container image for runtime=container, and CUDA compat
                          source image for runtime=host
-                         (default: cfregly/cluster_perf_orig_parity:latest)
+                         (default: cluster_perf_orig_parity:latest)
   --nvbw-bin <path>      nvbandwidth executable path (default: nvbandwidth)
   --quick                Use reduced testcase subset
 EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 HOSTS=""
 LABELS=""
@@ -37,7 +39,7 @@ SSH_KEY="${SSH_KEY:-}"
 REMOTE_ROOT="${REMOTE_ROOT:-$ROOT_DIR}"
 
 RUNTIME="${RUNTIME:-host}"
-IMAGE="${IMAGE:-cfregly/cluster_perf_orig_parity:latest}"
+IMAGE="${IMAGE:-cluster_perf_orig_parity:latest}"
 NVBW_BIN="${NVBW_BIN:-nvbandwidth}"
 QUICK=0
 
@@ -73,6 +75,14 @@ if [[ -n "$LABELS" && "${#LABEL_ARR[@]}" -ne "${#HOST_ARR[@]}" ]]; then
   echo "ERROR: --labels count must match --hosts count" >&2
   exit 2
 fi
+
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+LOCAL_STRUCTURED_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+LOCAL_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+REMOTE_STRUCTURED_DIR="$(cluster_structured_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+REMOTE_RAW_DIR="$(cluster_raw_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+REMOTE_ARTIFACT_ENV="$(cluster_artifact_env_prefix_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+mkdir -p "${LOCAL_STRUCTURED_DIR}" "${LOCAL_RAW_DIR}"
 
 sanitize_label() {
   local raw="$1"
@@ -113,14 +123,14 @@ for idx in "${!HOST_ARR[@]}"; do
     label="$(sanitize_label "$host")"
   fi
 
-  out_json="results/structured/${RUN_ID}_${label}_nvbandwidth.json"
-  out_sums_csv="results/structured/${RUN_ID}_${label}_nvbandwidth_sums.csv"
-  out_clock_json="results/structured/${RUN_ID}_${label}_nvbandwidth_clock_lock.json"
-  out_raw_dir="results/raw/${RUN_ID}_${label}_nvbandwidth"
+  out_json_remote="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_nvbandwidth.json"
+  out_sums_csv_remote="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_nvbandwidth_sums.csv"
+  out_clock_json_remote="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_nvbandwidth_clock_lock.json"
+  out_raw_dir_remote="${REMOTE_RAW_DIR}/${RUN_ID}_${label}_nvbandwidth"
 
   echo "========================================"
   echo "nvbandwidth: host=${host} label=${label} runtime=${RUNTIME}"
-  echo "Outputs: ${out_json}, ${out_sums_csv}, ${out_clock_json}"
+  echo "Outputs: ${out_json_remote}, ${out_sums_csv_remote}, ${out_clock_json_remote}"
   echo "========================================"
 
   bench_args=(
@@ -140,7 +150,7 @@ for idx in "${!HOST_ARR[@]}"; do
   fi
 
   bench_str="$(printf '%q ' "${bench_args[@]}")"
-  remote_cmd="cd $(printf '%q' "${REMOTE_ROOT}") && ${bench_str}"
+  remote_cmd="cd $(printf '%q' "${REMOTE_ROOT}") && ${REMOTE_ARTIFACT_ENV} ${bench_str}"
 
   if [[ "$host" == "localhost" || "$host" == "$(hostname)" ]]; then
     bash -lc "$remote_cmd"
@@ -149,23 +159,22 @@ for idx in "${!HOST_ARR[@]}"; do
   fi
 
   if [[ "$host" != "localhost" && "$host" != "$(hostname)" ]]; then
-    mkdir -p "${ROOT_DIR}/results/structured" "${ROOT_DIR}/results/raw"
-    rm -f "${ROOT_DIR}/${out_json}" "${ROOT_DIR}/${out_sums_csv}" "${ROOT_DIR}/${out_clock_json}"
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_json}" "${ROOT_DIR}/results/structured/" || {
-      echo "ERROR: failed to fetch ${out_json} from ${host}" >&2
+    rm -f "${LOCAL_STRUCTURED_DIR}/$(basename "${out_json_remote}")" "${LOCAL_STRUCTURED_DIR}/$(basename "${out_sums_csv_remote}")" "${LOCAL_STRUCTURED_DIR}/$(basename "${out_clock_json_remote}")"
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_json_remote}" "${LOCAL_STRUCTURED_DIR}/" || {
+      echo "ERROR: failed to fetch ${out_json_remote} from ${host}" >&2
       exit 1
     }
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_sums_csv}" "${ROOT_DIR}/results/structured/" || {
-      echo "ERROR: failed to fetch ${out_sums_csv} from ${host}" >&2
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_sums_csv_remote}" "${LOCAL_STRUCTURED_DIR}/" || {
+      echo "ERROR: failed to fetch ${out_sums_csv_remote} from ${host}" >&2
       exit 1
     }
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_clock_json}" "${ROOT_DIR}/results/structured/" || {
-      echo "ERROR: failed to fetch ${out_clock_json} from ${host}" >&2
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_clock_json_remote}" "${LOCAL_STRUCTURED_DIR}/" || {
+      echo "ERROR: failed to fetch ${out_clock_json_remote} from ${host}" >&2
       exit 1
     }
-    rm -rf "${ROOT_DIR}/${out_raw_dir}"
-    scp -r "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_raw_dir}" "${ROOT_DIR}/results/raw/" || {
-      echo "ERROR: failed to fetch ${out_raw_dir} from ${host}" >&2
+    rm -rf "${LOCAL_RAW_DIR}/$(basename "${out_raw_dir_remote}")"
+    scp -r "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_raw_dir_remote}" "${LOCAL_RAW_DIR}/" || {
+      echo "ERROR: failed to fetch ${out_raw_dir_remote} from ${host}" >&2
       exit 1
     }
   fi

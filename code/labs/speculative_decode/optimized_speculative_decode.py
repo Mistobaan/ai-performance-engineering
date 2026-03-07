@@ -153,7 +153,6 @@ class OptimizedSpeculativeDecodeBenchmark(VerificationPayloadMixin, BaseBenchmar
             "speculative.acceptance_rate_pct": (accepted_draft / max(draft_tokens, 1)) * 100.0,
             "speculative.rounds": float(rounds),
         }
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.input_ids is None or self.output is None:

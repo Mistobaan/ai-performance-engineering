@@ -97,11 +97,12 @@ class OptimizedNativeTmaPrefillDecodeBenchmark(VerificationPayloadMixin, BaseBen
             evt.record(stream)
             events.append(evt)
             if len(events) > self.cfg.max_in_flight:
-                events.pop(0).synchronize()
+                stream.wait_event(events.pop(0))
         if async_only:
             return events
+        current_stream = torch.cuda.current_stream()
         for evt in events:
-            evt.synchronize()
+            current_stream.wait_event(evt)
         return None
 
     def _decode_graph(self) -> None:
@@ -124,8 +125,8 @@ class OptimizedNativeTmaPrefillDecodeBenchmark(VerificationPayloadMixin, BaseBen
             self._decode_graph()
         if pref_events:
             for evt in pref_events:
-                evt.synchronize()
-        self._synchronize()
+                torch.cuda.current_stream().wait_event(evt)
+        torch.cuda.current_stream().wait_stream(self.decode_stream)
         if self.inputs is not None:
             self.output = self.inputs.out[:1, : min(8, self.inputs.out.shape[1])].detach().float().clone()
         if self.inputs is None or self.output is None:

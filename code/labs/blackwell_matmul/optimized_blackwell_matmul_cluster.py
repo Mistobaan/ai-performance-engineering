@@ -35,10 +35,8 @@ class ClusterGraceBlackwellBenchmark(GraceBlackwellMatmulBenchmark):
             reference_runner=baseline_blackwell_matmul,
         )
 
-
-
-def get_benchmark(size: int = 2048) -> GraceBlackwellMatmulBenchmark:
-    return ClusterGraceBlackwellBenchmark(size=size)
+def get_benchmark() -> GraceBlackwellMatmulBenchmark:
+    return ClusterGraceBlackwellBenchmark()
 
 
 if __name__ == "__main__":

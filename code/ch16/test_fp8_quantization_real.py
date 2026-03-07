@@ -22,25 +22,12 @@ in the codebase. If transformer_engine is available, it provides more
 robust FP8 training/inference, but this script uses PyTorch native APIs.
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-try:
-    from arch_config import prefer_flash_sdpa  # type: ignore
-except Exception:
-    from contextlib import nullcontext
-
-    def prefer_flash_sdpa():
-        return nullcontext()
+from core.harness.arch_config import prefer_flash_sdpa
 
 import torch
 import torch.nn as nn
 import time
 import json
-import sys
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any
 

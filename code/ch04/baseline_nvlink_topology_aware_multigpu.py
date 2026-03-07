@@ -78,10 +78,7 @@ class BaselineNvlinkTopologyAwareBenchmark(VerificationPayloadMixin, BaseBenchma
         with self._nvtx_range("baseline_nvlink_topology_aware_multigpu"):
             for host_buffer, src, dst in zip(self.host_buffers, self.src, self.dst):
                 host_buffer.copy_(src, non_blocking=False)
-                torch.cuda.synchronize(src.device)
                 dst.copy_(host_buffer, non_blocking=False)
-                torch.cuda.synchronize(dst.device)
-            self._sync_all()
         self.output = self.dst[0]
 
     def capture_verification_payload(self) -> None:

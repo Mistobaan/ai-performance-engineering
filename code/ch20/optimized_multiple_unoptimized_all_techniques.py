@@ -7,13 +7,6 @@ for `baseline_multiple_unoptimized.py`. The canonical implementation lives in
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
-
 import ch20.arch_config  # noqa: F401 - Apply chapter defaults
 
 from ch20.optimized_multiple_unoptimized import OptimizedAllTechniquesBenchmark

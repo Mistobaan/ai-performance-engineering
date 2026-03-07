@@ -28,6 +28,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 HOSTS=""
 LABELS=""
@@ -64,6 +66,12 @@ if [[ -z "$HOSTS" ]]; then
   usage >&2
   exit 2
 fi
+
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+LOCAL_STRUCTURED_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
+REMOTE_STRUCTURED_DIR="$(cluster_structured_dir_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+REMOTE_ARTIFACT_ENV="$(cluster_artifact_env_prefix_for_root "${REMOTE_ROOT}" "${RUN_ID}")"
+mkdir -p "${LOCAL_STRUCTURED_DIR}"
 
 IFS=',' read -r -a HOST_ARR <<<"$HOSTS"
 IFS=',' read -r -a LABEL_ARR <<<"$LABELS"
@@ -111,13 +119,16 @@ for idx in "${!HOST_ARR[@]}"; do
     label="$(sanitize_label "$host")"
   fi
 
-  out_json="results/structured/${RUN_ID}_${label}_gpu_stream.json"
-  out_csv="results/structured/${RUN_ID}_${label}_gpu_stream.csv"
-  out_lock="results/structured/${RUN_ID}_${label}_gpu_stream_clock_lock.json"
+  out_json_local="${LOCAL_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu_stream.json"
+  out_csv_local="${LOCAL_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu_stream.csv"
+  out_lock_local="${LOCAL_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu_stream_clock_lock.json"
+  out_json_remote="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu_stream.json"
+  out_csv_remote="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu_stream.csv"
+  out_lock_remote="${REMOTE_STRUCTURED_DIR}/${RUN_ID}_${label}_gpu_stream_clock_lock.json"
 
   echo "========================================"
   echo "gpu_stream: host=${host} label=${label}"
-  echo "Outputs: ${out_json}, ${out_csv}, ${out_lock}"
+  echo "Outputs: ${out_json_remote}, ${out_csv_remote}, ${out_lock_remote}"
   echo "========================================"
 
   bench_args=(
@@ -131,7 +142,7 @@ for idx in "${!HOST_ARR[@]}"; do
     --dtype "${DTYPE}"
   )
   bench_str="$(printf '%q ' "${bench_args[@]}")"
-  remote_cmd="cd $(printf '%q' "${REMOTE_ROOT}") && ${bench_str}"
+  remote_cmd="cd $(printf '%q' "${REMOTE_ROOT}") && ${REMOTE_ARTIFACT_ENV} ${bench_str}"
 
   if [[ "$host" == "localhost" || "$host" == "$(hostname)" ]]; then
     bash -lc "$remote_cmd"
@@ -140,15 +151,14 @@ for idx in "${!HOST_ARR[@]}"; do
   fi
 
   if [[ "$host" != "localhost" && "$host" != "$(hostname)" ]]; then
-    mkdir -p "${ROOT_DIR}/results/structured"
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_json}" "${ROOT_DIR}/results/structured/" || {
-      echo "WARNING: failed to fetch ${out_json} from ${host}" >&2
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_json_remote}" "${LOCAL_STRUCTURED_DIR}/" || {
+      echo "WARNING: failed to fetch ${out_json_remote} from ${host}" >&2
     }
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_csv}" "${ROOT_DIR}/results/structured/" || {
-      echo "WARNING: failed to fetch ${out_csv} from ${host}" >&2
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_csv_remote}" "${LOCAL_STRUCTURED_DIR}/" || {
+      echo "WARNING: failed to fetch ${out_csv_remote} from ${host}" >&2
     }
-    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${REMOTE_ROOT}/${out_lock}" "${ROOT_DIR}/results/structured/" || {
-      echo "WARNING: failed to fetch ${out_lock} from ${host}" >&2
+    scp "${SSH_OPTS[@]}" "${SSH_USER}@${host}:${out_lock_remote}" "${LOCAL_STRUCTURED_DIR}/" || {
+      echo "WARNING: failed to fetch ${out_lock_remote} from ${host}" >&2
     }
   fi
 done

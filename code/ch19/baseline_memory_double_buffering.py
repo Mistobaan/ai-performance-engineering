@@ -93,7 +93,7 @@ class MemoryDoubleBufferingBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     self.buffer.copy_(host_batch, non_blocking=False)
                     with torch.cuda.stream(self.stream):
                         self.output = self.model(self.buffer)
-                    self.stream.synchronize()
+                    torch.cuda.current_stream(device=self.device).wait_stream(self.stream)
         if self.output is None or self.buffer is None or self.model is None:
             raise RuntimeError("benchmark_fn() must produce output")
         dtype = self.output.dtype

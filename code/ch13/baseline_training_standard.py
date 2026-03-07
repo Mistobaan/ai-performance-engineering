@@ -172,7 +172,6 @@ class BaselineTrainingBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self._peak_memory_gb,
             torch.cuda.max_memory_allocated(self.device) / 1e9
         )
-        self._synchronize()
         if self.input_ids is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

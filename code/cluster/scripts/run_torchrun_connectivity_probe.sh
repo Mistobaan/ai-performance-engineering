@@ -28,6 +28,10 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 HOSTS=""
 SSH_USER="ubuntu"
@@ -100,13 +104,15 @@ fi
 if [[ -z "$GPUS_PER_NODE" ]]; then
   GPUS_PER_NODE="$(nvidia-smi -L | wc -l | tr -d ' ')"
 fi
+source_host_runtime_env_if_present "$ROOT_DIR"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
 if ! [[ "$GPUS_PER_NODE" =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: --gpus-per-node must be a positive integer (got: ${GPUS_PER_NODE})" >&2
   exit 2
 fi
 
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW_DIR" "$OUT_STRUCT_DIR"
 OUTPUT_JSON="${OUT_STRUCT_DIR}/${RUN_ID}_torchrun_connectivity_probe.json"
 
@@ -165,6 +171,8 @@ if [[ -n "$NCCL_IB_HCA" ]]; then
   REMOTE_ENV+=("NCCL_IB_HCA=${NCCL_IB_HCA}")
 fi
 
+HOST_RUNTIME_REMOTE_PREFIX="$(host_runtime_remote_prefix "$ROOT_DIR")"
+
 PIDS=()
 for idx in "${!HOST_ARR[@]}"; do
   host="${HOST_ARR[$idx]}"
@@ -188,7 +196,7 @@ for idx in "${!HOST_ARR[@]}"; do
   if [[ -n "$remote_env" ]]; then
     remote_env="env ${remote_env}"
   fi
-  remote_cmd="cd ${ROOT_DIR} && ${remote_env} $(printf "%q " "${cmd[@]}")"
+  remote_cmd="cd ${ROOT_DIR} && ${HOST_RUNTIME_REMOTE_PREFIX}${remote_env} $(printf "%q " "${cmd[@]}")"
   echo "Launching ${host} -> ${log_path}"
   ssh "${SSH_OPTS[@]}" "${SSH_USER}@${host}" "bash -lc $(printf '%q' "$remote_cmd")" 2>&1 | tee "$log_path" &
   PIDS+=($!)

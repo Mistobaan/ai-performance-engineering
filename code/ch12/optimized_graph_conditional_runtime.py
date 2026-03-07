@@ -13,13 +13,7 @@ For conditional graph nodes (CUDA 12.4+), see the CUDA binary implementations.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Optional
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 import torch
 from torch.cuda import CUDAGraph
@@ -125,7 +119,6 @@ class OptimizedGraphBenchmark(VerificationPayloadMixin, BaseBenchmark):
         """Benchmark CUDA graph replay - much faster than fresh launches."""
         with self._nvtx_range("graph_replay"):
             self._graph.replay()
-        self._synchronize()
         if self._verify_input is None or self.data is None:
             raise RuntimeError("Verification input/output not initialized")
 

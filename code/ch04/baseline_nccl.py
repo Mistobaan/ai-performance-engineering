@@ -28,6 +28,8 @@ from ch04.verification_payload_mixin import VerificationPayloadMixin
 
 class BaselineNcclBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Baseline: CPU-based reduction - copies each shard to CPU for aggregation."""
+
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
     
     def __init__(self):
         super().__init__()
@@ -74,7 +76,6 @@ class BaselineNcclBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 reduced = sum(cpu_shards) / float(self.num_shards)
                 # Copy result back to GPU
                 self.output = reduced.to(self.device)
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.input is None or self.output is None:

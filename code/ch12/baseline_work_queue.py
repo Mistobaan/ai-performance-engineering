@@ -2,13 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
-
 import torch
 
 from typing import Optional
@@ -76,7 +69,6 @@ class BaselineWorkQueueBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with nvtx_range("work_queue", enable=enable_nvtx):
             # Call CUDA extension with static work distribution
             self._extension.static_work_distribution(self.input_data, self.output_data, self.iterations)
-        self._synchronize()
         if self._verify_input is None or self.output_data is None:
             raise RuntimeError("Verification input/output not initialized")
 

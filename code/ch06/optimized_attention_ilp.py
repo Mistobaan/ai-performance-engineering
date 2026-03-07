@@ -108,7 +108,6 @@ class OptimizedAttentionILPBenchmark(VerificationPayloadMixin, BaseBenchmark):
                         out = self.out_proj(merged)
                         self._last_sum += out.sum()
 
-                self._synchronize()
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(

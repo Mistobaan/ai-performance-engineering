@@ -42,9 +42,7 @@ class BaselineNvlinkTopologyAwareBenchmark(VerificationPayloadMixin, BaseBenchma
             for start in range(0, self.numel, self.chunk_elems):
                 end = min(start + self.chunk_elems, self.numel)
                 self.host_buffer[start:end].copy_(self.src[start:end], non_blocking=False)
-                self._synchronize()
                 self.dst[start:end].copy_(self.host_buffer[start:end], non_blocking=False)
-                self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.src is None or self.dst is None:

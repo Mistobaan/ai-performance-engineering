@@ -31,6 +31,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 HOSTS=""
 LABELS=""
@@ -92,7 +94,8 @@ if [[ -n "$SSH_KEY" ]]; then
   SSH_OPTS+=(-i "$SSH_KEY")
 fi
 
-mkdir -p "${ROOT_DIR}/results/raw" "${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+mkdir -p "${CLUSTER_RAW_DIR_EFFECTIVE}" "${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 
 fail=0
 for idx in "${!HOST_ARR[@]}"; do
@@ -105,8 +108,8 @@ for idx in "${!HOST_ARR[@]}"; do
     label="$(sanitize_label "$host")"
   fi
 
-  out_json="${ROOT_DIR}/results/structured/${RUN_ID}_${label}_hang_triage_readiness.json"
-  out_log="${ROOT_DIR}/results/raw/${RUN_ID}_${label}_hang_triage_readiness.log"
+  out_json="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}/${RUN_ID}_${label}_hang_triage_readiness.json"
+  out_log="${CLUSTER_RAW_DIR_EFFECTIVE}/${RUN_ID}_${label}_hang_triage_readiness.log"
 
   read -r -d '' PY_PAYLOAD <<'PY' || true
 import json

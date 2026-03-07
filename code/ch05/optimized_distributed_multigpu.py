@@ -60,7 +60,6 @@ class OptimizedDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
             # Ensure the all-reduce is complete for timing and for post-timing verification.
             # torch.cuda.nccl may use non-default streams, so we must synchronize before
             # consuming outputs elsewhere.
-            self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if not self.data:

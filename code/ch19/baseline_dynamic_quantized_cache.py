@@ -22,6 +22,7 @@ repo_root = Path(__file__).parent.parent
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
+from core.benchmark.cuda_event_timing import elapsed_ms
 from core.harness.benchmark_harness import (  # noqa: E402
     BaseBenchmark,
     BenchmarkConfig,
@@ -50,6 +51,7 @@ class _DynamicQuantizedCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
             tokens_per_iteration=float(total_tokens),
         )
         self._verification_payload = None
+        self._pending_timing_pair: Optional[tuple[torch.cuda.Event, torch.cuda.Event]] = None
 
     def setup(self) -> None:
         torch.manual_seed(42)
@@ -103,8 +105,9 @@ class _DynamicQuantizedCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
             raise RuntimeError("Tensor not initialized")
 
         errors: List[float] = []
-        torch.cuda.synchronize(self.device)
-        start = self._record_start()
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()
 
         if self.use_fp32_baseline:
             # Baseline: Non-adaptive (full cache reprocessing each time)
@@ -115,13 +118,21 @@ class _DynamicQuantizedCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
             for bits in self.schedule_bits:
                 errors.append(self._adaptive_cache_update(bits))
 
-        torch.cuda.synchronize(self.device)
-        latency_ms = self._record_stop(start)
-        self._history["latency_ms"].append(latency_ms)
+        end_event.record()
+        self._pending_timing_pair = (start_event, end_event)
         self._history["error"].extend(errors)
-        return {"errors": errors}
+        return {}
+
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, List[float]]]:
+        if self._pending_timing_pair is None:
+            return None
+        latency_ms = elapsed_ms(self._pending_timing_pair)
+        self._pending_timing_pair = None
+        self._history["latency_ms"].append(latency_ms)
+        return None
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         self._set_verification_payload(
             inputs={"tensor": self.tensor},
             output=self.tensor,
@@ -142,6 +153,7 @@ class _DynamicQuantizedCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
         return self._workload
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        self.finalize_iteration_metrics()
         if not self._history["latency_ms"]:
             return None
         avg_ms = statistics.mean(self._history["latency_ms"])

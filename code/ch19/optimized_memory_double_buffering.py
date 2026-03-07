@@ -131,8 +131,9 @@ class OptimizedMemoryDoubleBufferingBenchmark(VerificationPayloadMixin, BaseBenc
                         with torch.cuda.stream(self.copy_stream):
                             next_buffer.copy_(self.host_batches[i + 1], non_blocking=True)
                             next_event.record()
-                self.compute_stream.synchronize()
-        torch.cuda.synchronize()
+                current = torch.cuda.current_stream(device=self.device)
+                current.wait_stream(self.compute_stream)
+                current.wait_stream(self.copy_stream)
         if self.output is None or (self.buffer_a is None and self.buffer_b is None):
             raise RuntimeError("benchmark_fn() must produce output and buffers")
 

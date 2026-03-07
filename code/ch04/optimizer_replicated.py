@@ -60,7 +60,6 @@ class BaselineOptimizerReplicatedBenchmark(VerificationPayloadMixin, BaseBenchma
                     model.weight.add_(-1e-3, mom)
                     model.weight.grad.zero_()
                     model.bias.grad.zero_()
-            self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if not self.models or not self.momentum or not self.inputs:

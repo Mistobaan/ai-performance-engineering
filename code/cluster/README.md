@@ -1,303 +1,103 @@
 # Cluster Evaluation Harness
 
-This folder contains a strict, reproducible cluster-evaluation harness (discovery + benchmarks + plots) and a field report workflow.
+This folder has one contract that matters for new work:
 
-## Non-Negotiable Rules
-- GPU benchmark runs are valid only when clock locking succeeds through the harness (`lock_gpu_clocks`).
-- Preflight is mandatory for suite runs (`nvidia-persistenced`, `nvidia-imex`, `nvidia-dcgm`).
-- FP4/grouped-GEMM runs enforce stack-profile preflight (digest-pinned image for container mode, stack drift checks, and strict `nvidia_peermem` requirement).
-- Runtime/CVE evidence collection is enabled by default in discovery + health workflows (CVE-2025-23266 and CVE-2025-23267).
-- Do not rotate machine identity / SSH host keys unless explicitly approved for a break-glass recovery.
-
-## Quick Start
-
-### 1) Portable baseline (recommended first run)
-Use this when you want a fast first pass without FP4.
-
-```bash
-scripts/run_cluster_eval_suite.sh \
-  --run-id <run_id> \
-  --hosts node1,node2 \
-  --labels node1,node2 \
-  --ssh-key ~/.ssh/ssh_key.pem \
-  --oob-if <iface> \
-  --socket-ifname <iface> \
-  --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5 \
-  --health-suite extended \
-  --disable-fp4
+```text
+cluster/runs/<run_id>/
+  manifest.json
+  structured/
+  raw/
+  figures/
+  reports/
 ```
 
-### 2) Full GB200 run (FP4 enabled)
-Use this with host-native FP4 (default runtime).
+If you are running benchmarks, consuming results from MCP/CLI/dashboard, or handing the output to another tool, use the run directory as the unit of record.
+
+## Start Here
+Use this for the common "evaluate this system" ask:
 
 ```bash
-scripts/run_cluster_eval_suite.sh \
-  --run-id <run_id> \
-  --hosts node1,node2 \
-  --labels node1,node2 \
-  --ssh-key ~/.ssh/ssh_key.pem \
-  --oob-if <iface> \
-  --socket-ifname <iface> \
-  --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5 \
-  --health-suite extended \
-  --enable-fp4
-```
-
-### 2b) Full GB200 run (all extended checks enabled)
-Use this when you want the complete multi-node package used by the field report (network + inference + FP4 + train-step + C2C + stability/composition/control-plane arcs).
-
-```bash
-scripts/run_cluster_eval_suite.sh \
-  --run-id <run_id> \
-  --hosts node1,node2 \
-  --labels node1,node2 \
-  --ssh-key ~/.ssh/ssh_key.pem \
-  --oob-if <iface> \
-  --socket-ifname <iface> \
-  --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5 \
-  --health-suite extended \
-  --health-gdr \
-  --health-gdr-gpu 0 \
-  --health-gdr-mem-types 0,1 \
-  --health-gdr-use-dmabuf \
-  --fp4-runtime host \
-  --run-c2c \
-  --run-numa-mem-bw \
-  --run-train-step \
-  --train-step-single-node \
-  --train-step-multi-node \
-  --run-checkpoint-io \
-  --enable-mamf \
-  --mamf-mode quick \
-  --mamf-concurrent \
-  --enable-allreduce-stability \
-  --allreduce-payload-gib 2.0 \
-  --allreduce-iters 200 \
-  --allreduce-warmup 20 \
-  --enable-allreduce-latency-comp \
-  --allreduce-latency-payload-gib 4.0 \
-  --allreduce-latency-chunks 1000 \
-  --allreduce-latency-iters 5 \
-  --allreduce-latency-warmup 1 \
-  --enable-allgather-control-plane \
-  --allgather-control-iters 2000 \
-  --allgather-control-warmup 200 \
-  --enable-nccl-algo-comparison \
-  --nccl-algos Ring,Tree,NVLS,auto
-```
-
-Optional containerized FP4 runtime (if you prefer containerized FP4 or host bootstrap cannot satisfy prerequisites):
-
-```bash
-scripts/repro/build_cluster_perf_image.sh --profile open --tag cfregly/cluster_perf:latest
-
-scripts/run_cluster_eval_suite.sh \
-  --run-id <run_id> \
-  --hosts node1,node2 \
-  --labels node1,node2 \
-  --ssh-key ~/.ssh/ssh_key.pem \
-  --oob-if <iface> \
-  --socket-ifname <iface> \
-  --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5 \
-  --health-suite extended \
-  --fp4-runtime container \
-  --fp4-stack-profile new_container
-```
-
-Optional orig-parity open container profile (matches legacy `old_container` software versions, without `jordannanos` image dependency):
-
-```bash
-scripts/repro/build_cluster_perf_image.sh --profile orig_parity
-IMAGE_ID="$(docker image inspect --format '{{.Id}}' cfregly/cluster_perf_orig_parity:latest)"
-
-scripts/run_cluster_eval_suite.sh \
-  --run-id <run_id> \
-  --hosts node1,node2 \
-  --labels node1,node2 \
-  --ssh-key ~/.ssh/ssh_key.pem \
-  --oob-if <iface> \
-  --socket-ifname <iface> \
-  --nccl-ib-hca mlx5_0,mlx5_1,mlx5_4,mlx5_5 \
-  --health-suite extended \
-  --fp4-runtime container \
-  --fp4-stack-profile orig_parity_container \
-  --fp4-image "${IMAGE_ID}"
-```
-
-Optional extension for 2-node vLLM serving (Ray + TP across nodes):
-
-```bash
-  --run-vllm-multinode \
-  --vllm-multinode-concurrency 16 \
-  --vllm-multinode-num-prompts 64 \
-  --vllm-multinode-ray-port 6379
-```
-
-### Localhost Canonical Package (Required For Single-Node Work)
-For localhost/single-node evaluations, the required deliverable is the full template-style package:
-- `cluster/field-report-localhost.md`
-- `cluster/field-report-localhost-notes.md`
-
-Run the localhost suite:
-
-```bash
-sg docker -c "scripts/run_cluster_eval_suite.sh \
+python -m cli.aisp cluster common-eval \
+  --preset common-answer-fast \
   --run-id <run_id> \
   --hosts localhost \
   --labels localhost \
-  --ssh-user $(id -un) \
+  --ssh-user "$(id -un)" \
   --primary-label localhost \
-  --skip-bootstrap-nodes \
-  --disable-fp4 \
-  --health-suite off \
-  --skip-vllm-multinode \
-  --model openai-community/gpt2 \
-  --tp 1 \
-  --isl 128 \
-  --osl 64 \
-  --concurrency-range '1 2' \
-  --port 8893 \
-  --fio-runtime 15 \
-  --skip-nvbandwidth"
+  --extra-arg --skip-render-localhost-report
 ```
 
-Validate the localhost package:
+Presets:
+- `common-answer-fast`: the fastest useful answer bundle; NCCL, vLLM concurrency, vLLM request-rate, GEMM, GPU STREAM, fio, quick nvbandwidth, scorecard, coverage, MLPerf alignment.
+- `core-system`: the standard full single-node/system bundle.
+- `modern-llm`: the canonical full bundle with advanced LLM/distributed signals.
+- `multinode-readiness`: checks contract and environment only; no workloads.
+
+## What To Open
+- `cluster/runs/<run_id>/`: new run results.
+- `cluster/published/current/`: the current published canonical package.
+- `cluster/field-report.md`: published report package.
+- `cluster/field-report-notes.md`: published evidence ledger.
+- `cluster/docs/advanced-runbook.md`: operator reference for running, promoting, and validating canonical packages.
+- `cluster/docs/field-report-template.md`: promotion template, not the entrypoint.
+
+## What To Ignore Most Of The Time
+- `cluster/published/current/structured/`: published structured artifacts for the current canonical package.
+- `cluster/published/current/figures/`: published figures for the current canonical package.
+- `cluster/published/current/raw/`: raw logs; useful for debugging, not for first-pass consumption.
+
+That published package is for readers and stakeholder deliverables. It is not the forward runtime contract.
+Archived historical baselines live under `cluster/archive/runs/<run_id>/`.
+
+## Current Published State
+- Published canonical localhost package: `2026-03-05_localhost_modern_profile_r24_full20b`
+- Archived comparison baseline: `2026-03-04_localhost_modern_profile_r22_fastcanon` in `cluster/archive/runs/2026-03-04_localhost_modern_profile_r22_fastcanon/`
+
+Interpretation:
+- `r24` is the official published package.
+- `r22` is preserved only for historical delta work and does not stay in the live publication surfaces.
+
+## Promotion Rules
+When a run should become the new published package:
+1. Run `common-eval` or the raw suite and inspect `cluster/runs/<run_id>/`.
+2. Promote the localhost package into `cluster/published/current/` explicitly:
 
 ```bash
-scripts/validate_field_report_requirements.sh \
-  --report field-report-localhost.md \
-  --notes field-report-localhost-notes.md \
-  --canonical-run-id <run_id>
-```
-
-If stale-artifact hygiene is expected to retain prior runs, pass repeated `--allow-run-id <id>` values explicitly.
-
-`results/structured/*_localhost_environment_report.md` is supplemental context only and is not a replacement for the localhost field-report package.
-
-Optional dedicated `nvbandwidth` add-on (strict lock + structured JSON/CSV):
-
-```bash
-scripts/repro/run_nvbandwidth_bundle.sh \
+python -m cli.aisp cluster promote-run \
   --run-id <run_id> \
-  --label <label> \
-  --runtime host \
-  --quick
-python3 analysis/plot_nvbandwidth_sums.py \
-  --input results/structured/<run_id>_<label>_nvbandwidth_sums.csv \
-  --out docs/figures/<run_id>_<label>_nvbandwidth_sums.png
+  --label localhost \
+  --allow-run-id <historical_baseline_if_any> \
+  --cleanup
 ```
 
-### 3) Generate / refresh report plots and manifest
-`run_cluster_eval_suite.sh` already does this. If you need to refresh later:
+3. If this run also becomes the stakeholder report package, sync:
+   - `cluster/field-report.md`
+   - `cluster/field-report-notes.md`
+   - `cluster/docs/field-report-template.md`
+   - `cluster/docs/advanced-runbook.md`
+4. Re-run `cluster/scripts/validate_field_report_requirements.sh`.
+
+## Multi-Node
+Before the first real multi-node run, use the readiness-only preset:
 
 ```bash
-python3 scripts/write_manifest.py --run-id <run_id> --hosts node1,node2 --include-figures
+python -m cli.aisp cluster common-eval \
+  --preset multinode-readiness \
+  --run-id <run_id> \
+  --hosts <h1,h2> \
+  --labels <l1,l2> \
+  --ssh-user <user> \
+  --ssh-key <key> \
+  --extra-arg --oob-if \
+  --extra-arg <iface> \
+  --extra-arg --socket-ifname \
+  --extra-arg <iface>
 ```
 
-## FP4 Notes
-- FP4 is enabled by default in `scripts/run_cluster_eval_suite.sh`.
-- FP4 runtime is host-native by default (`--fp4-runtime host`).
-- Host bootstrap now installs `host_only` from `orig_parity` image provenance (Torch/CUDA/NCCL/cuDNN/DeepGEMM) and installs host `nvbandwidth` from the same image by default (`--bootstrap-host-parity-image` to override).
-- Optional container runtime is supported with `--fp4-runtime container --fp4-stack-profile new_container`.
-- FP4 benchmark entrypoints also expose runtime selection:
-  - grouped GEMM: `scripts/run_cluster_perf_grouped_gemm.sh --runtime host|container --stack-profile <profile>`
-  - FP4 smoke: `scripts/run_cluster_perf_fp4_smoke.sh --runtime host|container --stack-profile <profile>`
-- Build local open container runtime (optional):
-  - open decoupled: `scripts/repro/build_cluster_perf_image.sh --profile open --tag cfregly/cluster_perf:latest`
-  - orig-parity: `scripts/repro/build_cluster_perf_image.sh --profile orig_parity --tag cfregly/cluster_perf_orig_parity:latest`
-- Stack profile catalog and pinned digests: `docs/cluster-perf-stack-profiles.md`
-- FP4 checks now enforce a balanced attestation by default:
-  - semantic source check on `scripts/benchmarks/grouped_gemm_bench.py` (GB200 UE8M0 markers)
-  - grouped GEMM behavioral validation (`--require-deepgemm`) so unsupported DeepGEMM paths fail fast
-  - per-host provenance capture (repo git, runtime mode, optional container image ID/digest, driver/CUDA)
-  - cross-host consistency report at `results/structured/<run_id>_fp4_attestation_consistency.json`
-- Provenance capture is metadata-only. It does not mutate host state, lock versions, or pin files.
-- Health-suite GDR behavior:
-  - if perftest CUDA mode (`--use_cuda`) is unavailable, GDR checks are automatically disabled with a recorded warning
-  - if a GDR subtest fails at runtime (for example MR allocation errors), the suite logs warnings and continues with the rest of the run
+That writes:
+- `cluster/runs/<run_id>/structured/<run_id>_multinode_readiness.json`
 
-## Required Structured Outputs
-- `results/structured/<run_id>_manifest.json`
-- `results/structured/<run_id>_suite_steps.json`
-- `results/structured/<run_id>_preflight_services.json`
-- `results/structured/<run_id>_<label>_meta.json`
-- `results/structured/<run_id>_<label>_container_runtime.txt`
-- `results/structured/<run_id>_health_suite_<mode>_<label>_cluster_health_suite_summary.json`
-- `results/structured/<run_id>_node1_nccl.json`
-- `results/structured/<run_id>_2nodes_nccl.json`
-- `results/structured/<run_id>_<label>_vllm_serve_sweep.csv`
-- `results/structured/<run_id>_<label>_vllm_serve_sweep.jsonl`
-- `results/structured/<run_id>_<label>_vllm_serve_sweep_clock_lock.json`
-- `results/structured/<run_id>_<label>_vllm_serve_slo_goodput.json`
-- `results/structured/<run_id>_<label>_vllm_serve_slo_goodput.csv`
-- `results/structured/<run_id>_<label>_vllm_serve_request_rate_sweep.csv` (when `--run-vllm-request-rate-sweep`)
-- `results/structured/<run_id>_<label>_vllm_serve_request_rate_sweep.jsonl` (when `--run-vllm-request-rate-sweep`)
-- `results/structured/<run_id>_<label>_vllm_serve_request_rate_sweep_clock_lock.json` (when `--run-vllm-request-rate-sweep`)
-- `results/structured/<run_id>_<label>_vllm_request_rate_slo_goodput.json` (when `--run-vllm-request-rate-sweep`)
-- `results/structured/<run_id>_<label>_vllm_request_rate_slo_goodput.csv` (when `--run-vllm-request-rate-sweep`)
-- `results/structured/<run_id>_<leader_label>_vllm_multinode_serve.json` (when `--run-vllm-multinode`)
-- `results/structured/<run_id>_<leader_label>_vllm_multinode_serve.csv` (when `--run-vllm-multinode`)
-- `results/structured/<run_id>_<leader_label>_vllm_multinode_serve.jsonl` (when `--run-vllm-multinode`)
-- `results/structured/<run_id>_<leader_label>_vllm_multinode_slo_goodput.json` (when `--run-vllm-multinode`)
-- `results/structured/<run_id>_<leader_label>_vllm_multinode_slo_goodput.csv` (when `--run-vllm-multinode`)
-- `results/structured/<run_id>_<leader_label>_vllm_multinode_leader_clock_lock.json` (when `--run-vllm-multinode`)
-- `results/structured/<run_id>_<worker_label>_vllm_multinode_worker_clock_lock.json` (when `--run-vllm-multinode`)
-- `results/structured/<run_id>_<label>_nvbandwidth.json` (when running `scripts/repro/run_nvbandwidth_bundle.sh`)
-- `results/structured/<run_id>_<label>_nvbandwidth_sums.csv` (when running `scripts/repro/run_nvbandwidth_bundle.sh`)
-- `results/structured/<run_id>_<label>_nvbandwidth_clock_lock.json` (when running `scripts/repro/run_nvbandwidth_bundle.sh`)
-- `results/structured/<run_id>_<label>_gpu_stream.json` (when GPU STREAM benchmark is enabled)
-- `results/structured/<run_id>_<label>_gpu_stream.csv` (when GPU STREAM benchmark is enabled)
-- `results/structured/<run_id>_<label>_gpu_stream_clock_lock.json` (when GPU STREAM benchmark is enabled)
-- `results/structured/<run_id>_<label>_gemm_gpu_sanity.csv`
-- `results/structured/<run_id>_<label>_fio.json`
-- `results/structured/<run_id>_node_parity_summary.json`
-- `results/structured/<run_id>_<label>_nvlink_topology.json`
-- `results/structured/<run_id>_cluster_scorecard.json`
-- `results/structured/<run_id>_cluster_scorecard.md`
-- `results/structured/<run_id>_benchmark_coverage_analysis.json`
-- `results/structured/<run_id>_benchmark_coverage_analysis.md`
-- `results/structured/<run_id>_fp4_attestation_consistency.json` (when FP4 checks are enabled)
+Use `modern-llm` only after readiness is green.
 
-## Documentation Map
-- Advanced runbook and optional diagnostics: `docs/advanced-runbook.md`
-- Field report template: `docs/field-report-template.md`
-- Manifest schema: `docs/manifest_schema.md`
-- Current report write-up: `field-report.md`
-- Validated notes ledger (claim-to-evidence index): `field-report-notes.md`
-
-## Reference Evidence Package
-- Canonical validated run: `2026-02-09_gb200_fullflags_all_0117`
-- Artifact manifest: `results/structured/2026-02-09_gb200_fullflags_all_0117_manifest.json`
-- Sanitized cluster metadata: `results/structured/2026-02-09_gb200_fullflags_all_0117_cluster_meta.json`
-- Networking arc (data + plots):
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_health_suite_extended_node1node2_cluster_health_suite_summary.json`
-  - `docs/figures/2026-02-09_gb200_fullflags_all_0117_2nodes_nccl_bw_vs_msg.png`
-- Inference arc (data + plots):
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_vllm_serve_sweep.csv`
-  - `docs/figures/2026-02-09_gb200_fullflags_all_0117_node1_vllm_serve_total_tok_s_vs_concurrency.png`
-  - `docs/figures/2026-02-09_gb200_fullflags_all_0117_node1_vllm_serve_ttft_vs_concurrency.png`
-- Multi-node vLLM path evidence (latest run passing, strict-lock, digest-pinned image parity across nodes):
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_vllm_multinode_serve.json`
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_vllm_multinode_serve.csv`
-- Dedicated nvbandwidth bundle artifacts:
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_nvbandwidth.json`
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node2_nvbandwidth.json`
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_nvbandwidth_sums.csv`
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node2_nvbandwidth_sums.csv`
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_nvbandwidth_clock_lock.json`
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node2_nvbandwidth_clock_lock.json`
-- NVLink/NVSwitch topology artifacts:
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_nvlink_topology.json`
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node2_nvlink_topology.json`
-  - `docs/figures/2026-02-09_gb200_fullflags_all_0117_node1_nvlink_topology.png`
-  - `docs/figures/2026-02-09_gb200_fullflags_all_0117_node2_nvlink_topology.png`
-- Story dashboard + parity summary:
-  - `docs/figures/2026-02-09_gb200_fullflags_all_0117_cluster_story_dashboard.png`
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node_parity_summary.json`
-- Storage parity fio artifacts:
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node1_fio.json`
-  - `results/structured/2026-02-09_gb200_fullflags_all_0117_node2_fio.json`
-
-## Notes
-- `results/raw/` is intentionally gitignored and for debugging only.
-- Field reports should link to `results/structured/` and `docs/figures/` artifacts.
+## Optional Export
+`python -m cli.aisp cluster build-canonical-package ...` is optional. Most users can ignore it. It only exists to export already-produced runs into a clean shareable bundle after collection/promotion are already done.

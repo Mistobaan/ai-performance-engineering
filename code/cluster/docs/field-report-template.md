@@ -1,19 +1,25 @@
 # Cluster Field Report Template
 
+This file is the promotion template.
+If you are trying to understand how the harness works or which command to run, start with `cluster/README.md` instead.
+
 Last updated: YYYY-MM-DD
 
 ## Current Canonical Example
 | Item | Value |
 | --- | --- |
-| RUN_ID | `2026-02-10_full_suite_e2e_wire_qf_mon` |
-| Manifest | `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_manifest.json` |
-| Suite steps | `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_suite_steps.json` |
+| RUN_ID | `2026-03-05_localhost_modern_profile_r24_full20b` |
+| Manifest | `published/current/manifest.json` |
+| Suite steps | `published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_suite_steps.json` |
+| Preserved localhost canonical package | `2026-03-05_localhost_modern_profile_r24_full20b` |
+| Archived localhost comparison baseline | `2026-03-04_localhost_modern_profile_r22_fastcanon` in `cluster/archive/runs/2026-03-04_localhost_modern_profile_r22_fastcanon/` |
+| Historical multi-node reference | `2026-02-10_full_suite_e2e_wire_qf_mon` may be documented as historical context, but do not treat it as active canonical evidence unless its artifacts are materialized locally. |
 | Localhost package convention | For single-host packages, publish `cluster/field-report-localhost.md` + `cluster/field-report-localhost-notes.md` tied to the localhost RUN_ID (auto-rendered by `run_cluster_eval_suite.sh` when localhost is detected). |
 | Localhost renderer | `python3 cluster/scripts/render_localhost_field_report_package.py --run-id <RUN_ID> --label <label>` |
 | Artifact cleanup | `cluster/scripts/cleanup_run_artifacts.sh --canonical-run-id <RUN_ID> --apply [--allow-run-id <RUN_ID>]` |
-| Required reliability gates | `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_torchrun_connectivity_probe.json`, `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_nccl_env_sensitivity.json`, `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_node1_hang_triage_readiness.json`, `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_node2_hang_triage_readiness.json` |
-| Required operator checks | `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_node1_quick_friction.json`, `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_node2_quick_friction.json`, `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_node1_monitoring_expectations.json`, `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_node2_monitoring_expectations.json` |
-| Operator checks dashboard | `results/structured/2026-02-10_full_suite_e2e_wire_qf_mon_operator_checks_dashboard.json`, `docs/figures/2026-02-10_full_suite_e2e_wire_qf_mon_operator_checks_dashboard.png` |
+| Required reliability gates | `published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_torchrun_connectivity_probe.json`, `published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_nccl_env_sensitivity.json`, `published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_hang_triage_readiness.json` |
+| Required operator checks | `published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_quick_friction.json`, `published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_localhost_monitoring_expectations.json` |
+| Operator checks dashboard | `published/current/structured/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.json`, `published/current/figures/2026-03-05_localhost_modern_profile_r24_full20b_operator_checks_dashboard.png` |
 
 ## Table of Contents
 1. [TL;DR](#tldr)
@@ -45,7 +51,7 @@ Last updated: YYYY-MM-DD
 
 | Rule | Requirement |
 | --- | --- |
-| Artifact paths | Prefer `results/structured/` and `docs/figures/`; link `results/raw/` only when raw logs are required to prove a root-cause claim. |
+| Artifact paths | Prefer `published/current/structured/` and `published/current/figures/`; link `published/current/raw/` only when raw logs are required to prove a root-cause claim. |
 | Benchmark validity | GPU benchmark runs are valid only if clock locking succeeded; include clock-lock artifacts. |
 | Stakeholder handoff | Include repo URL, commit/tag, and collaborator invite/access status. |
 | Visual formatting | Show full-size inline images under each subsection; link each image to itself. |
@@ -99,50 +105,50 @@ Last updated: YYYY-MM-DD
 
 | Discovery artifact | Link |
 | --- | --- |
-| Manifest | `results/structured/<RUN_ID>_manifest.json` |
-| Cluster metadata | `results/structured/<RUN_ID>_<label>_meta.json` |
-| NVLink topology | `results/structured/<RUN_ID>_<label>_nvlink_topology.json` |
-| Runtime/CVE evidence | `results/structured/<RUN_ID>_<label>_container_runtime.txt` |
-| Hang triage readiness | `results/structured/<RUN_ID>_<label>_hang_triage_readiness.json` |
-| Connectivity probe | `results/structured/<RUN_ID>_torchrun_connectivity_probe.json` |
-| NCCL env sensitivity | `results/structured/<RUN_ID>_nccl_env_sensitivity.json` |
+| Manifest | `published/current/structured/<RUN_ID>_manifest.json` |
+| Cluster metadata | `published/current/structured/<RUN_ID>_<label>_meta.json` |
+| NVLink topology | `published/current/structured/<RUN_ID>_<label>_nvlink_topology.json` |
+| Runtime/CVE evidence | `published/current/structured/<RUN_ID>_<label>_container_runtime.txt` |
+| Hang triage readiness | `published/current/structured/<RUN_ID>_<label>_hang_triage_readiness.json` |
+| Connectivity probe | `published/current/structured/<RUN_ID>_torchrun_connectivity_probe.json` |
+| NCCL env sensitivity | `published/current/structured/<RUN_ID>_nccl_env_sensitivity.json` |
 
 ## Required Reliability Gates (Smoke Validation)
 | Gate | Status | Key metric | Structured artifacts |
 | --- | --- | --- | --- |
-| Hang triage readiness (`py-spy` + `strace`) | <ok/error> | <tool versions + semantic status> | `results/structured/<RUN_ID>_<label>_hang_triage_readiness.json` |
-| Torchrun connectivity probe | <ok/error> | <world_size, barrier p50/p95, payload busbw min/max> | `results/structured/<RUN_ID>_torchrun_connectivity_probe.json` |
-| NCCL env sensitivity | <ok/error> | <baseline peak, best profile, speedup> | `results/structured/<RUN_ID>_nccl_env_sensitivity.json` |
+| Hang triage readiness (`py-spy` + `strace`) | <ok/error> | <tool versions + semantic status> | `published/current/structured/<RUN_ID>_<label>_hang_triage_readiness.json` |
+| Torchrun connectivity probe | <ok/error> | <world_size, barrier p50/p95, payload busbw min/max> | `published/current/structured/<RUN_ID>_torchrun_connectivity_probe.json` |
+| NCCL env sensitivity | <ok/error> | <baseline peak, best profile, speedup> | `published/current/structured/<RUN_ID>_nccl_env_sensitivity.json` |
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_nccl_env_sensitivity.png"><img src="docs/figures/<RUN_ID>_nccl_env_sensitivity.png" alt="NCCL env sensitivity" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_nccl_env_sensitivity.png"><img src="published/current/figures/<RUN_ID>_nccl_env_sensitivity.png" alt="NCCL env sensitivity" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_manifest.json`<br/>
-`results/structured/<RUN_ID>_torchrun_connectivity_probe.json`<br/>
-`results/structured/<RUN_ID>_nccl_env_sensitivity.json`<br/>
-`results/structured/<RUN_ID>_<label>_hang_triage_readiness.json`
+`published/current/structured/<RUN_ID>_manifest.json`<br/>
+`published/current/structured/<RUN_ID>_torchrun_connectivity_probe.json`<br/>
+`published/current/structured/<RUN_ID>_nccl_env_sensitivity.json`<br/>
+`published/current/structured/<RUN_ID>_<label>_hang_triage_readiness.json`
 
 ## Operator Friction + Monitoring Expectations (Required)
 | Check | Status | Key diagnostics | Structured artifacts |
 | --- | --- | --- | --- |
-| quick_friction | <ok/degraded/error> | <pass/fail counts, missing external tools, install/pull timing> | `results/structured/<RUN_ID>_<label>_quick_friction.json` |
-| monitoring_expectations | <ok/degraded/error> | <category status: control_plane, gpu_telemetry, system_signals> | `results/structured/<RUN_ID>_<label>_monitoring_expectations.json` |
-| operator_checks_dashboard | <generated/missing> | <rolled-up node summaries for quick_friction + monitoring_expectations> | `results/structured/<RUN_ID>_operator_checks_dashboard.json` |
+| quick_friction | <ok/degraded/error> | <pass/fail counts, missing external tools, install/pull timing> | `published/current/structured/<RUN_ID>_<label>_quick_friction.json` |
+| monitoring_expectations | <ok/degraded/error> | <category status: control_plane, gpu_telemetry, system_signals> | `published/current/structured/<RUN_ID>_<label>_monitoring_expectations.json` |
+| operator_checks_dashboard | <generated/missing> | <rolled-up node summaries for quick_friction + monitoring_expectations> | `published/current/structured/<RUN_ID>_operator_checks_dashboard.json` |
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_operator_checks_dashboard.png"><img src="docs/figures/<RUN_ID>_operator_checks_dashboard.png" alt="Operator checks dashboard" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_operator_checks_dashboard.png"><img src="published/current/figures/<RUN_ID>_operator_checks_dashboard.png" alt="Operator checks dashboard" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_<label>_quick_friction.json`<br/>
-`results/raw/<RUN_ID>_<label>_quick_friction.log`<br/>
-`results/structured/<RUN_ID>_<label>_monitoring_expectations.json`<br/>
-`results/raw/<RUN_ID>_<label>_monitoring_expectations.log`<br/>
-`results/structured/<RUN_ID>_operator_checks_dashboard.json`
+`published/current/structured/<RUN_ID>_<label>_quick_friction.json`<br/>
+`published/current/raw/<RUN_ID>_<label>_quick_friction.log`<br/>
+`published/current/structured/<RUN_ID>_<label>_monitoring_expectations.json`<br/>
+`published/current/raw/<RUN_ID>_<label>_monitoring_expectations.log`<br/>
+`published/current/structured/<RUN_ID>_operator_checks_dashboard.json`
 
 ## Cluster Story (First Contact)
 | UTC time | Milestone |
@@ -153,13 +159,13 @@ Evidence data:
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_cluster_story_dashboard.png"><img src="docs/figures/<RUN_ID>_cluster_story_dashboard.png" alt="Cluster story dashboard" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_cluster_story_dashboard.png"><img src="published/current/figures/<RUN_ID>_cluster_story_dashboard.png" alt="Cluster story dashboard" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_health_suite_..._summary.json`<br/>
-`results/structured/<RUN_ID>_preflight_services.json`<br/>
-`results/structured/<RUN_ID>_node_parity_summary.json`
+`published/current/structured/<RUN_ID>_health_suite_..._summary.json`<br/>
+`published/current/structured/<RUN_ID>_preflight_services.json`<br/>
+`published/current/structured/<RUN_ID>_node_parity_summary.json`
 
 ## Weird / New / Interesting (with Normal Baseline)
 ### Baseline vs Weird Log
@@ -181,17 +187,17 @@ Evidence data:
 ### Weird/Normal Evidence
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_cluster_story_dashboard.png"><img src="docs/figures/<RUN_ID>_cluster_story_dashboard.png" alt="Weird/normal baseline dashboard" width="920"/></a></p>
-<p><a href="docs/figures/<RUN_ID>_finding1.png"><img src="docs/figures/<RUN_ID>_finding1.png" alt="Weird/normal deep-dive finding 1" width="920"/></a></p>
-<p><a href="docs/figures/<RUN_ID>_finding2.png"><img src="docs/figures/<RUN_ID>_finding2.png" alt="Weird/normal deep-dive finding 2" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_cluster_story_dashboard.png"><img src="published/current/figures/<RUN_ID>_cluster_story_dashboard.png" alt="Weird/normal baseline dashboard" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_finding1.png"><img src="published/current/figures/<RUN_ID>_finding1.png" alt="Weird/normal deep-dive finding 1" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_finding2.png"><img src="published/current/figures/<RUN_ID>_finding2.png" alt="Weird/normal deep-dive finding 2" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_preflight_services.json`<br/>
-`results/structured/<RUN_ID>_node_parity_summary.json`<br/>
-`results/structured/<RUN_ID>_finding1.json`<br/>
-`results/structured/<RUN_ID>_finding1.csv`<br/>
-`results/structured/<RUN_ID>_finding2.json`
+`published/current/structured/<RUN_ID>_preflight_services.json`<br/>
+`published/current/structured/<RUN_ID>_node_parity_summary.json`<br/>
+`published/current/structured/<RUN_ID>_finding1.json`<br/>
+`published/current/structured/<RUN_ID>_finding1.csv`<br/>
+`published/current/structured/<RUN_ID>_finding2.json`
 
 ## Capability Demonstration (Causal Debugging Workflow)
 | Phase | Content |
@@ -204,12 +210,12 @@ Evidence data:
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_capability_demo.png"><img src="docs/figures/<RUN_ID>_capability_demo.png" alt="Capability demonstration" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_capability_demo.png"><img src="published/current/figures/<RUN_ID>_capability_demo.png" alt="Capability demonstration" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<artifact1>.json`<br/>
-`results/structured/<artifact2>.json`
+`published/current/structured/<artifact1>.json`<br/>
+`published/current/structured/<artifact2>.json`
 
 ## Benchmark A (Networking Story): NCCL `all_reduce_perf`
 | Field | Content |
@@ -221,12 +227,12 @@ Evidence data:
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_nccl_bw_vs_msg.png"><img src="docs/figures/<RUN_ID>_nccl_bw_vs_msg.png" alt="NCCL bandwidth" width="920"/></a></p>
-<p><a href="docs/figures/<RUN_ID>_nccl_scaling_efficiency.png"><img src="docs/figures/<RUN_ID>_nccl_scaling_efficiency.png" alt="NCCL scaling" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_nccl_bw_vs_msg.png"><img src="published/current/figures/<RUN_ID>_nccl_bw_vs_msg.png" alt="NCCL bandwidth" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_nccl_scaling_efficiency.png"><img src="published/current/figures/<RUN_ID>_nccl_scaling_efficiency.png" alt="NCCL scaling" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_nccl.json`
+`published/current/structured/<RUN_ID>_nccl.json`
 
 ## Benchmark B (Inference Story): vLLM Online Serving
 | Field | Content |
@@ -239,13 +245,13 @@ Evidence data:
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_<label>_vllm_serve_total_tok_s_vs_concurrency.png"><img src="docs/figures/<RUN_ID>_<label>_vllm_serve_total_tok_s_vs_concurrency.png" alt="vLLM throughput" width="920"/></a></p>
-<p><a href="docs/figures/<RUN_ID>_<label>_vllm_serve_ttft_vs_concurrency.png"><img src="docs/figures/<RUN_ID>_<label>_vllm_serve_ttft_vs_concurrency.png" alt="vLLM TTFT" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_<label>_vllm_serve_total_tok_s_vs_concurrency.png"><img src="published/current/figures/<RUN_ID>_<label>_vllm_serve_total_tok_s_vs_concurrency.png" alt="vLLM throughput" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_<label>_vllm_serve_ttft_vs_concurrency.png"><img src="published/current/figures/<RUN_ID>_<label>_vllm_serve_ttft_vs_concurrency.png" alt="vLLM TTFT" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_<label>_vllm_serve_sweep.csv`<br/>
-`results/structured/<RUN_ID>_<label>_vllm_serve_sweep.jsonl`
+`published/current/structured/<RUN_ID>_<label>_vllm_serve_sweep.csv`<br/>
+`published/current/structured/<RUN_ID>_<label>_vllm_serve_sweep.jsonl`
 
 ## Supporting: nvbandwidth Bundle
 | Field | Content |
@@ -255,13 +261,13 @@ Evidence data:
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_<label>_nvbandwidth_sums.png"><img src="docs/figures/<RUN_ID>_<label>_nvbandwidth_sums.png" alt="nvbandwidth sums" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_<label>_nvbandwidth_sums.png"><img src="published/current/figures/<RUN_ID>_<label>_nvbandwidth_sums.png" alt="nvbandwidth sums" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_<label>_nvbandwidth.json`<br/>
-`results/structured/<RUN_ID>_<label>_nvbandwidth_sums.csv`<br/>
-`results/structured/<RUN_ID>_<label>_nvbandwidth_clock_lock.json`
+`published/current/structured/<RUN_ID>_<label>_nvbandwidth.json`<br/>
+`published/current/structured/<RUN_ID>_<label>_nvbandwidth_sums.csv`<br/>
+`published/current/structured/<RUN_ID>_<label>_nvbandwidth_clock_lock.json`
 
 ## Supporting: Compute Sanity (BF16 GEMM)
 | Field | Content |
@@ -271,11 +277,11 @@ Evidence data:
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_gemm_gpu_sanity.png"><img src="docs/figures/<RUN_ID>_gemm_gpu_sanity.png" alt="GEMM sanity" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_gemm_gpu_sanity.png"><img src="published/current/figures/<RUN_ID>_gemm_gpu_sanity.png" alt="GEMM sanity" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_<label>_gemm_gpu_sanity.csv`
+`published/current/structured/<RUN_ID>_<label>_gemm_gpu_sanity.csv`
 
 ## Supporting: Storage (fio)
 | Field | Content |
@@ -285,22 +291,22 @@ Evidence data:
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_<label>_fio.png"><img src="docs/figures/<RUN_ID>_<label>_fio.png" alt="fio summary" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_<label>_fio.png"><img src="published/current/figures/<RUN_ID>_<label>_fio.png" alt="fio summary" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_<label>_fio.json`
+`published/current/structured/<RUN_ID>_<label>_fio.json`
 
 ## Supporting: Health / GDR / NUMA / Train Step / Checkpoint
 | Area | Repro | Evidence data |
 | --- | --- | --- |
-| Health suite | `scripts/run_cluster_health_suite.sh ...` | `results/structured/<RUN_ID>_..._cluster_health_suite_summary.json` |
+| Health suite | `scripts/run_cluster_health_suite.sh ...` | `published/current/structured/<RUN_ID>_..._cluster_health_suite_summary.json` |
 | GDR checks | `scripts/run_cluster_health_suite.sh --gdr ...` | `ib_gdr` section in summary payload |
-| C2C/NUMA probes | `scripts/run_c2c_memcpy_bench.sh ...`<br/>`scripts/run_numa_mem_bw_all_nodes.sh ...` | `results/structured/<RUN_ID>_<label>_c2c_memcpy.json`<br/>`results/structured/<RUN_ID>_<label>_numa_mem_bw.json` |
-| Train step | `scripts/run_torchrun_transformer_train_step.sh ...` | `results/structured/<RUN_ID>_<label>_torchrun_train_step.json` |
-| Checkpoint I/O | `scripts/run_checkpoint_io_all_nodes.sh ...` | `results/structured/<RUN_ID>_<label>_checkpoint_io.json` |
-| Quick friction check (required) | `scripts/run_quick_friction_all_nodes.sh --run-id <RUN_ID> --hosts <hosts> --labels <labels> ...` | `results/structured/<RUN_ID>_<label>_quick_friction.json`<br/>`results/raw/<RUN_ID>_<label>_quick_friction.log` |
-| Monitoring expectations alignment (required) | `scripts/collect_monitoring_expectations_all_nodes.sh --run-id <RUN_ID> --hosts <hosts> --labels <labels> ...` | `results/structured/<RUN_ID>_<label>_monitoring_expectations.json`<br/>`results/raw/<RUN_ID>_<label>_monitoring_expectations.log` |
+| C2C/NUMA probes | `scripts/run_c2c_memcpy_bench.sh ...`<br/>`scripts/run_numa_mem_bw_all_nodes.sh ...` | `published/current/structured/<RUN_ID>_<label>_c2c_memcpy.json`<br/>`published/current/structured/<RUN_ID>_<label>_numa_mem_bw.json` |
+| Train step | `scripts/run_torchrun_transformer_train_step.sh ...` | `published/current/structured/<RUN_ID>_<label>_torchrun_train_step.json` |
+| Checkpoint I/O | `scripts/run_checkpoint_io_all_nodes.sh ...` | `published/current/structured/<RUN_ID>_<label>_checkpoint_io.json` |
+| Quick friction check (required) | `scripts/run_quick_friction_all_nodes.sh --run-id <RUN_ID> --hosts <hosts> --labels <labels> ...` | `published/current/structured/<RUN_ID>_<label>_quick_friction.json`<br/>`published/current/raw/<RUN_ID>_<label>_quick_friction.log` |
+| Monitoring expectations alignment (required) | `scripts/collect_monitoring_expectations_all_nodes.sh --run-id <RUN_ID> --hosts <hosts> --labels <labels> ...` | `published/current/structured/<RUN_ID>_<label>_monitoring_expectations.json`<br/>`published/current/raw/<RUN_ID>_<label>_monitoring_expectations.log` |
 
 ## Required Issues (Explicit)
 | Required issue (verbatim) | Current status | Evidence |
@@ -357,25 +363,25 @@ Evidence data:
 ## Reproducibility Package
 | Bundle | Artifact links |
 | --- | --- |
-| Baseline package | `results/structured/<RUN_ID>_manifest.json`<br/>`results/structured/<RUN_ID>_cluster_meta.json`<br/>`results/structured/<RUN_ID>_preflight_services.json`<br/>`results/structured/<RUN_ID>_health_suite_..._summary.json` |
-| Multinode vLLM bundle | `results/structured/<RUN_ID>_<label>_vllm_multinode_serve.json`<br/>`results/structured/<RUN_ID>_<label>_vllm_multinode_serve.csv` |
-| NVLink topology bundle | `results/structured/<RUN_ID>_node1_nvlink_topology.json`<br/>`results/structured/<RUN_ID>_node2_nvlink_topology.json` |
-| nvbandwidth bundle | `results/structured/<RUN_ID>_node1_nvbandwidth.json`<br/>`results/structured/<RUN_ID>_node2_nvbandwidth.json`<br/>`results/structured/<RUN_ID>_node1_nvbandwidth_sums.csv`<br/>`results/structured/<RUN_ID>_node2_nvbandwidth_sums.csv` |
-| fio parity bundle | `results/structured/<RUN_ID>_node1_fio.json`<br/>`results/structured/<RUN_ID>_node2_fio.json` |
+| Baseline package | `published/current/structured/<RUN_ID>_manifest.json`<br/>`published/current/structured/<RUN_ID>_cluster_meta.json`<br/>`published/current/structured/<RUN_ID>_preflight_services.json`<br/>`published/current/structured/<RUN_ID>_health_suite_..._summary.json` |
+| Multinode vLLM bundle | `published/current/structured/<RUN_ID>_<label>_vllm_multinode_serve.json`<br/>`published/current/structured/<RUN_ID>_<label>_vllm_multinode_serve.csv` |
+| NVLink topology bundle | `published/current/structured/<RUN_ID>_node1_nvlink_topology.json`<br/>`published/current/structured/<RUN_ID>_node2_nvlink_topology.json` |
+| nvbandwidth bundle | `published/current/structured/<RUN_ID>_node1_nvbandwidth.json`<br/>`published/current/structured/<RUN_ID>_node2_nvbandwidth.json`<br/>`published/current/structured/<RUN_ID>_node1_nvbandwidth_sums.csv`<br/>`published/current/structured/<RUN_ID>_node2_nvbandwidth_sums.csv` |
+| fio parity bundle | `published/current/structured/<RUN_ID>_node1_fio.json`<br/>`published/current/structured/<RUN_ID>_node2_fio.json` |
 
 Visualization:
 
-<p><a href="docs/figures/<RUN_ID>_node1_nvlink_topology.png"><img src="docs/figures/<RUN_ID>_node1_nvlink_topology.png" alt="Node1 NVLink topology" width="920"/></a></p>
-<p><a href="docs/figures/<RUN_ID>_node2_nvlink_topology.png"><img src="docs/figures/<RUN_ID>_node2_nvlink_topology.png" alt="Node2 NVLink topology" width="920"/></a></p>
-<p><a href="docs/figures/<RUN_ID>_node1_nvbandwidth_sums.png"><img src="docs/figures/<RUN_ID>_node1_nvbandwidth_sums.png" alt="Node1 nvbandwidth sums" width="920"/></a></p>
-<p><a href="docs/figures/<RUN_ID>_node2_nvbandwidth_sums.png"><img src="docs/figures/<RUN_ID>_node2_nvbandwidth_sums.png" alt="Node2 nvbandwidth sums" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_node1_nvlink_topology.png"><img src="published/current/figures/<RUN_ID>_node1_nvlink_topology.png" alt="Node1 NVLink topology" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_node2_nvlink_topology.png"><img src="published/current/figures/<RUN_ID>_node2_nvlink_topology.png" alt="Node2 NVLink topology" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_node1_nvbandwidth_sums.png"><img src="published/current/figures/<RUN_ID>_node1_nvbandwidth_sums.png" alt="Node1 nvbandwidth sums" width="920"/></a></p>
+<p><a href="published/current/figures/<RUN_ID>_node2_nvbandwidth_sums.png"><img src="published/current/figures/<RUN_ID>_node2_nvbandwidth_sums.png" alt="Node2 nvbandwidth sums" width="920"/></a></p>
 
 Evidence data:
 
-`results/structured/<RUN_ID>_node1_nvlink_topology.json`<br/>
-`results/structured/<RUN_ID>_node2_nvlink_topology.json`<br/>
-`results/structured/<RUN_ID>_node1_nvbandwidth.json`<br/>
-`results/structured/<RUN_ID>_node2_nvbandwidth.json`
+`published/current/structured/<RUN_ID>_node1_nvlink_topology.json`<br/>
+`published/current/structured/<RUN_ID>_node2_nvlink_topology.json`<br/>
+`published/current/structured/<RUN_ID>_node1_nvbandwidth.json`<br/>
+`published/current/structured/<RUN_ID>_node2_nvbandwidth.json`
 
 ## Repository Handoff (GitHub)
 | Field | Value |

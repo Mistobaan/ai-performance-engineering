@@ -1,0 +1,30 @@
+{
+  "cmd": "scripts/run_gpu_stream_bench.sh --run-id 2026-03-05_localhost_modern_profile_r24_full20b --label localhost --device 0 --size-mb 1024 --iters 40 --warmup 10 --dtype fp32",
+  "command_end_ts": "2026-03-05T04:27:33+0000",
+  "command_start_ts": "2026-03-05T04:27:31+0000",
+  "devices": [
+    0
+  ],
+  "label": "localhost",
+  "locks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 1965,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1155
+      },
+      "device": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 595.5993599999999
+      },
+      "physical_gpu": 0
+    }
+  ],
+  "require_clock_lock": true,
+  "returncode": 0,
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "timestamp": "2026-03-05T04:27:31+0000"
+}

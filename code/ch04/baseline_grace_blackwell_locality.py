@@ -54,7 +54,6 @@ class BaselineGb200LocalityBenchmark(VerificationPayloadMixin, BaseBenchmark):
         # Keep the reduction in the workload, but verify via a representative slice.
         _ = self.device_buf.sum()
         self.output = self.device_buf[: 256 * 256].detach()
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.host_buf is None or self.output is None:

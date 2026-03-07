@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import torch
 import torch.nn as nn
-
-repo_root = Path(__file__).parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 from core.utils import compile_utils as _compile_utils_patch  # noqa: F401
 from core.utils.compile_utils import error_on_graph_break, maybe_nested_compile_region  # noqa: E402

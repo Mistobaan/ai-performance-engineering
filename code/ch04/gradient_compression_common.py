@@ -6,15 +6,9 @@ from typing import List, Optional
 
 import torch
 
+from core.benchmark.wrapper_utils import attach_benchmark_metadata
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from ch04.verification_payload_mixin import VerificationPayloadMixin
-
-
-def attach_benchmark_metadata(bench: BaseBenchmark, module_file: str) -> BaseBenchmark:
-    """Ensure subprocess runner calls get_benchmark() for parametrized benchmarks."""
-    bench._module_file_override = module_file
-    bench._factory_name_override = "get_benchmark"
-    return bench
 
 
 class GradientCompressionBenchmark(VerificationPayloadMixin, BaseBenchmark):
@@ -176,7 +170,6 @@ class GradientCompressionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     self.output = self._int8_all_reduce_naive()
             else:
                 raise ValueError(f"Unknown compression mode: {self.compression}")
-        self._synchronize_all()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

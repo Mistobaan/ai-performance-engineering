@@ -129,6 +129,10 @@ class BenchmarkDefaults:
     deterministic: bool = False
     seed: Optional[int] = 42
     detect_setup_precomputation: bool = True
+    detect_benchmark_fn_sync: bool = True
+    benchmark_fn_sync_policy: str = "warn"  # ignore | warn | error
+    detect_benchmark_fn_antipatterns: bool = True
+    benchmark_fn_antipattern_policy: str = "warn"  # ignore | warn | error
     monitor_backend_policy: bool = True
     enforce_backend_policy_immutability: bool = True
     graph_capture_cheat_ratio_threshold: float = 10.0
@@ -213,6 +217,10 @@ class BenchmarkDefaults:
             "backend_policy": self.backend_policy,
             "deterministic": self.deterministic,
             "seed": self.seed,
+            "detect_benchmark_fn_sync": self.detect_benchmark_fn_sync,
+            "benchmark_fn_sync_policy": self.benchmark_fn_sync_policy,
+            "detect_benchmark_fn_antipatterns": self.detect_benchmark_fn_antipatterns,
+            "benchmark_fn_antipattern_policy": self.benchmark_fn_antipattern_policy,
             "monitor_backend_policy": self.monitor_backend_policy,
             "enforce_backend_policy_immutability": self.enforce_backend_policy_immutability,
             "setup_timeout_seconds": self.setup_timeout_seconds,

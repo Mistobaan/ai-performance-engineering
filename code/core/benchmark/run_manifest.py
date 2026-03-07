@@ -649,7 +649,7 @@ class RunManifest(BaseModel):
                     "schemaVersion": "1.0"
                 },
                 "software": {
-                    "pytorch_version": "2.10.0.dev20251213+cu130",
+                    "pytorch_version": "2.9.1+cu130",
                     "triton_version": "3.5.0",
                     "python_version": "3.12.0",
                     "os": "linux",

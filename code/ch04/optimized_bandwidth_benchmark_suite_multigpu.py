@@ -13,6 +13,7 @@ if str(repo_root) not in sys.path:
 
 import torch
 from core.benchmark.gpu_requirements import require_min_gpus
+from core.benchmark.cuda_event_timing import max_elapsed_ms
 from ch04.baseline_bandwidth_benchmark_suite_multigpu import measure_peer_bandwidth
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
 from ch04.verification_payload_mixin import VerificationPayloadMixin
@@ -62,6 +63,7 @@ class OptimizedBandwidthSuiteMultiGPU(VerificationPayloadMixin, BaseBenchmark):
         self.pairs: list[tuple[torch.Tensor, torch.Tensor]] = []
         self.chunk_pairs: list[list[tuple[torch.Tensor, torch.Tensor]]] = []
         self.streams: list[torch.cuda.Stream] = []
+        self._pending_timing_pairs: list[tuple[torch.cuda.Event, torch.cuda.Event]] = []
         self.register_workload_metadata(requests_per_iteration=1.0)
 
     def setup(self) -> None:
@@ -94,20 +96,35 @@ class OptimizedBandwidthSuiteMultiGPU(VerificationPayloadMixin, BaseBenchmark):
     def benchmark_fn(self) -> None:
         if not self.chunk_pairs:
             raise RuntimeError("Benchmark not initialized")
-        total_bytes = self.size_mb * 1024 * 1024 * len(self.pairs) * self.inner_iterations
-        start = time.perf_counter()
+        self._pending_timing_pairs = []
+        for stream in self.streams:
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            with torch.cuda.stream(stream):
+                start_event.record()
+            self._pending_timing_pairs.append((start_event, end_event))
         for _ in range(self.inner_iterations):
             for idx, chunk_list in enumerate(self.chunk_pairs):
                 stream = self.streams[idx]
                 with torch.cuda.stream(stream):
                     for src_chunk, dst_chunk in chunk_list:
                         dst_chunk.copy_(src_chunk, non_blocking=True)
-            for stream in self.streams:
-                stream.synchronize()
-        elapsed = time.perf_counter() - start
-        self.last_bandwidth_gbps = (total_bytes / max(elapsed, 1e-9)) / 1e9
+        for stream, (_, end_event) in zip(self.streams, self._pending_timing_pairs):
+            with torch.cuda.stream(stream):
+                end_event.record()
+
+    def finalize_iteration_metrics(self) -> Optional[dict]:
+        if not self._pending_timing_pairs:
+            return None
+        total_bytes = self.size_mb * 1024 * 1024 * len(self.pairs) * self.inner_iterations
+        elapsed_ms_value = max_elapsed_ms(self._pending_timing_pairs)
+        self._pending_timing_pairs = []
+        elapsed_s = max(elapsed_ms_value, 1e-9) / 1000.0
+        self.last_bandwidth_gbps = (total_bytes / elapsed_s) / 1e9
+        return None
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         if not self.pairs:
             raise RuntimeError("setup() and benchmark_fn() must be called before capture_verification_payload()")
         probe = self.pairs[0][0][: 256 * 256].view(256, 256)
@@ -135,6 +152,7 @@ class OptimizedBandwidthSuiteMultiGPU(VerificationPayloadMixin, BaseBenchmark):
         )
 
     def get_custom_metrics(self) -> Optional[dict]:
+        self.finalize_iteration_metrics()
         """Return measured P2P bandwidth."""
         return {"p2p_bandwidth_gbps": float(self.last_bandwidth_gbps or 0.0)}
 

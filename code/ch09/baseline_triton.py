@@ -67,7 +67,6 @@ class BaselineTritonBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 raise RuntimeError("setup() must initialize _output_buffer")
             baseline_elementwise(self.input, self._output_buffer)
             self.output = self._output_buffer
-            torch.cuda.synchronize(self.device)
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

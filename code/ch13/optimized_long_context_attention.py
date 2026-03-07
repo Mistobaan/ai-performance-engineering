@@ -67,7 +67,6 @@ class OptimizedLongContextAttentionBenchmark(VerificationPayloadMixin, BaseBench
                     dropout_p=0.0,
                     is_causal=True,
                 )
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

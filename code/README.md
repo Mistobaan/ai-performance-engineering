@@ -4,6 +4,8 @@
 Reference implementation of high-performance PyTorch, CUDA, and Triton workloads for NVIDIA Blackwell platforms.
 The repository packages 20 focused chapters, advanced labs, and the shared benchmarking harness so you can profile baselines, apply optimizations, and capture artifacts that prove performance gains.
 
+Roadmap: [`docs/performance_repo_roadmap.md`](/home/cfregly/ai-performance-engineering/code/docs/performance_repo_roadmap.md) defines the prioritized plan for canonical suites, trend tracking, anti-pattern enforcement, shared benchmark bases, and evidence-first documentation.
+
 ## Learning Goals
 - Understand how the chapters, labs, and shared tooling fit together.
 - Stand up a reproducible environment for PyTorch 2.10-dev + CUDA 13 workloads on Blackwell GPUs.
@@ -34,6 +36,27 @@ python -m cli.aisp bench run --targets ch01 --profile minimal
 - Use `python -m cli.aisp bench run --targets ch*` for automated regression suites.
 - Portable runs do not update expectation files unless `--allow-portable-expectations-update` is supplied.
 - `python core/analysis/analyze_expectations.py --artifacts-dir artifacts` compares new runs to stored thresholds.
+
+## Cluster Evaluation
+Cluster evaluation has one supported artifact contract for new work:
+
+```text
+cluster/runs/<run_id>/
+  manifest.json
+  structured/
+  raw/
+  figures/
+  reports/
+```
+
+Start with:
+- [`cluster/README.md`](/home/cfregly/ai-performance-engineering/code/cluster/README.md) for the current commands and folder contract.
+- `python -m cli.aisp cluster common-eval --preset common-answer-fast ...` for the normal "evaluate this system" ask.
+- `python -m cli.aisp cluster common-eval --preset modern-llm ...` when you need the full canonical package.
+- `python -m cli.aisp cluster common-eval --preset multinode-readiness ...` before first real multi-node workloads.
+- `python -m cli.aisp cluster promote-run --run-id <run_id> ...` when one collected run should become the published localhost package.
+
+The current published canonical package lives under `cluster/published/current/`. New collection still happens under `cluster/runs/<run_id>/`.
 
 ## Validation Checklist
 - `pytest tests/integration` succeeds to confirm harness discovery and CLI plumbing.

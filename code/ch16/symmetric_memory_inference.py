@@ -22,9 +22,9 @@ All demos degrade to NCCL-based fallbacks when symmetric memory is not
 available so the file can be executed on developer machines.
 
 Usage:
-    torchrun --nproc_per_node=<num_gpus> symmetric_memory_inference.py --demo kv
-    torchrun --nproc_per_node=<num_gpus> symmetric_memory_inference.py --demo multi
-    torchrun --nproc_per_node=<num_gpus> symmetric_memory_inference.py --demo speculative
+    torchrun --nproc_per_node=<num_gpus> -m ch16.symmetric_memory_inference --demo kv
+    torchrun --nproc_per_node=<num_gpus> -m ch16.symmetric_memory_inference --demo multi
+    torchrun --nproc_per_node=<num_gpus> -m ch16.symmetric_memory_inference --demo speculative
 """
 
 from __future__ import annotations
@@ -34,11 +34,8 @@ import datetime
 import os
 import random
 import string
-import sys
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.optimization.symmetric_memory_patch import (
     SymmetricMemoryHandle,

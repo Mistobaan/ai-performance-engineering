@@ -71,7 +71,6 @@ class BaselineDualPipelineBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 self.input_b,
                 self.num_streams,
             )
-        self._synchronize()
         self.output = result
         if self.input_a is None or self.input_b is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")

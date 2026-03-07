@@ -37,12 +37,21 @@ import numba  # noqa: F401
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
-from core.harness.serving_stack import get_serving_stack_pins
+from core.harness.serving_stack import (
+    configure_serving_stack_cache_env,
+    configure_serving_stack_runtime_env,
+    get_serving_stack_pins,
+    preload_serving_stack_shared_libs,
+)
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.utils.logger import get_logger
+from ch18.vllm_process_cleanup import shutdown_vllm_runtime
 
 logger = get_logger(__name__)
 _SERVING_STACK = get_serving_stack_pins()
+_SERVING_STACK_LIB_DIRS = configure_serving_stack_runtime_env()
+_SERVING_STACK_CACHE_DIRS = configure_serving_stack_cache_env()
+_SERVING_STACK_PRELOADED_LIBS = preload_serving_stack_shared_libs()
 
 
 def _is_vllm_abi_mismatch_error(exc: BaseException) -> bool:
@@ -120,6 +129,16 @@ def _assert_vllm_runtime_ready(import_error: Optional[BaseException]) -> None:
             f"Original error: {exc}"
         ) from exc
 
+
+def _fixed_kv_cache_memory_bytes() -> int:
+    """Use a deterministic KV-cache budget to avoid unstable init profiling.
+
+    vLLM's default startup path profiles available GPU memory and can fail when
+    free memory changes mid-profile in shared/containerized environments.
+    Supplying kv_cache_memory_bytes skips that fragile profiling path.
+    """
+    return 2 * 1024**3  # 2 GiB is sufficient for opt-125m @ max_model_len=512
+
 # Check for vLLM
 try:
     from vllm import LLM, SamplingParams
@@ -146,10 +165,26 @@ class BaselineVLLMV1Integration:
         self.model_name = model_name
         self.max_tokens = max_tokens
         self.batch_size = batch_size
-        self.use_vllm = use_vllm and VLLM_AVAILABLE
-        
-        if not self.use_vllm:
-            logger.info("Running in simulation mode (vLLM not available)")
+        if not use_vllm:
+            raise RuntimeError(
+                "FAIL FAST: BaselineVLLMV1Integration requires vLLM execution "
+                "(use_vllm=False is unsupported)."
+        )
+        self.use_vllm = True
+
+    def _new_llm(self) -> "LLM":
+        return LLM(
+            model=self.model_name,
+            enforce_eager=True,  # Disable CUDA graphs (baseline)
+            enable_prefix_caching=False,  # Disable prefix caching
+            enable_chunked_prefill=True,
+            # Keep headroom for shared GPU environments; vLLM hard-gates init on this ratio.
+            gpu_memory_utilization=0.15,
+            kv_cache_memory_bytes=_fixed_kv_cache_memory_bytes(),
+            dtype="bfloat16",
+            tensor_parallel_size=1,  # Single GPU to avoid coordination issues
+            max_model_len=512,  # Limit context length to reduce memory
+        )
     
     def setup(self):
         """Initialize vLLM model."""
@@ -157,41 +192,50 @@ class BaselineVLLMV1Integration:
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
         _assert_vllm_runtime_ready(_IMPORT_ERROR)
-        if self.use_vllm:
-            import gc
-            
-            # Force cleanup before vLLM initialization to avoid resource conflicts
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-            
+        import gc
+
+        # Force cleanup before vLLM initialization to avoid resource conflicts
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+
+        last_engine_error: Optional[RuntimeError] = None
+        for attempt in range(2):
             try:
-                # Baseline: No CUDA graphs, no prefix caching
-                self.llm = LLM(
-                    model=self.model_name,
-                    enforce_eager=True,  # Disable CUDA graphs (baseline)
-                    enable_prefix_caching=False,  # Disable prefix caching
-                    enable_chunked_prefill=True,
-                    gpu_memory_utilization=0.7,  # Lower to avoid OOM during engine init
-                    dtype="bfloat16",
-                    tensor_parallel_size=1,  # Single GPU to avoid coordination issues
-                    max_model_len=512,  # Limit context length to reduce memory
-                )
-                
+                # Baseline: no CUDA graphs, no prefix caching.
+                self.llm = self._new_llm()
                 logger.info(f"Loaded model: {self.model_name}")
                 logger.info("Baseline config: eager execution, no prefix caching")
+                break
             except RuntimeError as e:
                 error_msg = str(e)
-                if "Engine core initialization failed" in error_msg:
-                    raise RuntimeError(
-                        f"SKIPPED: vLLM engine initialization failed - likely due to GPU resource "
-                        f"contention from previous benchmark. Original error: {error_msg}"
-                    ) from e
-                raise
-
-        if not self.use_vllm:
-            raise RuntimeError("vLLM required for this benchmark. Install with: pip install vllm")
+                if "Engine core initialization failed" not in error_msg:
+                    raise
+                last_engine_error = e
+                if attempt == 0:
+                    logger.warning(
+                        "Baseline eager vLLM init failed on first attempt; forcing cleanup and retrying once: %s",
+                        error_msg,
+                    )
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+                    time.sleep(2.0)
+                    continue
+                raise RuntimeError(
+                    "FAIL FAST: Baseline vLLM engine initialization failed in eager mode "
+                    "after retry. Remediation: ensure the serving stack matches pinned versions "
+                    "and rerun after clearing GPU state. "
+                    f"Original error: {error_msg}"
+                ) from e
+        else:
+            if last_engine_error is not None:
+                raise RuntimeError(
+                    "FAIL FAST: Baseline eager vLLM engine initialization failed unexpectedly."
+                ) from last_engine_error
+            raise RuntimeError("FAIL FAST: Baseline eager vLLM engine did not initialize")
 
         # Build pre-tokenized prompts so CPU tokenization doesn't dominate, and so
         # prefix caching (in the optimized variant) can skip meaningful prefill.
@@ -260,8 +304,11 @@ class BaselineVLLMV1Integration:
     
     def cleanup(self):
         """Clean up resources."""
-        if self.use_vllm and hasattr(self, 'llm'):
-            del self.llm
+        if hasattr(self, 'llm'):
+            try:
+                shutdown_vllm_runtime(self.llm, logger=logger.warning)
+            finally:
+                del self.llm
         torch.cuda.empty_cache()
 
 
@@ -271,6 +318,14 @@ class BaselineVLLMV1IntegrationBenchmark(VerificationPayloadMixin, BaseBenchmark
     def __init__(self):
         super().__init__()
         self.runner = BaselineVLLMV1Integration()
+        # Profiling wrappers should teardown vLLM workers instead of hard-exiting.
+        self.profile_require_teardown = True
+        # vLLM kernels execute in worker subprocesses, so parent NVTX include
+        # filters can hide all kernels from NCU capture.
+        self.disable_ncu_nvtx_filter = True
+        # Keep NCU replay scoped to kernel to avoid repeated full application
+        # replays that can exceed benchmark timeout budgets.
+        self.preferred_ncu_replay_mode = "kernel"
         self._metrics: Dict[str, Any] = {}
         self.output: Optional[torch.Tensor] = None
         self._last_token_ids: Optional[torch.Tensor] = None
@@ -293,7 +348,6 @@ class BaselineVLLMV1IntegrationBenchmark(VerificationPayloadMixin, BaseBenchmark
             raise RuntimeError("Runner did not return token_ids for verification")
         self._last_token_ids = torch.as_tensor(token_ids, dtype=torch.int32)
         self.output = self._last_token_ids
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self._last_token_ids is None:

@@ -72,7 +72,6 @@ class BaselineSpeculativeDecodeBenchmark(VerificationPayloadMixin, BaseBenchmark
                 out[:, t + 1] = logits[:, 0, :].argmax(dim=-1)
 
         self.output = out
-        self._synchronize()
 
     def capture_verification_payload(self) -> None:
         if self.input_ids is None or self.output is None:

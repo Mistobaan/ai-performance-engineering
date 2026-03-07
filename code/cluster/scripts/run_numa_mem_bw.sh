@@ -11,8 +11,8 @@ nodes on Grace systems) by allocating memory on each NUMA node and measuring
 CPU memcpy bandwidth.
 
 Outputs:
-  results/structured/<run_id>_<label>_numa_mem_bw.json
-  results/structured/<run_id>_<label>_numa_mem_bw.csv
+  runs/<run_id>/structured/<run_id>_<label>_numa_mem_bw.json
+  runs/<run_id>/structured/<run_id>_<label>_numa_mem_bw.csv
 
 Options:
   --run-id <id>          RUN_ID prefix (default: YYYY-MM-DD)
@@ -27,6 +27,8 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 LABEL="${LABEL:-$(hostname)}"
 BYTES="${BYTES:-1073741824}"   # 1GiB
@@ -56,7 +58,8 @@ if ! command -v numactl >/dev/null 2>&1; then
   exit 1
 fi
 
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_STRUCT_DIR"
 OUT_JSON="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_numa_mem_bw.json"
 OUT_CSV="${OUT_STRUCT_DIR}/${RUN_ID}_${LABEL}_numa_mem_bw.csv"

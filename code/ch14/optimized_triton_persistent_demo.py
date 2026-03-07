@@ -500,7 +500,6 @@ class TritonPersistentDemoBenchmark(VerificationPayloadMixin, BaseBenchmark):
         """Benchmark: Persistent GEMM kernel."""
         self.output = matmul_persistent_batched(self.a, self.b, self.num_sms)
         self._last = float(self.output.sum())
-        self._synchronize()
         if self.output is None or self.a is None or self.b is None:
             raise RuntimeError("benchmark_fn() must produce output")
 

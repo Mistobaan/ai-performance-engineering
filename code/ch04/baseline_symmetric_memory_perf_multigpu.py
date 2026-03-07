@@ -25,6 +25,7 @@ from core.harness.benchmark_harness import (
     LaunchVia,
     TorchrunLaunchSpec,
 )
+from core.benchmark.cuda_event_timing import elapsed_ms
 from core.benchmark.metrics import compute_memory_transfer_metrics
 from ch04.verification_payload_mixin import VerificationPayloadMixin
 
@@ -63,6 +64,7 @@ class BaselineSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchma
         self._last_gbps = 0.0
         self._bytes_transferred = 0.0
         self._inner_iterations = 2000
+        self._pending_timing_pair: Optional[tuple[torch.cuda.Event, torch.cuda.Event]] = None
         self.register_workload_metadata(requests_per_iteration=1.0)
         self._verify_input: Optional[torch.Tensor] = None
         self._verify_output: Optional[torch.Tensor] = None
@@ -99,26 +101,25 @@ class BaselineSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchma
                 dist.recv(self.recv_tensor, src=prev_rank)
                 dist.send(self.tensor, dst=next_rank)
         end.record()
-        torch.cuda.synchronize()
+        self._pending_timing_pair = (start, end)
+        self._verify_output = self.recv_tensor
+        return None
 
-        elapsed_ms = start.elapsed_time(end)
-        
+    def finalize_iteration_metrics(self) -> Optional[Dict[str, float]]:
+        if self._pending_timing_pair is None:
+            return None
+        elapsed_ms_value = elapsed_ms(self._pending_timing_pair)
+        self._pending_timing_pair = None
         bytes_per_iter = self.size_mb * 1024 * 1024 * 2
         bytes_moved = bytes_per_iter * self._inner_iterations
-        gbps = (bytes_moved / (elapsed_ms / 1000.0)) / 1e9 if elapsed_ms > 0 else 0.0
-
-        self._last_avg_ms = elapsed_ms
+        gbps = (bytes_moved / (elapsed_ms_value / 1000.0)) / 1e9 if elapsed_ms_value > 0 else 0.0
+        self._last_avg_ms = elapsed_ms_value
         self._last_gbps = gbps
         self._bytes_transferred = bytes_moved
-        self._verify_output = self.recv_tensor
-
-        return {
-            "p2p.elapsed_ms": elapsed_ms,
-            "p2p.gbps": gbps,
-            "p2p.size_mb": self.size_mb,
-        }
+        return None
 
     def capture_verification_payload(self) -> None:
+        self.finalize_iteration_metrics()
         if self.tensor is None:
             if self._verify_input is None:
                 torch.manual_seed(42)
@@ -186,6 +187,7 @@ class BaselineSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchma
         )
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        self.finalize_iteration_metrics()
         """Return memory transfer metrics for NCCL P2P send/recv."""
         return compute_memory_transfer_metrics(
             bytes_transferred=self._bytes_transferred,
@@ -194,6 +196,7 @@ class BaselineSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchma
         )
 
     def validate_result(self) -> Optional[str]:
+        self.finalize_iteration_metrics()
         """Validate benchmark ran successfully."""
         if self.tensor is None:
             return "Tensor not initialized"

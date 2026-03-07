@@ -5,7 +5,10 @@ from __future__ import annotations
 from core.harness.benchmark_harness import BaseBenchmark
 
 from ch17.prefill_decode_disagg_multigpu_common import PrefillDecodeConfig
-from ch17.prefill_decode_disagg_single_common import PrefillDecodeSingleGPUBenchmark, attach_benchmark_metadata
+from ch17.prefill_decode_disagg_single_common import (
+    OptimizedPrefillDecodeSingleGPUBenchmark,
+    attach_benchmark_metadata,
+)
 
 TTFT_CONFIG = PrefillDecodeConfig(
     context_window=4096,
@@ -16,8 +19,7 @@ TTFT_CONFIG = PrefillDecodeConfig(
 
 
 def get_benchmark() -> BaseBenchmark:
-    bench = PrefillDecodeSingleGPUBenchmark(
-        use_host_staging=False,
+    bench = OptimizedPrefillDecodeSingleGPUBenchmark(
         label="optimized_prefill_decode_disagg_ttft",
         cfg=TTFT_CONFIG,
     )

@@ -37,12 +37,12 @@ Options:
   --worker-startup-wait <sec>    Delay before leader launch after worker start (default: 10)
 
 Artifacts:
-  - results/raw/<run_id>_<leader_label>_vllm_multinode_serve/
-  - results/structured/<run_id>_<leader_label>_vllm_multinode_serve.json
-  - results/structured/<run_id>_<leader_label>_vllm_multinode_serve.csv
-  - results/structured/<run_id>_<leader_label>_vllm_multinode_serve.jsonl
-  - results/structured/<run_id>_<leader_label>_vllm_multinode_leader_clock_lock.json
-  - results/structured/<run_id>_<worker_label>_vllm_multinode_worker_clock_lock.json
+  - runs/<run_id>/raw/<run_id>_<leader_label>_vllm_multinode_serve/
+  - runs/<run_id>/structured/<run_id>_<leader_label>_vllm_multinode_serve.json
+  - runs/<run_id>/structured/<run_id>_<leader_label>_vllm_multinode_serve.csv
+  - runs/<run_id>/structured/<run_id>_<leader_label>_vllm_multinode_serve.jsonl
+  - runs/<run_id>/structured/<run_id>_<leader_label>_vllm_multinode_leader_clock_lock.json
+  - runs/<run_id>/structured/<run_id>_<worker_label>_vllm_multinode_worker_clock_lock.json
 USAGE
 }
 
@@ -103,6 +103,8 @@ resolve_pinned_image() {
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
 RUN_ID="$(date +%Y-%m-%d)"
 HOSTS=""
 LABELS=""
@@ -258,8 +260,9 @@ if [[ ! -S "/run/nvidia-persistenced/socket" ]]; then
   exit 1
 fi
 
-OUT_RAW_DIR="${ROOT_DIR}/results/raw/${RUN_ID}_${LEADER_LABEL}_vllm_multinode_serve"
-STRUCT_DIR="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}/${RUN_ID}_${LEADER_LABEL}_vllm_multinode_serve"
+STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW_DIR" "$STRUCT_DIR"
 
 LEADER_LOG="${OUT_RAW_DIR}/leader.log"

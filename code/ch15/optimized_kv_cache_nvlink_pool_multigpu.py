@@ -19,6 +19,7 @@ class OptimizedKVCacheNvlinkPoolBenchmark(VerificationPayloadMixin, BaseBenchmar
     """Tiered KV cache with NVLink peer pooling."""
 
     multi_gpu_required = True
+    allowed_benchmark_fn_antipatterns = ("host_transfer",)
 
     def __init__(self):
         super().__init__()
@@ -38,6 +39,9 @@ class OptimizedKVCacheNvlinkPoolBenchmark(VerificationPayloadMixin, BaseBenchmar
             tokens_per_iteration=float(tokens),
         )
         self._verify_q: Optional[torch.Tensor] = None
+        self._query_steps: Optional[torch.Tensor] = None
+        self._key_steps: Optional[torch.Tensor] = None
+        self._value_steps: Optional[torch.Tensor] = None
 
     def setup(self) -> None:
         torch.manual_seed(42)
@@ -50,8 +54,11 @@ class OptimizedKVCacheNvlinkPoolBenchmark(VerificationPayloadMixin, BaseBenchmar
             require_peer_access(0, idx)
 
         self.model = nn.MultiheadAttention(self.hidden, self.heads, batch_first=True).to(self.device).eval()
+        self._query_steps = torch.randn(self.seq_len, self.batch, 1, self.hidden, device=self.device)
+        self._key_steps = torch.randn(self.seq_len, self.batch, 1, self.hidden, device=self.device)
+        self._value_steps = torch.randn(self.seq_len, self.batch, 1, self.hidden, device=self.device)
+        self._verify_q = self._query_steps[0, :1].detach().clone()
         self._synchronize()
-        self._verify_q = torch.randn(1, 1, self.hidden, device=self.device)
 
     def _place_kv(self, k: torch.Tensor, v: torch.Tensor, step: int) -> Tuple[torch.Tensor, torch.Tensor, str, Optional[torch.device]]:
         if step < self.local_cache_limit:
@@ -63,15 +70,16 @@ class OptimizedKVCacheNvlinkPoolBenchmark(VerificationPayloadMixin, BaseBenchmar
 
     def benchmark_fn(self) -> None:
         assert self.model is not None
+        assert self._query_steps is not None and self._key_steps is not None and self._value_steps is not None
         with self._nvtx_range("optimized_kv_cache_nvlink_pool_multigpu"):
             cache_k: list[torch.Tensor] = []
             cache_v: list[torch.Tensor] = []
             tiers: list[str] = []
             peer_targets: list[Optional[torch.device]] = []
             for step in range(self.seq_len):
-                q = torch.randn(self.batch, 1, self.hidden, device=self.device)
-                k = torch.randn(self.batch, 1, self.hidden, device=self.device)
-                v = torch.randn(self.batch, 1, self.hidden, device=self.device)
+                q = self._query_steps[step]
+                k = self._key_steps[step]
+                v = self._value_steps[step]
                 placed_k, placed_v, tier, peer = self._place_kv(k, v, step)
                 cache_k.append(placed_k)
                 cache_v.append(placed_v)
@@ -116,6 +124,9 @@ class OptimizedKVCacheNvlinkPoolBenchmark(VerificationPayloadMixin, BaseBenchmar
 
     def teardown(self) -> None:
         self.model = None
+        self._query_steps = None
+        self._key_steps = None
+        self._value_steps = None
         torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:

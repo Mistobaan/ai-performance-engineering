@@ -469,7 +469,6 @@ class SlidingWindowDemoBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with torch.no_grad():
             self.output = self.model(self.x)
             self._last = float(self.output.sum())
-            self._synchronize()
         if self.output is None or self.x is None:
             raise RuntimeError("benchmark_fn() must produce output")
 

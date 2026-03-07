@@ -5,16 +5,10 @@ Models host overhead in vLLM-like serving without async scheduling or stream int
 
 from __future__ import annotations
 
-import sys
 import time
-from pathlib import Path
 from typing import Optional, Tuple, Dict
 
 import torch
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
@@ -24,6 +18,8 @@ from ch16.runtime_scheduler_common import RuntimeSchedulerWorkload, SchedulerSce
 
 class BaselineRuntimeSchedulerBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Baseline: CPU prep + GPU compute + per-token streaming, no overlap."""
+
+    allowed_benchmark_fn_antipatterns = ("sync",)
 
     def __init__(self) -> None:
         super().__init__()

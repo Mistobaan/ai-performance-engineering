@@ -31,7 +31,8 @@ def get_benchmark() -> HFDecoderCacheBenchmark:
         cache_mode="static",
         compile_decode_step=True,
         eos_sync_mode="async_streamed",
-        eos_poll_interval=8,
+        # Poll less frequently to amortize host synchronization overhead.
+        eos_poll_interval=96,
         stop_on_all_done=False,
         iterations=8,
         warmup=8,

@@ -1,0 +1,99 @@
+{
+  "app_clocks": [
+    {
+      "clocks": {
+        "applications_mem_mhz": 3996,
+        "applications_sm_mhz": 1965,
+        "current_mem_mhz": 3996,
+        "current_sm_mhz": 1155
+      },
+      "global_rank": 0,
+      "local_rank": 0,
+      "lock": {
+        "locked": true,
+        "theoretical_mem_gbps": 0.0,
+        "theoretical_tflops_fp16": 595.5993599999999
+      },
+      "node": "ai-book-dev",
+      "physical_gpu": 0
+    }
+  ],
+  "backend": "nccl",
+  "config": {
+    "batch_size_per_rank": 2,
+    "heads": 32,
+    "hidden": 4096,
+    "layers": 24,
+    "mlp_ratio": 4,
+    "seq_len": 2048,
+    "steps": 30,
+    "warmup_steps": 5
+  },
+  "fp8": {
+    "note": "This benchmark currently runs bf16/fp16 only; use FP8 training stacks (e.g. TransformerEngine) separately.",
+    "torch_float8_supported": true,
+    "transformer_engine_available": false
+  },
+  "fsdp": {
+    "enabled": true,
+    "mixed_precision": "bf16",
+    "sharding": "FULL_SHARD"
+  },
+  "hosts": [
+    "ai-book-dev"
+  ],
+  "label": "localhost_single_node",
+  "local_rank_count": 1,
+  "optimizer": {
+    "fused": true,
+    "lr": 0.0001,
+    "name": "AdamW"
+  },
+  "precision": "bf16",
+  "results": {
+    "avg_step_s": 0.25658894777297975,
+    "p50_step_s": 0.2566261291503906,
+    "p99_step_s": 0.25681063532829285,
+    "step_times_s": [
+      0.25674203038215637,
+      0.2566288411617279,
+      0.25663891434669495,
+      0.2567523419857025,
+      0.2565982937812805,
+      0.25674018263816833,
+      0.2567146420478821,
+      0.25665056705474854,
+      0.2567320168018341,
+      0.25674012303352356,
+      0.2562752068042755,
+      0.25684088468551636,
+      0.2565198540687561,
+      0.256592720746994,
+      0.25648531317710876,
+      0.25639021396636963,
+      0.2566261291503906,
+      0.2564089000225067,
+      0.2562962472438812,
+      0.25646644830703735,
+      0.25655221939086914,
+      0.25681063532829285,
+      0.25648975372314453,
+      0.2566835880279541,
+      0.2564287781715393,
+      0.2565928101539612,
+      0.25632649660110474,
+      0.2566562294960022,
+      0.2565946877002716,
+      0.25669336318969727
+    ],
+    "tokens_per_s": 15963.275252307387,
+    "tokens_per_step": 4096
+  },
+  "run_id": "2026-03-05_localhost_modern_profile_r24_full20b",
+  "timestamp": "2026-03-05T15:33:55+0000",
+  "versions": {
+    "cuda": "13.0",
+    "torch": "2.9.1+cu130"
+  },
+  "world_size": 1
+}

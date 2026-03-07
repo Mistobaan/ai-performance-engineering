@@ -101,7 +101,6 @@ class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     raise RuntimeError("Transformers generate did not return scores")
                 logits = outputs.scores[0]
                 self.output = slice_logits(logits, self.vocab_slice).float()
-        self._synchronize()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 

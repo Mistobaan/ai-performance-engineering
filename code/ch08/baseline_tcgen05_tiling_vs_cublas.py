@@ -47,7 +47,6 @@ class BaselineTcgen05TilingVsCublasBenchmark(Tcgen05TilingVsCublasBase):
                 self.output = self.extension.matmul_tiling_tcgen05_pretransposed(
                     self.matrix_a, self.matrix_b_t
                 )
-        self._synchronize()
 
     def teardown(self) -> None:
         self.matrix_b_t = None

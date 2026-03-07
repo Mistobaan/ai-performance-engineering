@@ -12,15 +12,6 @@ replacing standard `nn.Linear` layers with TE equivalents as well as for enterin
 the FP8 autocast region.
 """
 
-import pathlib
-import sys
-
-_EXTRAS_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-if str(_EXTRAS_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_EXTRAS_REPO_ROOT))
-
-from pathlib import Path
-
 import contextlib
 from typing import Optional
 
@@ -47,7 +38,7 @@ try:
 
     _TE_AVAILABLE = True
     _TE_IMPORT_ERROR: Optional[BaseException] = None
-except (ImportError, ModuleNotFoundError, FileNotFoundError, RuntimeError) as exc:  # pragma: no cover - environment dependent
+except (ImportError, ModuleNotFoundError, FileNotFoundError, OSError, RuntimeError) as exc:  # pragma: no cover - environment dependent
     te = None  # type: ignore
     DelayedScaling = None  # type: ignore
     Format = None  # type: ignore

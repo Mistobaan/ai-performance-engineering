@@ -22,10 +22,7 @@ class OptimizedTilingBenchmark(TilingBenchmarkBase):
         assert self.matrix_a is not None
         assert self.matrix_b is not None
         assert self.output is not None
-        if hasattr(self.extension, "matmul_tiled_fast"):
-            self.extension.matmul_tiled_fast(self.matrix_a, self.matrix_b, self.output)
-        else:
-            self.extension.matmul_tiled(self.matrix_a, self.matrix_b, self.output)
+        self.extension.matmul_tiled_fast(self.matrix_a, self.matrix_b, self.output)
 
 
 

@@ -16,8 +16,8 @@ This reveals:
 - Potential routing or topology issues that favor one algorithm
 
 Outputs:
-  results/structured/<run_id>_nccl_algo_<algo>.json  (per algorithm)
-  results/structured/<run_id>_nccl_algo_comparison.json  (summary)
+  runs/<run_id>/structured/<run_id>_nccl_algo_<algo>.json  (per algorithm)
+  runs/<run_id>/structured/<run_id>_nccl_algo_comparison.json  (summary)
 
 Options:
   --run-id <id>          RUN_ID prefix (default: YYYY-MM-DD)
@@ -36,6 +36,11 @@ EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib_host_runtime_env.sh
+source "${ROOT_DIR}/scripts/lib_host_runtime_env.sh"
+# shellcheck source=./lib_artifact_dirs.sh
+source "${ROOT_DIR}/scripts/lib_artifact_dirs.sh"
+source_host_runtime_env_if_present "$ROOT_DIR"
 RUN_ID="${RUN_ID:-$(date +%Y-%m-%d)}"
 HOSTS=""
 GPUS_PER_NODE=""
@@ -82,8 +87,9 @@ IFS=',' read -r -a HOST_ARR <<<"$HOSTS"
 IFS=',' read -r -a ALGO_ARR <<<"$ALGOS"
 TOTAL_RANKS=$((GPUS_PER_NODE * ${#HOST_ARR[@]}))
 
-OUT_RAW_DIR="${ROOT_DIR}/results/raw"
-OUT_STRUCT_DIR="${ROOT_DIR}/results/structured"
+resolve_cluster_artifact_dirs "$ROOT_DIR" "$RUN_ID"
+OUT_RAW_DIR="${CLUSTER_RAW_DIR_EFFECTIVE}"
+OUT_STRUCT_DIR="${CLUSTER_STRUCTURED_DIR_EFFECTIVE}"
 mkdir -p "$OUT_RAW_DIR" "$OUT_STRUCT_DIR"
 
 HOSTFILE="${OUT_RAW_DIR}/${RUN_ID}_nccl_algo_comparison_hosts.txt"

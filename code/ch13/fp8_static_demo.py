@@ -564,7 +564,6 @@ class FP8StaticDemoBenchmark(VerificationPayloadMixin, BaseBenchmark):
             output = self.model(self.x)
             self._last = float(output.sum())
             self.output = output.detach().clone()
-            self._synchronize()
         if self._verify_input is None or self.output is None:
             raise RuntimeError("Verification input/output not initialized")
 

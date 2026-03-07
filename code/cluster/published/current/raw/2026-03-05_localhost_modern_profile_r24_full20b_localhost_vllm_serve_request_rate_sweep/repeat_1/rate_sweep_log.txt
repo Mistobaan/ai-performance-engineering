@@ -1,0 +1,24 @@
+Lowering --gpu-memory-utilization from 0.8 to 0.8000 based on free VRAM (182514 MiB / 183359 MiB).
+Skipping completed request-rate point 1 (resume).
+Skipping completed request-rate point 2 (resume).
+Skipping completed request-rate point 4 (resume).
+Skipping completed request-rate point 8 (resume).
+Skipping completed request-rate point 16 (resume).
+All request-rate points already completed; nothing to run.
+
+========================================
+vLLM Request-Rate Sweep Results
+========================================
+Model: openai/gpt-oss-20b
+TP: 1
+ISL: 1024, OSL: 1024
+Max concurrency cap: 256
+Num prompts: 300
+
+Req/s | Output tok/s | Total tok/s | Mean TTFT | Mean TPOT | P99 TTFT | P99 TPOT
+------|--------------|-------------|-----------|-----------|----------|----------
+1.00   | 896.59       | 1793.18     | 115.06    | 41.062    | 137.68   | 42.347  
+2.00   | 1602.95      | 3205.90     | 122.97    | 42.943    | 151.23   | 44.868  
+4.00   | 2601.70      | 5203.40     | 117.88    | 39.521    | 139.15   | 42.036  
+8.00   | 3393.33      | 6786.65     | 125.45    | 40.992    | 171.73   | 41.329  
+16.00  | 3499.58      | 6999.16     | 122.36    | 40.966    | 154.35   | 42.041  
