@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.scripts.refresh_readmes import ENTRIES, REPO_ROOT, _format_markdown
+import json
+
+from core.scripts.refresh_readmes import (
+    ENTRIES,
+    REPO_ROOT,
+    _format_markdown,
+    _render_current_representative_deltas_body,
+)
 
 
 PRIORITY_EVIDENCE_DOCS = (
@@ -70,3 +77,50 @@ def test_priority_readmes_match_generated_content() -> None:
         expected = _format_markdown(ENTRIES[slug]).rstrip() + "\n"
         actual = _output_path(slug).read_text(encoding="utf-8")
         assert actual == expected, f"{slug} is out of sync with core/scripts/refresh_readmes.py"
+
+
+def test_current_representative_deltas_prefer_tier1_history_when_available(tmp_path: Path) -> None:
+    history_root = tmp_path / "artifacts" / "history" / "tier1" / "20260308_070000_manual"
+    history_root.mkdir(parents=True)
+    summary_path = history_root / "summary.json"
+    summary_payload = {
+        "run_id": "20260308_070000_manual",
+        "targets": [
+            {
+                "target": "labs/block_scaling:block_scaling",
+                "status": "succeeded",
+                "baseline_time_ms": 0.2,
+                "best_speedup": 2.0,
+            },
+            {
+                "target": "ch04:gradient_fusion",
+                "status": "succeeded",
+                "baseline_time_ms": 4.0,
+                "best_speedup": 8.0,
+            },
+        ],
+    }
+    summary_path.write_text(json.dumps(summary_payload), encoding="utf-8")
+    index_path = tmp_path / "artifacts" / "history" / "tier1" / "index.json"
+    index_path.write_text(
+        json.dumps(
+            {
+                "suite_name": "tier1",
+                "runs": [
+                    {
+                        "run_id": "20260308_070000_manual",
+                        "summary_path": str(summary_path),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    body = _render_current_representative_deltas_body(tmp_path)
+
+    assert "latest canonical tier-1 history summary" in body
+    assert "`labs/block_scaling:block_scaling`" in body
+    assert "`0.200 ms`" in body
+    assert "`0.100 ms`" in body
+    assert "artifacts/history/tier1/20260308_070000_manual/summary.json" in body

@@ -34,9 +34,9 @@ These are measured results from current validated benchmark artifacts in `artifa
 | `labs/block_scaling:block_scaling` | `0.198 ms` | `0.113 ms` | `1.76x` | `artifacts/runs/20260305_222139__bench__profile_none_targets_labs_block_scaling_block_scaling/...` |
 | `labs/flashattention4:flashattention4_alibi` | `5.562 ms` | `0.385 ms` | `14.45x` | `artifacts/runs/20260306_023114__bench__profile_none_targets_labs_flashattention4_flashattention4_alibi/...` |
 | `labs/persistent_decode:persistent_decode` | `1.411 ms` | `0.118 ms` | `11.94x` | `artifacts/runs/20260302_full_strict_all_singlegpu/...` |
-| `labs/kv_optimization:kv_standard` | `1687.906 ms` | `1074.736 ms` | `1.57x` | `artifacts/runs/20260302_full_strict_all_singlegpu/...` |
+| `labs/kv_optimization:kv_standard` | `1687.906 ms` | `1075.099 ms` | `1.57x` | `artifacts/runs/20260302_full_strict_all_singlegpu/...` |
 | `ch04:gradient_fusion` | `3.931 ms` | `0.058 ms` | `67.63x` | `artifacts/runs/20260302_full_strict_chapter_lab_singlegpu_v2/...` |
-| `labs/real_world_models:llama_3_1_8b` | `13.143 ms` | `5.274 ms` | `2.49x` | `artifacts/runs/20260302_full_strict_all_singlegpu/...` |
+| `labs/real_world_models:llama_3_1_8b` | `13.143 ms` | `5.278 ms` | `2.49x` | `artifacts/runs/20260302_full_strict_all_singlegpu/...` |
 
 ## Profiler Evidence
 When you want proof beyond wall-clock timing, use the same harness target with a profiling mode instead of a different script.

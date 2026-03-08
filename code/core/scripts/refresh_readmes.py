@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 from textwrap import dedent
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -95,6 +96,102 @@ def _format_markdown(entry: Entry) -> str:
         for note in entry.notes:
             lines.append(f"- {note}")
     lines.append("")
+    return "\n".join(lines)
+
+
+def _fallback_tier1_representative_rows() -> Sequence[Tuple[str, float, float, str]]:
+    return (
+        ("labs/block_scaling:block_scaling", 0.198, 1.76, "artifacts/runs/20260305_222139__bench__profile_none_targets_labs_block_scaling_block_scaling/..."),
+        ("labs/flashattention4:flashattention4_alibi", 5.562, 14.45, "artifacts/runs/20260306_023114__bench__profile_none_targets_labs_flashattention4_flashattention4_alibi/..."),
+        ("labs/persistent_decode:persistent_decode", 1.411, 11.94, "artifacts/runs/20260302_full_strict_all_singlegpu/..."),
+        ("labs/kv_optimization:kv_standard", 1687.906, 1.57, "artifacts/runs/20260302_full_strict_all_singlegpu/..."),
+        ("ch04:gradient_fusion", 3.931, 67.63, "artifacts/runs/20260302_full_strict_chapter_lab_singlegpu_v2/..."),
+        ("labs/real_world_models:llama_3_1_8b", 13.143, 2.49, "artifacts/runs/20260302_full_strict_all_singlegpu/..."),
+    )
+
+
+def _latest_tier1_summary(repo_root: Optional[Path] = None) -> Optional[Tuple[Dict[str, object], Path]]:
+    root = Path(repo_root or REPO_ROOT)
+    index_path = root / "artifacts" / "history" / "tier1" / "index.json"
+    if not index_path.exists():
+        return None
+    try:
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    runs = index.get("runs", [])
+    if not isinstance(runs, list) or not runs:
+        return None
+    latest = runs[-1]
+    if not isinstance(latest, dict):
+        return None
+    summary_path_raw = latest.get("summary_path")
+    if not isinstance(summary_path_raw, str) or not summary_path_raw:
+        return None
+    summary_path = Path(summary_path_raw)
+    if not summary_path.is_absolute():
+        summary_path = (root / summary_path).resolve()
+    if not summary_path.exists():
+        return None
+    try:
+        return json.loads(summary_path.read_text(encoding="utf-8")), summary_path
+    except Exception:
+        return None
+
+
+def _render_current_representative_deltas_body(repo_root: Optional[Path] = None) -> str:
+    def _fallback_body() -> str:
+        rows = _fallback_tier1_representative_rows()
+        lines = [
+            "These are measured results from current validated benchmark artifacts in `artifacts/runs/`, not aspirational target numbers.",
+            "",
+            "| Target | Baseline | Optimized | Measured delta | Artifact |",
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
+        for target, baseline_ms, speedup, artifact in rows:
+            optimized_ms = baseline_ms / speedup
+            lines.append(
+                f"| `{target}` | `{baseline_ms:.3f} ms` | `{optimized_ms:.3f} ms` | `{speedup:.2f}x` | `{artifact}` |"
+            )
+        return "\n".join(lines)
+
+    root = Path(repo_root or REPO_ROOT)
+    latest = _latest_tier1_summary(root)
+    if latest is None:
+        return _fallback_body()
+
+    summary, summary_path = latest
+    targets = summary.get("targets", [])
+    if not isinstance(targets, list):
+        return _fallback_body()
+
+    lines = [
+        "These numbers are taken from the latest canonical tier-1 history summary rather than from hand-maintained README text.",
+        "",
+        f"Source artifact: `{summary_path.relative_to(root) if summary_path.is_relative_to(root) else summary_path}`",
+        "",
+        "| Target | Baseline | Optimized | Measured delta | Artifact |",
+        "| --- | ---: | ---: | ---: | --- |",
+    ]
+    emitted = 0
+    for target in targets:
+        if not isinstance(target, dict):
+            continue
+        if target.get("status") != "succeeded":
+            continue
+        target_name = str(target.get("target") or "").strip()
+        baseline_ms = float(target.get("baseline_time_ms", 0.0) or 0.0)
+        speedup = float(target.get("best_speedup", 0.0) or 0.0)
+        if not target_name or baseline_ms <= 0.0 or speedup <= 0.0:
+            continue
+        optimized_ms = baseline_ms / speedup
+        artifact = f"artifacts/history/tier1/{summary.get('run_id')}/summary.json"
+        lines.append(
+            f"| `{target_name}` | `{baseline_ms:.3f} ms` | `{optimized_ms:.3f} ms` | `{speedup:.2f}x` | `{artifact}` |"
+        )
+        emitted += 1
+    if emitted == 0:
+        return _fallback_body()
     return "\n".join(lines)
 
 
@@ -438,19 +535,7 @@ ENTRIES["README.md"] = Entry(
         ),
         MarkdownSection(
             "Current Representative Deltas",
-            dedent(
-                """\
-                These are measured results from current validated benchmark artifacts in `artifacts/runs/`, not aspirational target numbers.
-
-                | Target | Baseline | Optimized | Measured delta | Artifact |
-                | --- | ---: | ---: | ---: | --- |
-                | `labs/block_scaling:block_scaling` | `0.198 ms` | `0.113 ms` | `1.76x` | `artifacts/runs/20260305_222139__bench__profile_none_targets_labs_block_scaling_block_scaling/...` |
-                | `labs/flashattention4:flashattention4_alibi` | `5.562 ms` | `0.385 ms` | `14.45x` | `artifacts/runs/20260306_023114__bench__profile_none_targets_labs_flashattention4_flashattention4_alibi/...` |
-                | `labs/persistent_decode:persistent_decode` | `1.411 ms` | `0.118 ms` | `11.94x` | `artifacts/runs/20260302_full_strict_all_singlegpu/...` |
-                | `labs/kv_optimization:kv_standard` | `1687.906 ms` | `1074.736 ms` | `1.57x` | `artifacts/runs/20260302_full_strict_all_singlegpu/...` |
-                | `ch04:gradient_fusion` | `3.931 ms` | `0.058 ms` | `67.63x` | `artifacts/runs/20260302_full_strict_chapter_lab_singlegpu_v2/...` |
-                | `labs/real_world_models:llama_3_1_8b` | `13.143 ms` | `5.274 ms` | `2.49x` | `artifacts/runs/20260302_full_strict_all_singlegpu/...` |"""
-            ),
+            _render_current_representative_deltas_body(),
         ),
         MarkdownSection(
             "Profiler Evidence",

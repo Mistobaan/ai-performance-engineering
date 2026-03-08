@@ -47,9 +47,9 @@ jobs:
           pytest tests/test_benchmark_metrics.py tests/test_profiler_config.py tests/test_update_custom_metrics.py tests/test_benchmark_fn_sync_detection.py tests/test_benchmark_linter.py tests/test_refresh_readmes.py tests/test_tier1_suite.py -v --tb=short
         continue-on-error: false
 
-      - name: Run benchmark contract linter
+      - name: Run full benchmark contract linter
         run: |
-          python -m core.scripts.linting.check_benchmarks --sync-only --fail-on-warnings
+          python -m core.scripts.linting.check_benchmarks --include-unpaired --fail-on-warnings
 
       - name: Audit expanded benchmark discovery
         run: |
