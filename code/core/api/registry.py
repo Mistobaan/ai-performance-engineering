@@ -176,6 +176,13 @@ _ROUTES: List[ApiRoute] = [
     ),
     ApiRoute(
         "GET",
+        "/api/benchmark/tier1/target-history",
+        "benchmark.tier1_target_history",
+        handlers.benchmark_tier1_target_history,
+        engine_op="benchmark.tier1_target_history",
+    ),
+    ApiRoute(
+        "GET",
         "/api/benchmark/compare",
         "benchmark.compare",
         handlers.benchmark_compare,

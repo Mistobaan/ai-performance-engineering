@@ -483,6 +483,12 @@ def benchmark_tier1_trends(_: Dict[str, Any]) -> Dict[str, Any]:
     return get_engine().benchmark.tier1_trends()
 
 
+def benchmark_tier1_target_history(params: Dict[str, Any]) -> Dict[str, Any]:
+    key = str(params.get("key") or "").strip() or None
+    target = str(params.get("target") or "").strip() or None
+    return get_engine().benchmark.tier1_target_history(key=key, target=target)
+
+
 def benchmark_compare(params: Dict[str, Any]) -> Dict[str, Any]:
     baseline_path = _parse_path_param(params, "baseline")
     candidate_path = _parse_path_param(params, "candidate")

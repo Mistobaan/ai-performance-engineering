@@ -12,8 +12,8 @@ import {
 } from 'recharts';
 import { DashboardShell } from '@/components/DashboardShell';
 import { StatsCard } from '@/components/StatsCard';
-import { getTier1History, getTier1Trends } from '@/lib/api';
-import type { Tier1Delta, Tier1History, Tier1TargetSummary, Tier1Trends } from '@/types';
+import { getTier1History, getTier1TargetHistory, getTier1Trends } from '@/lib/api';
+import type { Tier1Delta, Tier1History, Tier1TargetHistory, Tier1TargetSummary, Tier1Trends } from '@/types';
 import { BarChart3, Clock3, Gauge, ShieldCheck } from 'lucide-react';
 
 function Tier1Skeleton() {
@@ -68,7 +68,10 @@ function targetStatusBadge(status: string) {
 export default function Tier1Page() {
   const [history, setHistory] = useState<Tier1History | null>(null);
   const [trends, setTrends] = useState<Tier1Trends | null>(null);
+  const [targetHistory, setTargetHistory] = useState<Tier1TargetHistory | null>(null);
+  const [selectedTargetKey, setSelectedTargetKey] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [targetLoading, setTargetLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadTier1 = useCallback(async () => {
@@ -101,6 +104,50 @@ export default function Tier1Page() {
   const chartData = trends?.history ?? [];
   const latestRegressions = (history?.latest?.regressions ?? []).slice(0, 6);
   const latestImprovements = (history?.latest?.improvements ?? []).slice(0, 6);
+  const targetOptions = useMemo(
+    () =>
+      [...(history?.latest?.targets ?? [])].sort((a, b) =>
+        String(a.target || a.key || '').localeCompare(String(b.target || b.key || ''))
+      ),
+    [history?.latest?.targets]
+  );
+  const targetChartData = targetHistory?.history ?? [];
+
+  useEffect(() => {
+    if (!selectedTargetKey && latestTargets.length > 0) {
+      setSelectedTargetKey(latestTargets[0].key);
+    }
+  }, [latestTargets, selectedTargetKey]);
+
+  useEffect(() => {
+    if (!selectedTargetKey) {
+      setTargetHistory(null);
+      return;
+    }
+    let cancelled = false;
+    const loadTarget = async () => {
+      try {
+        setTargetLoading(true);
+        const payload = await getTier1TargetHistory({ key: selectedTargetKey });
+        if (!cancelled) {
+          setTargetHistory(payload as Tier1TargetHistory);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setTargetHistory(null);
+          setError(e instanceof Error ? e.message : 'Failed to load target history');
+        }
+      } finally {
+        if (!cancelled) {
+          setTargetLoading(false);
+        }
+      }
+    };
+    loadTarget();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTargetKey]);
 
   return (
     <DashboardShell
@@ -328,6 +375,87 @@ export default function Tier1Page() {
                   ))
                 )}
               </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h2 className="text-lg font-semibold text-white">Per-Target History</h2>
+              <div className="flex items-center gap-3">
+                <span className="badge badge-info">{targetHistory?.run_count ?? 0} runs</span>
+                <select
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                  value={selectedTargetKey}
+                  onChange={(event) => setSelectedTargetKey(event.target.value)}
+                >
+                  {targetOptions.map((target) => (
+                    <option key={target.key} value={target.key}>
+                      {target.target || target.key}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="card-body">
+              {targetLoading ? (
+                <div className="text-sm text-white/50">Loading target history…</div>
+              ) : !targetHistory || targetChartData.length === 0 ? (
+                <div className="text-sm text-white/50">No target history available yet.</div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                    <div className="mb-3 text-sm text-white/60">
+                      <div className="text-white">{targetHistory.selected_target}</div>
+                      <div>{targetHistory.rationale || 'Canonical target history from tier-1 summaries.'}</div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <LineChart data={targetChartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="run_id" tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 10 }} />
+                        <YAxis tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 11 }} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'rgba(16, 16, 24, 0.95)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '8px',
+                          }}
+                          formatter={(value: number, name) =>
+                            name === 'best_speedup'
+                              ? [`${value.toFixed(2)}x`, 'Speedup']
+                              : [`${value.toFixed(3)} ms`, name === 'baseline_time_ms' ? 'Baseline' : 'Optimized']
+                          }
+                        />
+                        <Line type="monotone" dataKey="best_speedup" name="best_speedup" stroke="#00f5d4" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="baseline_time_ms" name="baseline_time_ms" stroke="#f72585" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="best_optimized_time_ms" name="best_optimized_time_ms" stroke="#f9c74f" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-white/10 p-4">
+                      <div className="text-xs uppercase text-white/40 mb-1">Best Seen</div>
+                      <div className="text-xl text-accent-success">{formatSpeedup(targetHistory.best_speedup_seen)}</div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 p-4">
+                      <div className="text-xs uppercase text-white/40 mb-1">Latest Status</div>
+                      <div className="mt-1">
+                        <span className={targetStatusBadge(targetHistory.latest?.status || 'unknown')}>
+                          {targetHistory.latest?.status || 'unknown'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 p-4">
+                      <div className="text-xs uppercase text-white/40 mb-1">Latest Speedup</div>
+                      <div className="text-white">{formatSpeedup(targetHistory.latest?.best_speedup)}</div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 p-4">
+                      <div className="text-xs uppercase text-white/40 mb-1">Latest Optimization</div>
+                      <div className="text-white break-words">{targetHistory.latest?.best_optimization || '—'}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </>

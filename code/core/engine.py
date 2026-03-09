@@ -891,6 +891,10 @@ class BenchmarkDomain:
     def tier1_trends(self) -> Dict[str, Any]:
         """Get canonical tier-1 trend data."""
         return _get_handler().get_tier1_trends()
+
+    def tier1_target_history(self, *, key: Optional[str] = None, target: Optional[str] = None) -> Dict[str, Any]:
+        """Get canonical tier-1 history for a single benchmark target."""
+        return _get_handler().get_tier1_target_history(key=key, target=target)
     
     def data(self) -> Dict[str, Any]:
         """Load current benchmark results data."""

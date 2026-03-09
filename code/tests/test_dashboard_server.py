@@ -155,6 +155,7 @@ def test_engine_exposes_tier1_history_and_trends(tmp_path, monkeypatch):
     reset_engine()
     history = get_engine().benchmark.tier1_history()
     trends = get_engine().benchmark.tier1_trends()
+    target_history = get_engine().benchmark.tier1_target_history(key="flashattention4_alibi")
 
     assert history["total_runs"] == 1
     assert history["latest_run_id"] == "20260309_010000_tier1_local"
@@ -163,5 +164,9 @@ def test_engine_exposes_tier1_history_and_trends(tmp_path, monkeypatch):
     assert history["latest"]["run"]["regression_summary_json_path"] == str(regression_path)
     assert trends["latest_run_id"] == "20260309_010000_tier1_local"
     assert trends["best_speedup_seen"] == 12.5
+    assert target_history["selected_key"] == "flashattention4_alibi"
+    assert target_history["run_count"] == 1
+    assert target_history["history"][0]["target"] == "labs/flashattention4:flashattention4_alibi"
+    assert target_history["history"][0]["best_speedup"] == 12.5
 
     reset_engine()

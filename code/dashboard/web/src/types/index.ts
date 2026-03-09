@@ -457,6 +457,36 @@ export interface Tier1Trends {
   best_speedup_seen?: number;
 }
 
+export interface Tier1TargetHistoryPoint {
+  run_id: string;
+  generated_at?: string | null;
+  key?: string | null;
+  target?: string | null;
+  category?: string | null;
+  status: string;
+  baseline_time_ms?: number | null;
+  best_optimized_time_ms?: number | null;
+  best_speedup?: number | null;
+  best_optimization?: string | null;
+  baseline_memory_mb?: number | null;
+  best_memory_savings_pct?: number | null;
+  artifacts?: Record<string, string>;
+}
+
+export interface Tier1TargetHistory {
+  suite_name: string;
+  suite_version?: number;
+  history_root?: string;
+  selected_key?: string | null;
+  selected_target?: string | null;
+  category?: string | null;
+  rationale?: string | null;
+  run_count: number;
+  best_speedup_seen?: number;
+  latest?: Tier1TargetHistoryPoint | null;
+  history: Tier1TargetHistoryPoint[];
+}
+
 export interface BenchmarkCompareDelta {
   key: string;
   chapter: string;

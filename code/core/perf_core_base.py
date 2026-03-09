@@ -609,6 +609,83 @@ class PerformanceCoreBase:
             return trend_payload
         return build_trend_snapshot(index)
 
+    def get_tier1_target_history(self, *, key: Optional[str] = None, target: Optional[str] = None) -> dict:
+        """Return canonical tier-1 history for a single benchmark target."""
+        from core.analysis.history_index import load_history_index
+
+        selected_key = (key or "").strip() or None
+        selected_target = (target or "").strip() or None
+        if not selected_key and not selected_target:
+            raise ValueError("tier1 target history requires 'key' or 'target'")
+
+        history_root = self._tier1_history_root()
+        index_path = history_root / "index.json"
+        index = load_history_index(index_path)
+        run_entries = index.get("runs", []) or []
+
+        points: List[dict] = []
+        latest_point: Optional[dict] = None
+        category: Optional[str] = None
+        rationale: Optional[str] = None
+
+        for entry in run_entries:
+            summary_path = Path(entry.get("summary_path") or "")
+            summary_payload = self._load_json_if_exists(summary_path)
+            if not summary_payload:
+                continue
+            for target_payload in summary_payload.get("targets", []) or []:
+                if not isinstance(target_payload, dict):
+                    continue
+                if selected_key and str(target_payload.get("key") or "").strip() != selected_key:
+                    continue
+                if selected_target and str(target_payload.get("target") or "").strip() != selected_target:
+                    continue
+
+                selected_key = selected_key or str(target_payload.get("key") or "").strip() or None
+                selected_target = selected_target or str(target_payload.get("target") or "").strip() or None
+                category = category or str(target_payload.get("category") or "").strip() or None
+                rationale = rationale or str(target_payload.get("rationale") or "").strip() or None
+
+                point = {
+                    "run_id": summary_payload.get("run_id") or entry.get("run_id"),
+                    "generated_at": summary_payload.get("generated_at"),
+                    "key": target_payload.get("key"),
+                    "target": target_payload.get("target"),
+                    "category": target_payload.get("category"),
+                    "status": target_payload.get("status"),
+                    "baseline_time_ms": target_payload.get("baseline_time_ms"),
+                    "best_optimized_time_ms": target_payload.get("best_optimized_time_ms"),
+                    "best_speedup": target_payload.get("best_speedup"),
+                    "best_optimization": target_payload.get("best_optimization"),
+                    "baseline_memory_mb": target_payload.get("baseline_memory_mb"),
+                    "best_memory_savings_pct": target_payload.get("best_memory_savings_pct"),
+                    "artifacts": target_payload.get("artifacts") or {},
+                }
+                points.append(point)
+                latest_point = point
+                break
+
+        best_speedup_seen = 0.0
+        for point in points:
+            try:
+                best_speedup_seen = max(best_speedup_seen, float(point.get("best_speedup") or 0.0))
+            except Exception:
+                continue
+
+        return {
+            "suite_name": index.get("suite_name", "tier1"),
+            "suite_version": index.get("suite_version", 1),
+            "history_root": str(history_root),
+            "selected_key": selected_key,
+            "selected_target": selected_target,
+            "category": category,
+            "rationale": rationale,
+            "run_count": len(points),
+            "best_speedup_seen": best_speedup_seen,
+            "latest": latest_point,
+            "history": points,
+        }
+
     # ------------------------------------------------------------------
     # GPU + software info
     # ------------------------------------------------------------------

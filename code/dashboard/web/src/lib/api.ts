@@ -108,6 +108,11 @@ export async function getTier1Trends() {
   return fetchAPI('/benchmark/tier1/trends');
 }
 
+export async function getTier1TargetHistory(params: Record<string, unknown>) {
+  const query = buildQuery(params);
+  return fetchAPI(`/benchmark/tier1/target-history${query}`);
+}
+
 export async function getBenchmarkCompare(params: Record<string, unknown>) {
   const query = buildQuery(params);
   return fetchAPI(`/benchmark/compare${query}`);
