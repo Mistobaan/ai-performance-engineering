@@ -516,6 +516,14 @@ class PerformanceCoreBase:
             return None
         return payload if isinstance(payload, dict) else None
 
+    def _resolve_repo_path_string(self, raw_path: Optional[str]) -> Optional[str]:
+        if not raw_path:
+            return None
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = (CODE_ROOT / path).resolve()
+        return str(path)
+
     def get_tier1_history_runs(self) -> dict:
         """Return canonical tier-1 history with latest-run details."""
         from core.analysis.history_index import load_history_index
@@ -659,7 +667,12 @@ class PerformanceCoreBase:
                     "best_optimization": target_payload.get("best_optimization"),
                     "baseline_memory_mb": target_payload.get("baseline_memory_mb"),
                     "best_memory_savings_pct": target_payload.get("best_memory_savings_pct"),
-                    "artifacts": target_payload.get("artifacts") or {},
+                    "artifacts": {
+                        name: resolved
+                        for name, path in (target_payload.get("artifacts") or {}).items()
+                        if isinstance(path, str)
+                        and (resolved := self._resolve_repo_path_string(path)) is not None
+                    },
                 }
                 points.append(point)
                 latest_point = point

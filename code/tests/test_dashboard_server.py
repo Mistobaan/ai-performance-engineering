@@ -70,6 +70,9 @@ def test_engine_exposes_tier1_history_and_trends(tmp_path, monkeypatch):
                         "category": "attention",
                         "status": "succeeded",
                         "best_speedup": 12.5,
+                        "artifacts": {
+                            "baseline_nsys_rep": "artifacts/runs/demo/profiles/flash.nsys-rep",
+                        },
                     }
                 ],
                 "summary": {
@@ -168,5 +171,8 @@ def test_engine_exposes_tier1_history_and_trends(tmp_path, monkeypatch):
     assert target_history["run_count"] == 1
     assert target_history["history"][0]["target"] == "labs/flashattention4:flashattention4_alibi"
     assert target_history["history"][0]["best_speedup"] == 12.5
+    assert target_history["history"][0]["artifacts"]["baseline_nsys_rep"].endswith(
+        "/artifacts/runs/demo/profiles/flash.nsys-rep"
+    )
 
     reset_engine()

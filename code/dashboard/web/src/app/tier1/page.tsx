@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   CartesianGrid,
   Line,
@@ -12,6 +13,7 @@ import {
 } from 'recharts';
 import { DashboardShell } from '@/components/DashboardShell';
 import { StatsCard } from '@/components/StatsCard';
+import { useToast } from '@/components/Toast';
 import { getTier1History, getTier1TargetHistory, getTier1Trends } from '@/lib/api';
 import type { Tier1Delta, Tier1History, Tier1TargetHistory, Tier1TargetSummary, Tier1Trends } from '@/types';
 import { BarChart3, Clock3, Gauge, ShieldCheck } from 'lucide-react';
@@ -58,6 +60,14 @@ function formatDelta(change: Tier1Delta) {
   return change.reason || 'changed';
 }
 
+function artifactLabel(name: string) {
+  return name.replaceAll('_', ' ');
+}
+
+function deltaTargetKey(change: Tier1Delta, targetKeyByTarget: Map<string, string>) {
+  return change.key || (change.target ? targetKeyByTarget.get(change.target) : undefined) || '';
+}
+
 function targetStatusBadge(status: string) {
   if (status === 'succeeded') return 'badge badge-success';
   if (status === 'failed') return 'badge badge-danger';
@@ -65,7 +75,11 @@ function targetStatusBadge(status: string) {
   return 'badge badge-info';
 }
 
-export default function Tier1Page() {
+function Tier1PageInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { showToast } = useToast();
   const [history, setHistory] = useState<Tier1History | null>(null);
   const [trends, setTrends] = useState<Tier1Trends | null>(null);
   const [targetHistory, setTargetHistory] = useState<Tier1TargetHistory | null>(null);
@@ -73,6 +87,7 @@ export default function Tier1Page() {
   const [loading, setLoading] = useState(true);
   const [targetLoading, setTargetLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const targetHistoryRef = useRef<HTMLDivElement | null>(null);
 
   const loadTier1 = useCallback(async () => {
     try {
@@ -104,6 +119,14 @@ export default function Tier1Page() {
   const chartData = trends?.history ?? [];
   const latestRegressions = (history?.latest?.regressions ?? []).slice(0, 6);
   const latestImprovements = (history?.latest?.improvements ?? []).slice(0, 6);
+  const latestRegressionCount = history?.latest?.regressions?.length ?? 0;
+  const latestImprovementCount = history?.latest?.improvements?.length ?? 0;
+  const latestMissingCount = history?.latest?.missing_targets?.length ?? 0;
+  const latestNewTargetCount = history?.latest?.new_targets?.length ?? 0;
+  const releaseReady =
+    (latestRun?.failed ?? 0) === 0 &&
+    (latestRun?.missing ?? 0) === 0 &&
+    latestRegressionCount === 0;
   const targetOptions = useMemo(
     () =>
       [...(history?.latest?.targets ?? [])].sort((a, b) =>
@@ -111,13 +134,88 @@ export default function Tier1Page() {
       ),
     [history?.latest?.targets]
   );
+  const selectedTargetParam = (searchParams?.get('target') || '').trim();
+  const targetKeyByTarget = useMemo(() => {
+    const mapping = new Map<string, string>();
+    for (const target of history?.latest?.targets ?? []) {
+      if (target.target && target.key) {
+        mapping.set(target.target, target.key);
+      }
+    }
+    return mapping;
+  }, [history?.latest?.targets]);
   const targetChartData = targetHistory?.history ?? [];
+  const currentPath = pathname || '/tier1';
+  const blockerRows = useMemo(() => {
+    const blockers: Tier1Delta[] = [];
+    blockers.push(...(history?.latest?.regressions ?? []));
+    blockers.push(...(history?.latest?.missing_targets ?? []));
+    return blockers.slice(0, 6);
+  }, [history?.latest?.regressions, history?.latest?.missing_targets]);
+  const selectedTargetUrl = useMemo(() => {
+    if (!selectedTargetKey) {
+      return '';
+    }
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.set('target', selectedTargetKey);
+    const query = params.toString();
+    const relative = query ? `${currentPath}?${query}` : currentPath;
+    if (typeof window === 'undefined') {
+      return relative;
+    }
+    return `${window.location.origin}${relative}`;
+  }, [currentPath, searchParams, selectedTargetKey]);
+
+  const focusTargetFromDelta = useCallback(
+    (change: Tier1Delta) => {
+      const key = deltaTargetKey(change, targetKeyByTarget);
+      if (!key) return;
+      setSelectedTargetKey(key);
+      targetHistoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+    [targetKeyByTarget]
+  );
+
+  const isSelectedDelta = useCallback(
+    (change: Tier1Delta) => deltaTargetKey(change, targetKeyByTarget) === selectedTargetKey,
+    [selectedTargetKey, targetKeyByTarget]
+  );
+
+  const copySelectedTargetLink = useCallback(async () => {
+    if (!selectedTargetUrl) {
+      showToast('Select a target before copying a link.', 'warning');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(selectedTargetUrl);
+      showToast('Tier-1 target link copied.', 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Failed to copy link.', 'error');
+    }
+  }, [selectedTargetUrl, showToast]);
 
   useEffect(() => {
+    if (selectedTargetParam) {
+      const matchingTarget = targetOptions.find((target) => target.key === selectedTargetParam);
+      if (matchingTarget && selectedTargetKey !== matchingTarget.key) {
+        setSelectedTargetKey(matchingTarget.key);
+        return;
+      }
+    }
     if (!selectedTargetKey && latestTargets.length > 0) {
       setSelectedTargetKey(latestTargets[0].key);
     }
-  }, [latestTargets, selectedTargetKey]);
+  }, [latestTargets, selectedTargetKey, selectedTargetParam, targetOptions]);
+
+  useEffect(() => {
+    if (!selectedTargetKey || selectedTargetKey === selectedTargetParam) {
+      return;
+    }
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.set('target', selectedTargetKey);
+    const query = params.toString();
+    router.replace(query ? `${currentPath}?${query}` : currentPath, { scroll: false });
+  }, [currentPath, router, searchParams, selectedTargetKey, selectedTargetParam]);
 
   useEffect(() => {
     if (!selectedTargetKey) {
@@ -255,16 +353,75 @@ export default function Tier1Page() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Regressions</span>
-                  <span className="text-accent-danger">{history.latest.regressions.length}</span>
+                  <span className="text-accent-danger">{latestRegressionCount}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Improvements</span>
-                  <span className="text-accent-success">{history.latest.improvements.length}</span>
+                  <span className="text-accent-success">{latestImprovementCount}</span>
                 </div>
                 <div className="pt-2 border-t border-white/10 text-xs text-white/50 space-y-1">
                   <div>Summary: {latestRun?.summary_path || '—'}</div>
                   <div>Regressions: {latestRun?.regression_summary_path || '—'}</div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h2 className="text-lg font-semibold text-white">Release Readiness</h2>
+              <span className={releaseReady ? 'badge badge-success' : 'badge badge-warning'}>
+                {releaseReady ? 'Ready' : 'Needs attention'}
+              </span>
+            </div>
+            <div className="card-body grid grid-cols-1 md:grid-cols-5 gap-4 text-sm text-white/70">
+              <div>
+                <div className="text-xs uppercase text-white/40 mb-1">Failed targets</div>
+                <div className="text-white">{latestRun?.failed ?? 0}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-white/40 mb-1">Regressions</div>
+                <div className="text-accent-danger">{latestRegressionCount}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-white/40 mb-1">Missing</div>
+                <div className="text-white">{latestMissingCount}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-white/40 mb-1">New targets</div>
+                <div className="text-accent-success">{latestNewTargetCount}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-white/40 mb-1">Run health</div>
+                <div className="text-white">
+                  {latestRun?.succeeded ?? 0}/{latestRun?.target_count ?? 0} succeeded
+                </div>
+              </div>
+              <div className="md:col-span-5 pt-2 border-t border-white/10">
+                <div className="text-xs uppercase text-white/40 mb-2">Top blockers</div>
+                {blockerRows.length === 0 ? (
+                  <div className="text-white/50">No blocking regressions or missing targets in the latest canonical run.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {blockerRows.map((change, index) => (
+                      <button
+                        key={`blocker-${change.key || change.target || index}`}
+                        type="button"
+                        onClick={() => focusTargetFromDelta(change)}
+                        className={[
+                          'w-full rounded-lg border p-3 text-left transition-colors',
+                          isSelectedDelta(change)
+                            ? 'border-accent-primary/40 bg-accent-primary/10'
+                            : 'border-white/10 hover:border-white/20 hover:bg-white/5',
+                        ].join(' ')}
+                      >
+                        <div className="text-white">{change.target || change.key || 'unknown target'}</div>
+                        <div className="mt-1 text-xs text-white/50">{change.reason || 'release blocker'}</div>
+                        <div className="mt-2 text-sm text-accent-danger">{formatDelta(change)}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -287,10 +444,25 @@ export default function Tier1Page() {
                   </thead>
                   <tbody>
                     {latestTargets.map((target: Tier1TargetSummary) => (
-                      <tr key={target.key} className="border-b border-white/5 text-sm text-white/70">
+                      <tr
+                        key={target.key}
+                        className={[
+                          'border-b border-white/5 text-sm text-white/70 transition-colors',
+                          target.key === selectedTargetKey ? 'bg-accent-primary/10' : 'hover:bg-white/5',
+                        ].join(' ')}
+                      >
                         <td className="px-5 py-3">
-                          <div className="text-white">{target.key}</div>
-                          <div className="text-xs text-white/40">{target.target}</div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTargetKey(target.key);
+                              targetHistoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }}
+                            className="text-left"
+                          >
+                            <div className="text-white">{target.key}</div>
+                            <div className="text-xs text-white/40">{target.target}</div>
+                          </button>
                         </td>
                         <td className="px-5 py-3 text-right">{target.category}</td>
                         <td className="px-5 py-3 text-right text-accent-success">
@@ -340,18 +512,28 @@ export default function Tier1Page() {
             <div className="card">
               <div className="card-header">
                 <h2 className="text-lg font-semibold text-white">Latest Regressions</h2>
-                <span className="badge badge-danger">{history.latest.regressions.length}</span>
+                <span className="badge badge-danger">{latestRegressionCount}</span>
               </div>
               <div className="card-body space-y-3">
                 {latestRegressions.length === 0 ? (
                   <div className="text-sm text-white/50">No tracked regressions in the latest canonical run.</div>
                 ) : (
                   latestRegressions.map((change, index) => (
-                    <div key={`reg-${change.key || change.target || index}`} className="rounded-lg border border-white/10 p-3">
+                    <button
+                      key={`reg-${change.key || change.target || index}`}
+                      type="button"
+                      onClick={() => focusTargetFromDelta(change)}
+                      className={[
+                        'w-full rounded-lg border p-3 text-left transition-colors',
+                        isSelectedDelta(change)
+                          ? 'border-accent-primary/40 bg-accent-primary/10'
+                          : 'border-white/10 hover:border-white/20 hover:bg-white/5',
+                      ].join(' ')}
+                    >
                       <div className="text-sm text-white">{change.target || change.key || 'unknown target'}</div>
                       <div className="mt-1 text-xs text-white/50">{change.reason || 'regression'}</div>
                       <div className="mt-2 text-sm text-accent-danger">{formatDelta(change)}</div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
@@ -360,25 +542,35 @@ export default function Tier1Page() {
             <div className="card">
               <div className="card-header">
                 <h2 className="text-lg font-semibold text-white">Latest Improvements</h2>
-                <span className="badge badge-success">{history.latest.improvements.length}</span>
+                <span className="badge badge-success">{latestImprovementCount}</span>
               </div>
               <div className="card-body space-y-3">
                 {latestImprovements.length === 0 ? (
                   <div className="text-sm text-white/50">No tracked improvements in the latest canonical run.</div>
                 ) : (
                   latestImprovements.map((change, index) => (
-                    <div key={`imp-${change.key || change.target || index}`} className="rounded-lg border border-white/10 p-3">
+                    <button
+                      key={`imp-${change.key || change.target || index}`}
+                      type="button"
+                      onClick={() => focusTargetFromDelta(change)}
+                      className={[
+                        'w-full rounded-lg border p-3 text-left transition-colors',
+                        isSelectedDelta(change)
+                          ? 'border-accent-primary/40 bg-accent-primary/10'
+                          : 'border-white/10 hover:border-white/20 hover:bg-white/5',
+                      ].join(' ')}
+                    >
                       <div className="text-sm text-white">{change.target || change.key || 'unknown target'}</div>
                       <div className="mt-1 text-xs text-white/50">{change.reason || 'improvement'}</div>
                       <div className="mt-2 text-sm text-accent-success">{formatDelta(change)}</div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
             </div>
           </div>
 
-          <div className="card">
+          <div ref={targetHistoryRef} className="card">
             <div className="card-header">
               <h2 className="text-lg font-semibold text-white">Per-Target History</h2>
               <div className="flex items-center gap-3">
@@ -404,9 +596,28 @@ export default function Tier1Page() {
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2">
-                    <div className="mb-3 text-sm text-white/60">
-                      <div className="text-white">{targetHistory.selected_target}</div>
-                      <div>{targetHistory.rationale || 'Canonical target history from tier-1 summaries.'}</div>
+                    <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="text-sm text-white/60">
+                        <div className="text-white">{targetHistory.selected_target}</div>
+                        <div>{targetHistory.rationale || 'Canonical target history from tier-1 summaries.'}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={copySelectedTargetLink}
+                          className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/70 transition-colors hover:border-white/20 hover:bg-white/5"
+                        >
+                          Copy link
+                        </button>
+                        {selectedTargetUrl ? (
+                          <a
+                            href={selectedTargetUrl}
+                            className="rounded-lg border border-white/10 px-3 py-2 text-xs text-accent-primary transition-colors hover:border-white/20 hover:bg-white/5"
+                          >
+                            Open target URL
+                          </a>
+                        ) : null}
+                      </div>
                     </div>
                     <ResponsiveContainer width="100%" height={260}>
                       <LineChart data={targetChartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
@@ -453,6 +664,26 @@ export default function Tier1Page() {
                       <div className="text-xs uppercase text-white/40 mb-1">Latest Optimization</div>
                       <div className="text-white break-words">{targetHistory.latest?.best_optimization || '—'}</div>
                     </div>
+                    <div className="rounded-lg border border-white/10 p-4">
+                      <div className="text-xs uppercase text-white/40 mb-2">Selected Run Artifacts</div>
+                      <div className="space-y-2 text-sm">
+                        {Object.entries(targetHistory.latest?.artifacts || {}).length === 0 ? (
+                          <div className="text-white/50">No artifact links for this target.</div>
+                        ) : (
+                          Object.entries(targetHistory.latest?.artifacts || {}).map(([name, path]) => (
+                            <a
+                              key={name}
+                              href={`file://${path}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block text-accent-primary hover:text-accent-secondary break-all"
+                            >
+                              {artifactLabel(name)}
+                            </a>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -461,5 +692,13 @@ export default function Tier1Page() {
         </>
       )}
     </DashboardShell>
+  );
+}
+
+export default function Tier1Page() {
+  return (
+    <Suspense fallback={<Tier1Skeleton />}>
+      <Tier1PageInner />
+    </Suspense>
   );
 }
