@@ -1,0 +1,176 @@
+{
+  "entries": [
+    {
+      "chapter": 4,
+      "label": "after_ddp.py",
+      "classification": "generic",
+      "canonical_path": "ch04/optimized_dataparallel.py",
+      "notes": "The manuscript's DDP comparison sample maps to the optimized DataParallel-vs-DDP benchmark."
+    },
+    {
+      "chapter": 4,
+      "label": "after_overlap_ddp.py",
+      "classification": "generic",
+      "canonical_path": "ch04/ddp_overlap.py",
+      "notes": "The overlap-focused DDP sample is kept under the shorter ddp_overlap.py name in the repo."
+    },
+    {
+      "chapter": 4,
+      "label": "after_reinit_comm.py",
+      "classification": "generic",
+      "canonical_path": "ch04/optimized_reinit_comm.py",
+      "notes": "The fixed communicator-lifecycle sample is tracked under the optimized prefix."
+    },
+    {
+      "chapter": 4,
+      "label": "before_dataparallel.py",
+      "classification": "generic",
+      "canonical_path": "ch04/baseline_dataparallel.py",
+      "notes": "The manuscript's DataParallel baseline uses the repo's baseline prefix."
+    },
+    {
+      "chapter": 4,
+      "label": "before_reinit_comm.py",
+      "classification": "generic",
+      "canonical_path": "ch04/baseline_reinit_comm.py",
+      "notes": "The slow communicator reinitialization sample is tracked under the baseline prefix."
+    },
+    {
+      "chapter": 6,
+      "label": "add_parallel.py",
+      "classification": "generic",
+      "canonical_path": "ch06/optimized_add.py",
+      "notes": "The book's vectorized PyTorch add example maps to the optimized Python benchmark."
+    },
+    {
+      "chapter": 6,
+      "label": "add_sequential.py",
+      "classification": "generic",
+      "canonical_path": "ch06/baseline_add.py",
+      "notes": "The book's Python-loop add example maps to the baseline Python benchmark."
+    },
+    {
+      "chapter": 10,
+      "label": "warp_specialized_cluster_pipeline.cu",
+      "classification": "generic",
+      "canonical_path": "ch10/optimized_warp_specialized_cluster_pipeline.cu",
+      "notes": "Chapter 10 uses the pedagogical sample name without the repo's baseline/optimized prefix.",
+      "required_markers": [
+        "compute_rows_from_ds",
+        "cluster.map_shared_rank",
+        "tiled_partition<32>"
+      ]
+    },
+    {
+      "chapter": 10,
+      "label": "warp_specialized_pipeline.cu",
+      "classification": "generic",
+      "canonical_path": "ch10/optimized_warp_specialized_pipeline.cu",
+      "notes": "The manuscript labels the optimized sample without the repo prefix.",
+      "required_markers": [
+        "compute_full_tile",
+        "cuda::make_pipeline",
+        "pipe.consumer_wait"
+      ]
+    },
+    {
+      "chapter": 11,
+      "label": "warp_specialized_pipeline_multistream.cu",
+      "classification": "generic",
+      "canonical_path": "ch11/optimized_warp_specialized_multistream.cu",
+      "notes": "The chapter uses a simplified sample name for the multistream optimized path."
+    },
+    {
+      "chapter": 11,
+      "label": "warp_specialized_kernel_two_pipelines_multistream.cu",
+      "classification": "generic",
+      "canonical_path": "ch11/warp_specialized_two_pipelines_multistream_impl.cuh",
+      "notes": "The kernel body lives in the shared implementation header that the driver includes.",
+      "required_markers": [
+        "warp_specialized_kernel_two_pipelines_multistream",
+        "kPipelineStages",
+        "pipe.consumer_wait"
+      ]
+    },
+    {
+      "chapter": 11,
+      "label": "warp_specialized_two_pipelines_multistream_driver.cu",
+      "classification": "generic",
+      "canonical_path": "ch11/optimized_warp_specialized_two_pipelines_driver.cu",
+      "notes": "The chapter names the driver without the repo's optimized prefix.",
+      "required_markers": [
+        "warp_specialized_kernel_two_pipelines_multistream"
+      ]
+    },
+    {
+      "chapter": 12,
+      "label": "dp_device_launched.cu",
+      "classification": "generic",
+      "canonical_path": "ch12/helper_optimized_dynamic_parallelism.cu",
+      "notes": "The chapter uses the device-launched alias; the repo keeps the implementation in the optimized helper file.",
+      "required_markers": [
+        "parent_launcher",
+        "child_scale_kernel"
+      ]
+    },
+    {
+      "chapter": 12,
+      "label": "dp_host_launched.cu",
+      "classification": "generic",
+      "canonical_path": "ch12/helper_baseline_dynamic_parallelism.cu",
+      "notes": "The chapter uses the host-launched alias; the repo keeps the implementation in the baseline helper file.",
+      "required_markers": [
+        "scale_segment_kernel"
+      ]
+    },
+    {
+      "chapter": 12,
+      "label": "uneven_static.cu",
+      "classification": "wrapper",
+      "canonical_path": "ch12/baseline_uneven_static.cu",
+      "notes": "The chapter's uneven_static.cu label is preserved by the baseline wrapper file."
+    },
+    {
+      "chapter": 13,
+      "label": "scripts/compare_perf.py",
+      "classification": "pseudocode",
+      "notes": "This is a CI snippet path in the manuscript, not a checked-in chapter sample."
+    },
+    {
+      "chapter": 14,
+      "label": "fx_graph_runnable.py",
+      "classification": "pseudocode",
+      "notes": "This is a TorchInductor debug artifact emitted under TORCH_COMPILE_DEBUG, not a tracked repo sample."
+    },
+    {
+      "chapter": 14,
+      "label": "outputcode.py",
+      "classification": "pseudocode",
+      "notes": "This is a TorchInductor debug artifact emitted under TORCH_COMPILE_DEBUG, not a tracked repo sample."
+    },
+    {
+      "chapter": 16,
+      "label": "radix_attention_example.py",
+      "classification": "pseudocode",
+      "notes": "The book explicitly presents this as simplified RadixAttention pseudocode."
+    },
+    {
+      "chapter": 16,
+      "label": "scheduler.py",
+      "classification": "pseudocode",
+      "notes": "This is a sample vLLM scheduler log reference, not a repo implementation file."
+    },
+    {
+      "chapter": 19,
+      "label": "kv_prefetch_overlap.cu",
+      "classification": "generic",
+      "canonical_path": "ch19/optimized_kv_prefetch_overlap.cu",
+      "notes": "The chapter uses the generic overlapping variant name; the repo keeps baseline/optimized prefixed binaries.",
+      "required_markers": [
+        "cudaMemcpyAsync",
+        "forward_kernel",
+        "optimized_kv_prefetch_overlap"
+      ]
+    }
+  ]
+}

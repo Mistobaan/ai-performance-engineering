@@ -9,6 +9,8 @@ The optimized pair overlaps prefill and decode via pipelined transfers.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import argparse
 import inspect
 import os

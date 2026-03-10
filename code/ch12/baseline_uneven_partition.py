@@ -1,6 +1,8 @@
 """Python harness wrapper for baseline_uneven_partition.cu."""
 
 from __future__ import annotations
+
+from pathlib import Path
 from typing import Optional
 
 from core.harness.benchmark_harness import BaseBenchmark

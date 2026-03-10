@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import torch
 from ch04.nccl_blackwell_config import (
     configure_nccl_for_blackwell,

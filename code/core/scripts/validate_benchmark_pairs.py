@@ -129,12 +129,12 @@ class ValidationReport:
 # Benchmark Loading
 # =============================================================================
 
-def load_benchmark_class(file_path: Path) -> Optional[Any]:
+def load_benchmark_class(file_path: Path) -> Tuple[Optional[Any], Optional[str]]:
     """Dynamically load and instantiate a benchmark from a file."""
     try:
         spec = importlib.util.spec_from_file_location("benchmark_module", file_path)
         if spec is None or spec.loader is None:
-            return None
+            return None, "Could not create import spec"
         
         module = importlib.util.module_from_spec(spec)
         sys.modules["benchmark_module"] = module
@@ -142,7 +142,7 @@ def load_benchmark_class(file_path: Path) -> Optional[Any]:
         
         # Look for get_benchmark factory function
         if hasattr(module, "get_benchmark"):
-            return module.get_benchmark()
+            return module.get_benchmark(), None
         
         # Look for Benchmark class
         for name in dir(module):
@@ -150,12 +150,11 @@ def load_benchmark_class(file_path: Path) -> Optional[Any]:
             if (isinstance(obj, type) and 
                 hasattr(obj, "benchmark_fn") and 
                 name != "BaseBenchmark"):
-                return obj()
+                return obj(), None
         
-        return None
+        return None, "No get_benchmark() factory or benchmark class found"
     except Exception as e:
-        # Import errors are common due to missing dependencies
-        return None
+        return None, f"{type(e).__name__}: {e}"
     finally:
         if "benchmark_module" in sys.modules:
             del sys.modules["benchmark_module"]
@@ -343,14 +342,14 @@ def validate_pair(
     )
     
     # Load benchmarks
-    baseline_benchmark = load_benchmark_class(baseline_path)
+    baseline_benchmark, baseline_load_error = load_benchmark_class(baseline_path)
     if baseline_benchmark is None:
-        result.error = f"Failed to load baseline benchmark"
+        result.error = f"Failed to load baseline benchmark: {baseline_load_error}"
         return result
     
-    optimized_benchmark = load_benchmark_class(optimized_path)
+    optimized_benchmark, optimized_load_error = load_benchmark_class(optimized_path)
     if optimized_benchmark is None:
-        result.error = f"Failed to load optimized benchmark"
+        result.error = f"Failed to load optimized benchmark: {optimized_load_error}"
         return result
     
     # Get signatures

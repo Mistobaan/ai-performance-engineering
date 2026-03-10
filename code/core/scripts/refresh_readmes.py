@@ -1776,6 +1776,7 @@ ENTRIES["ch10"] = chapter_entry(
         ("`baseline_cluster_multicast.py`, `optimized_cluster_multicast.py`, `tma_multicast_baseline.cu`, `tma_multicast_cluster.cu`", "Cluster multicast GEMM example (baseline vs cluster multicast) wrapped as CUDA-binary harness benchmarks."),
         ("`baseline_cooperative_persistent.{py,cu}`, `optimized_cooperative_persistent.{py,cu}`, `baseline_persistent_matmul_tma.py`, `optimized_persistent_matmul_tma.py`", "Persistent kernels that keep the iteration loop on-device, contrasting synchronous staging with a two-stage shared-memory pipeline."),
         ("`baseline_warp_spec_pingpong.{py,cu}`, `optimized_warp_spec_pingpong.{py,cu}`, `baseline_flash_attn_tma_micro_pipeline.{py,cu}`, `optimized_flash_attn_tma_micro_pipeline.{py,cu}`, `baseline_warp_specialized_pipeline*.{py,cu}`, `optimized_warp_specialized_pipeline*.{py,cu}`", "Micro-pipeline and warp specialization studies, including explicit producer/compute/consumer warp roles and ping-pong staging."),
+        ("`baseline_warp_specialized_cluster_pipeline.{py,cu}`, `optimized_warp_specialized_cluster_pipeline.{py,cu}`", "Thread-block-cluster warp specialization example: a synchronous DSMEM baseline versus a leader-CTA pipeline that stages tiles once per cluster."),
         ("`compare.py`, `workload_config.py`, `demo_both_examples.sh`, `profile.sh`, `requirements_cufile.txt`", "Harness entry, workload dials, demo runner, Nsight automation, and optional cuFile deps."),
     ],
     validation=[

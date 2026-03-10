@@ -6,6 +6,8 @@ Use the optimized variant to see the uplift when using SymmetricMemory + direct 
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import datetime
 import os
 from typing import Dict, List, Optional, Tuple

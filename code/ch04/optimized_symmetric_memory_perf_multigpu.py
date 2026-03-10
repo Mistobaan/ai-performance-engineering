@@ -6,6 +6,8 @@ Demonstrates the uplift from using direct GPU-to-GPU memory access vs NCCL colle
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import datetime
 import os
 from typing import Dict, List, Optional, Tuple

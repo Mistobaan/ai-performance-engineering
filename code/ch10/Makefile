@@ -63,6 +63,18 @@ optimized_cluster_group_single_cta$(SUFFIX): optimized_cluster_group_single_cta.
 optimized_cluster_group_single_cta_verify$(SUFFIX): optimized_cluster_group_single_cta.cu cluster_group_common.cuh $(COMMON_HEADERS) $(CUDA_NVTX_DEPS)
 	$(NVCC) $(NVCC_FLAGS) -rdc=true -DVERIFY=1 $(INCLUDES) -o $@ $< $(CUDA_NVTX_LDFLAGS)
 
+baseline_warp_specialized_cluster_pipeline$(SUFFIX): baseline_warp_specialized_cluster_pipeline.cu $(COMMON_HEADERS) $(CUDA_NVTX_DEPS)
+	$(NVCC) $(NVCC_FLAGS) -std=c++17 -rdc=true $(INCLUDES) -o $@ $< $(CUDA_NVTX_LDFLAGS)
+
+baseline_warp_specialized_cluster_pipeline_verify$(SUFFIX): baseline_warp_specialized_cluster_pipeline.cu $(COMMON_HEADERS) $(CUDA_NVTX_DEPS)
+	$(NVCC) $(NVCC_FLAGS) -std=c++17 -rdc=true -DVERIFY=1 $(INCLUDES) -o $@ $< $(CUDA_NVTX_LDFLAGS)
+
+optimized_warp_specialized_cluster_pipeline$(SUFFIX): optimized_warp_specialized_cluster_pipeline.cu $(COMMON_HEADERS) $(CUDA_NVTX_DEPS)
+	$(NVCC) $(NVCC_FLAGS) -std=c++17 -rdc=true $(INCLUDES) -o $@ $< $(CUDA_NVTX_LDFLAGS)
+
+optimized_warp_specialized_cluster_pipeline_verify$(SUFFIX): optimized_warp_specialized_cluster_pipeline.cu $(COMMON_HEADERS) $(CUDA_NVTX_DEPS)
+	$(NVCC) $(NVCC_FLAGS) -std=c++17 -rdc=true -DVERIFY=1 $(INCLUDES) -o $@ $< $(CUDA_NVTX_LDFLAGS)
+
 tma_multicast_cluster$(SUFFIX): tma_multicast_cluster.cu $(COMMON_HEADERS) $(CUDA_NVTX_DEPS)
 	$(NVCC) $(NVCC_FLAGS) -std=c++17 -rdc=true $(INCLUDES) -lcuda -o $@ $< $(CUDA_NVTX_LDFLAGS)
 
