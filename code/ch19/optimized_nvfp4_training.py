@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from core.benchmark.verification import InputSignature, PrecisionFlags
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 
@@ -211,6 +212,28 @@ class OptimizedNVFP4TrainingBenchmark(VerificationPayloadMixin, BaseBenchmark):
             parameter_count=sum(p.numel() for p in self.model.parameters()),
             precision_flags=precision_flags,
             output_tolerance=(0.5, 5.0),
+        )
+
+    def get_input_signature(self) -> InputSignature:
+        parameter_count = self.num_layers * (
+            (self.hidden_dim * self.intermediate_dim)
+            + (self.intermediate_dim * self.hidden_dim)
+            + self.hidden_dim * 3
+            + self.intermediate_dim
+            + self.hidden_dim
+        )
+        return InputSignature(
+            shapes={
+                "verify_input": (self.batch_size, self.seq_len, self.hidden_dim),
+                "output": (self.batch_size, self.seq_len, self.hidden_dim),
+            },
+            dtypes={
+                "verify_input": str(torch.bfloat16),
+                "output": str(torch.float32),
+            },
+            batch_size=self.batch_size,
+            parameter_count=parameter_count,
+            precision_flags=PrecisionFlags(bf16=True, tf32=torch.backends.cuda.matmul.allow_tf32),
         )
 
     def teardown(self) -> None:

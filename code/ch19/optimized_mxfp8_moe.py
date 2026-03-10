@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 
 from core.utils import logger  # noqa: E402
+from core.benchmark.verification import InputSignature, PrecisionFlags
 from core.harness.benchmark_harness import (  # noqa: E402
     BaseBenchmark,
     BenchmarkConfig,
@@ -283,6 +284,24 @@ class OptimizedMXFP8MoEBenchmark(VerificationPayloadMixin, BaseBenchmark):
             parameter_count=self.weights.numel() if self.weights is not None else 0,
             output_tolerance=(0.5, 20.0),
             precision_flags={"fp16": False, "bf16": True, "fp8": True, "tf32": False},
+        )
+
+    def get_input_signature(self) -> InputSignature:
+        parameter_count = self.num_experts * self.ffn_dim * self.hidden_dim
+        return InputSignature(
+            shapes={
+                "inputs": (self.num_tokens, self.hidden_dim),
+                "weights": (self.num_experts, self.ffn_dim, self.hidden_dim),
+                "output": (self.num_tokens, self.ffn_dim),
+            },
+            dtypes={
+                "inputs": str(torch.bfloat16),
+                "weights": str(torch.bfloat16),
+                "output": str(torch.float16),
+            },
+            batch_size=self.num_tokens,
+            parameter_count=parameter_count,
+            precision_flags=PrecisionFlags(bf16=True, fp8=True, tf32=False),
         )
 
     def teardown(self) -> None:

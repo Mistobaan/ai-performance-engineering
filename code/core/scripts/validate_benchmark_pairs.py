@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import signal
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -222,6 +223,33 @@ def get_input_signature_safe(benchmark: Any) -> Tuple[Optional[InputSignature], 
                 pass
 
 
+def _is_skip_message(message: Optional[str]) -> bool:
+    return bool(message and "SKIPPED" in message.upper())
+
+
+class _PairTimeout:
+    """Best-effort timeout guard for pair validation on Unix-like systems."""
+
+    def __init__(self, seconds: Optional[int]) -> None:
+        self.seconds = int(seconds) if seconds else 0
+        self._active = False
+
+    def _handle_timeout(self, signum: int, frame: Any) -> None:
+        raise TimeoutError(f"Validation timeout after {self.seconds} seconds")
+
+    def __enter__(self) -> "_PairTimeout":
+        if self.seconds <= 0 or not hasattr(signal, "SIGALRM"):
+            return self
+        signal.signal(signal.SIGALRM, self._handle_timeout)
+        signal.alarm(self.seconds)
+        self._active = True
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if self._active:
+            signal.alarm(0)
+
+
 # =============================================================================
 # Pair Discovery
 # =============================================================================
@@ -344,11 +372,19 @@ def validate_pair(
     # Load benchmarks
     baseline_benchmark, baseline_load_error = load_benchmark_class(baseline_path)
     if baseline_benchmark is None:
+        if _is_skip_message(baseline_load_error):
+            result.skipped = True
+            result.error = baseline_load_error
+            return result
         result.error = f"Failed to load baseline benchmark: {baseline_load_error}"
         return result
     
     optimized_benchmark, optimized_load_error = load_benchmark_class(optimized_path)
     if optimized_benchmark is None:
+        if _is_skip_message(optimized_load_error):
+            result.skipped = True
+            result.error = optimized_load_error
+            return result
         result.error = f"Failed to load optimized benchmark: {optimized_load_error}"
         return result
     
@@ -358,6 +394,16 @@ def validate_pair(
     
     result.baseline_has_signature = baseline_sig is not None
     result.optimized_has_signature = optimized_sig is not None
+
+    if _is_skip_message(baseline_err) or _is_skip_message(optimized_err):
+        result.skipped = True
+        details: list[str] = []
+        if baseline_err:
+            details.append(f"baseline_error={baseline_err!r}")
+        if optimized_err:
+            details.append(f"optimized_error={optimized_err!r}")
+        result.error = "SKIPPED: " + ", ".join(details)
+        return result
     
     if baseline_sig is None and optimized_sig is None:
         if baseline_err and optimized_err and "SKIPPED" in baseline_err and "SKIPPED" in optimized_err:
@@ -419,6 +465,7 @@ def validate_pair(
 def validate_all_pairs(
     root_dir: Path,
     chapter: Optional[str] = None,
+    pair_timeout_seconds: Optional[int] = 120,
 ) -> ValidationReport:
     """Validate all benchmark pairs."""
     report = ValidationReport(timestamp=datetime.now().isoformat())
@@ -459,12 +506,22 @@ def validate_all_pairs(
             continue
         
         # Validate the pair
-        result = validate_pair(
-            chapter_name,
-            example_name,
-            paths["baseline"],
-            paths["optimized"],
-        )
+        try:
+            with _PairTimeout(pair_timeout_seconds):
+                result = validate_pair(
+                    chapter_name,
+                    example_name,
+                    paths["baseline"],
+                    paths["optimized"],
+                )
+        except TimeoutError as exc:
+            result = PairValidationResult(
+                chapter=chapter_name,
+                example_name=example_name,
+                baseline_path=str(paths["baseline"]),
+                optimized_path=str(paths["optimized"]),
+                error=str(exc),
+            )
         report.results.append(result)
         
         if result.valid:
@@ -561,12 +618,22 @@ def main() -> int:
         default=".",
         help="Root directory (default: current directory)"
     )
+    parser.add_argument(
+        "--pair-timeout-seconds",
+        type=int,
+        default=120,
+        help="Maximum time per pair validation before failing that pair (default: 120)",
+    )
     
     args = parser.parse_args()
     root_dir = args.root.resolve()
     
     # Run validation
-    report = validate_all_pairs(root_dir, args.chapter)
+    report = validate_all_pairs(
+        root_dir,
+        args.chapter,
+        pair_timeout_seconds=args.pair_timeout_seconds,
+    )
     
     # Print summary
     print_summary(report)

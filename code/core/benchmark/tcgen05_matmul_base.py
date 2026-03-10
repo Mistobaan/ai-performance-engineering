@@ -6,6 +6,7 @@ from typing import Optional
 
 import torch
 
+from core.benchmark.verification import InputSignature, PrecisionFlags
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
 
@@ -71,6 +72,27 @@ class Tcgen05MatmulBenchmarkBase(VerificationPayloadMixin, BaseBenchmark):
                 "tf32": False,
             },
             output_tolerance=self.output_tolerance,
+        )
+
+    def get_input_signature(self) -> InputSignature:
+        parameter_count = int(
+            (self.matrix_rows * self.shared_dim) + (self.matrix_cols * self.shared_dim)
+        )
+        dtype = str(self.tensor_dtype)
+        return InputSignature(
+            shapes={
+                "matrix_a": (self.matrix_rows, self.shared_dim),
+                "matrix_b": (self.matrix_cols, self.shared_dim),
+                "output": (self.matrix_rows, self.matrix_cols),
+            },
+            dtypes={"matrix_a": dtype, "matrix_b": dtype, "output": dtype},
+            batch_size=self.matrix_rows,
+            parameter_count=parameter_count,
+            precision_flags=PrecisionFlags(
+                fp16=self.tensor_dtype == torch.float16,
+                bf16=self.tensor_dtype == torch.bfloat16,
+                tf32=False,
+            ),
         )
 
     def validate_result(self) -> Optional[str]:

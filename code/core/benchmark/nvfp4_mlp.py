@@ -9,6 +9,7 @@ from typing import List, Optional, Tuple
 import torch
 import torch.nn as nn
 
+from core.benchmark.verification import InputSignature, PrecisionFlags
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
 
@@ -211,6 +212,29 @@ class NVFP4MLPBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 "tf32": False,
             },
             output_tolerance=self.config.output_tolerance,
+        )
+
+    def get_input_signature(self) -> InputSignature:
+        if self.config is None:
+            if not self.config_dict:
+                raise RuntimeError("NVFP4MLPBenchmark requires an explicit config")
+            self.config = NVFP4MLPConfig(**self.config_dict)
+        parameter_count = self.config.num_layers * (
+            (self.config.d_model * self.config.d_ff)
+            + (self.config.d_ff * self.config.d_model)
+            + (self.config.d_ff if self.config.use_bias else 0)
+            + (self.config.d_model if self.config.use_bias else 0)
+        )
+        dtype = str(torch.bfloat16)
+        return InputSignature(
+            shapes={
+                "input": (self.config.batch_size, self.config.d_model),
+                "output": (self.config.batch_size, self.config.d_model),
+            },
+            dtypes={"input": dtype, "output": dtype},
+            batch_size=self.config.batch_size,
+            parameter_count=parameter_count,
+            precision_flags=PrecisionFlags(bf16=True, tf32=False),
         )
 
     def validate_result(self) -> Optional[str]:
