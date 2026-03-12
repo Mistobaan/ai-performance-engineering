@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import ctypes
+from pathlib import Path
 from typing import List, Optional
 
 import torch
 import torch.nn as nn
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
+from core.env import apply_env_defaults
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
 from labs.kv_cache_compression.kv_cache_common import (
     KVCache,
@@ -18,6 +21,29 @@ from labs.kv_cache_compression.kv_cache_common import (
     reset_cache,
     resolve_device,
 )
+
+
+apply_env_defaults()
+
+
+def _preload_torch_cuda_symbols() -> None:
+    """Ensure torch CUDA shared objects are globally visible before TE import."""
+    torch_lib_dir = Path(torch.__file__).resolve().parent / "lib"
+    libs = [
+        "libtorch_cuda.so",
+        "libtorch_cuda_linalg.so",
+        "libtorch_nvshmem.so",
+        "libc10_cuda.so",
+    ]
+    for name in libs:
+        candidate = torch_lib_dir / name
+        try:
+            ctypes.CDLL(str(candidate), mode=ctypes.RTLD_GLOBAL)
+        except OSError:
+            continue
+
+
+_preload_torch_cuda_symbols()
 
 try:  # Transformer Engine is optional; fail fast in setup when missing.
     from transformer_engine.pytorch import Linear as TELinear
@@ -41,7 +67,9 @@ class BaselineKVCacheBenchmark(VerificationPayloadMixin, BaseBenchmark):
         super().__init__()
         self.device = resolve_device()
         self.tensor_dtype = torch.bfloat16
-        self.batch_size = 16
+        # Keep the lab large enough to exercise KV pressure without relying on
+        # near-capacity allocator behavior on single-GPU runs.
+        self.batch_size = 8
         self.hidden_dim = 16384
         self.num_heads = 64
         self.prefill_seq = 4096

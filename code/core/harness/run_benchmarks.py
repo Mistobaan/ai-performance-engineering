@@ -65,6 +65,7 @@ from core.harness.validity_profile import (
     PORTABLE_EXPECTATIONS_UPDATE_HELP_TEXT,
     normalize_validity_profile,
 )
+from core.harness.validity_checks import detect_execution_environment
 from core.harness.progress import ProgressEvent, ProgressRecorder
 from core.benchmark.defaults import BenchmarkDefaults, set_defaults, get_defaults
 from core.benchmark.run_manifest import get_gpu_state
@@ -169,6 +170,47 @@ def _query_gpu_telemetry_for_profile(
             )
             return None
         raise
+
+
+def _set_profiler_status(statuses: Dict[str, str], profiler: str, status: str) -> None:
+    """Track profiler outcomes for later validity enforcement."""
+    statuses[profiler] = status
+
+
+def _collect_required_profiler_failures(
+    result_entry: Dict[str, Any],
+    best_opt: Optional[Dict[str, Any]],
+    *,
+    profiling_requested: bool,
+) -> List[str]:
+    """Return required profiler failures for a benchmark pair.
+
+    Profiling-enabled runs are only trustworthy when the requested profilers
+    actually succeed. Treat skipped or failed profiler outcomes as invalid.
+    """
+    if not profiling_requested:
+        return []
+
+    failures: List[str] = []
+    baseline_statuses = result_entry.get("baseline_profiler_statuses") or {}
+    for profiler, status in sorted(baseline_statuses.items()):
+        if status != "succeeded":
+            failures.append(f"baseline:{profiler}:{status}")
+
+    if best_opt and isinstance(best_opt, dict):
+        optimized_statuses = best_opt.get("optimized_profiler_statuses") or {}
+        for profiler, status in sorted(optimized_statuses.items()):
+            if status != "succeeded":
+                failures.append(f"optimized:{profiler}:{status}")
+
+    return failures
+
+
+def _format_required_profiler_failure(failures: List[str]) -> str:
+    detail = ", ".join(failures)
+    return f"Required profilers did not succeed: {detail}"
+
+
 PROGRESS_TOTAL_PHASES = max(PROGRESS_PHASES.values())
 _SERVING_STACK_PINS = get_serving_stack_pins()
 
@@ -891,6 +933,28 @@ def log_expectation_delta(
     goal_norm = (goal or "speed").strip().lower()
     new_score = new_entry.primary_improvement
     old_score = old_entry.primary_improvement if old_entry else None
+    old_provenance = old_entry.provenance.to_dict() if old_entry else None
+    new_provenance = new_entry.provenance.to_dict()
+    update_message = update_result.message if update_result else None
+    validation_issues = (
+        [issue.to_dict() for issue in update_result.validation_issues]
+        if update_result
+        else []
+    )
+    validation_issue_types = [issue["issue_type"] for issue in validation_issues]
+    provenance_mismatch_fields: list[str] = []
+    for issue in validation_issues:
+        if issue.get("issue_type") != "provenance_mismatch":
+            continue
+        stored_value = issue.get("stored_value")
+        expected_value = issue.get("expected_value")
+        if isinstance(stored_value, dict) and isinstance(expected_value, dict):
+            for field_name in sorted(set(stored_value) | set(expected_value)):
+                if stored_value.get(field_name) != expected_value.get(field_name):
+                    provenance_mismatch_fields.append(field_name)
+        break
+    if not provenance_mismatch_fields and old_entry is not None:
+        provenance_mismatch_fields = new_entry.provenance.mismatch_fields(old_entry.provenance)
     delta = None
     delta_pct = None
     if old_score is not None:
@@ -929,6 +993,12 @@ def log_expectation_delta(
             example=example_key,
             goal=goal_norm,
             status=status,
+            update_message=update_message,
+            validation_issue_types=validation_issue_types,
+            validation_issues=validation_issues,
+            old_provenance=old_provenance,
+            new_provenance=new_provenance,
+            provenance_mismatch_fields=provenance_mismatch_fields,
             old_score=old_score,
             new_score=new_score,
             delta=delta,
@@ -3397,7 +3467,8 @@ def _test_chapter_impl(
         git_commit = get_git_info().get("commit")
     except Exception:
         git_commit = None
-    
+    execution_environment = detect_execution_environment()
+
     if not torch.cuda.is_available():
         emit_event(
             event_logger,
@@ -3879,6 +3950,7 @@ def _test_chapter_impl(
                 'baseline_time_ms': None,
                 'baseline_throughput': None,
                 'baseline_memory_mb': None,  # Peak memory for baseline
+                'baseline_profiler_statuses': {},
                 'optimizations': [],
                 'best_speedup': 1.0,
                 'best_memory_savings_pct': 0.0,  # Memory reduction percentage
@@ -4235,6 +4307,7 @@ def _test_chapter_impl(
                 if enable_profiling and profiling_output_dir:
                     logger.info(f"    Profiling baseline...")
                     profiler_results = []
+                    baseline_profiler_statuses: Dict[str, str] = {}
                     baseline_metrics = {}
                     
                     # nsys profiling
@@ -4268,6 +4341,7 @@ def _test_chapter_impl(
                         if nsys_path:
                             result_entry['baseline_nsys_rep'] = _repo_relative_path(nsys_path, repo_root)
                             profiler_results.append("nsys✓")
+                            _set_profiler_status(baseline_profiler_statuses, "nsys", "succeeded")
                             baseline_profile_paths["nsys"] = nsys_path
                             # Extract metrics
                             nsys_metrics = extract_from_nsys_report(nsys_path)
@@ -4288,6 +4362,7 @@ def _test_chapter_impl(
                             )
                         else:
                             profiler_results.append("nsys✗")
+                            _set_profiler_status(baseline_profiler_statuses, "nsys", "failed")
                             emit_event(
                                 event_logger,
                                 logger,
@@ -4303,6 +4378,7 @@ def _test_chapter_impl(
                             )
                     else:
                         profiler_results.append("nsys-")
+                        _set_profiler_status(baseline_profiler_statuses, "nsys", "skipped")
                         emit_event(
                             event_logger,
                             logger,
@@ -4348,6 +4424,7 @@ def _test_chapter_impl(
                         if ncu_path:
                             result_entry['baseline_ncu_rep'] = _repo_relative_path(ncu_path, repo_root)
                             profiler_results.append("ncu✓")
+                            _set_profiler_status(baseline_profiler_statuses, "ncu", "succeeded")
                             baseline_profile_paths["ncu"] = ncu_path
                             # Extract metrics
                             ncu_metrics = extract_from_ncu_report(ncu_path)
@@ -4368,6 +4445,7 @@ def _test_chapter_impl(
                             )
                         else:
                             profiler_results.append("ncu✗")
+                            _set_profiler_status(baseline_profiler_statuses, "ncu", "failed")
                             emit_event(
                                 event_logger,
                                 logger,
@@ -4383,6 +4461,7 @@ def _test_chapter_impl(
                             )
                     else:
                         profiler_results.append("ncu-")
+                        _set_profiler_status(baseline_profiler_statuses, "ncu", "skipped")
                         emit_event(
                             event_logger,
                             logger,
@@ -4427,6 +4506,7 @@ def _test_chapter_impl(
                         if torch_path:
                             result_entry['baseline_torch_trace'] = _repo_relative_path(torch_path, repo_root)
                             profiler_results.append("torch✓")
+                            _set_profiler_status(baseline_profiler_statuses, "torch", "succeeded")
                             baseline_profile_paths["torch"] = torch_path
                             # Extract metrics
                             torch_metrics = extract_from_pytorch_trace(torch_path)
@@ -4447,6 +4527,7 @@ def _test_chapter_impl(
                             )
                         else:
                             profiler_results.append("torch✗")
+                            _set_profiler_status(baseline_profiler_statuses, "torch", "failed")
                             emit_event(
                                 event_logger,
                                 logger,
@@ -4462,6 +4543,7 @@ def _test_chapter_impl(
                             )
                     else:
                         profiler_results.append("torch-")
+                        _set_profiler_status(baseline_profiler_statuses, "torch", "skipped")
                         emit_event(
                             event_logger,
                             logger,
@@ -4477,6 +4559,7 @@ def _test_chapter_impl(
                         )
                     
                     logger.info(f" ({', '.join(profiler_results)})")
+                    result_entry["baseline_profiler_statuses"] = dict(baseline_profiler_statuses)
                     _reap_run_descendants(f"{chapter_name}:{example_name}:baseline_profiling")
                     
                     # Display extracted metrics
@@ -5048,6 +5131,7 @@ def _test_chapter_impl(
                         pair_dir.mkdir(parents=True, exist_ok=True)
                         logger.info(f"\n    Profiling optimized...")
                         profiler_results = []
+                        optimized_profiler_statuses: Dict[str, str] = {}
                         optimized_metrics = {}
                         
                         # nsys profiling
@@ -5082,6 +5166,7 @@ def _test_chapter_impl(
                             if nsys_path:
                                 opt_result['optimized_nsys_rep'] = _repo_relative_path(nsys_path, repo_root)
                                 profiler_results.append("nsys✓")
+                                _set_profiler_status(optimized_profiler_statuses, "nsys", "succeeded")
                                 # Extract metrics
                                 nsys_metrics = extract_from_nsys_report(nsys_path)
                                 if nsys_metrics:
@@ -5102,6 +5187,7 @@ def _test_chapter_impl(
                                 )
                             else:
                                 profiler_results.append("nsys✗")
+                                _set_profiler_status(optimized_profiler_statuses, "nsys", "failed")
                                 emit_event(
                                     event_logger,
                                     logger,
@@ -5118,6 +5204,7 @@ def _test_chapter_impl(
                                 )
                         else:
                             profiler_results.append("nsys-")
+                            _set_profiler_status(optimized_profiler_statuses, "nsys", "skipped")
                             emit_event(
                                 event_logger,
                                 logger,
@@ -5165,6 +5252,7 @@ def _test_chapter_impl(
                             if ncu_path:
                                 opt_result['optimized_ncu_rep'] = _repo_relative_path(ncu_path, repo_root)
                                 profiler_results.append("ncu✓")
+                                _set_profiler_status(optimized_profiler_statuses, "ncu", "succeeded")
                                 # Extract metrics
                                 ncu_metrics = extract_from_ncu_report(ncu_path)
                                 if ncu_metrics:
@@ -5185,6 +5273,7 @@ def _test_chapter_impl(
                                 )
                             else:
                                 profiler_results.append("ncu✗")
+                                _set_profiler_status(optimized_profiler_statuses, "ncu", "failed")
                                 emit_event(
                                     event_logger,
                                     logger,
@@ -5201,6 +5290,7 @@ def _test_chapter_impl(
                                 )
                         else:
                             profiler_results.append("ncu-")
+                            _set_profiler_status(optimized_profiler_statuses, "ncu", "skipped")
                             emit_event(
                                 event_logger,
                                 logger,
@@ -5247,6 +5337,7 @@ def _test_chapter_impl(
                             if torch_path:
                                 opt_result['optimized_torch_trace'] = _repo_relative_path(torch_path, repo_root)
                                 profiler_results.append("torch✓")
+                                _set_profiler_status(optimized_profiler_statuses, "torch", "succeeded")
                                 # Extract metrics
                                 torch_metrics = extract_from_pytorch_trace(torch_path)
                                 if torch_metrics:
@@ -5267,6 +5358,7 @@ def _test_chapter_impl(
                                 )
                             else:
                                 profiler_results.append("torch✗")
+                                _set_profiler_status(optimized_profiler_statuses, "torch", "failed")
                                 emit_event(
                                     event_logger,
                                     logger,
@@ -5283,6 +5375,7 @@ def _test_chapter_impl(
                                 )
                         else:
                             profiler_results.append("torch-")
+                            _set_profiler_status(optimized_profiler_statuses, "torch", "skipped")
                             emit_event(
                                 event_logger,
                                 logger,
@@ -5299,6 +5392,7 @@ def _test_chapter_impl(
                             )
                         
                         logger.info(f" ({', '.join(profiler_results)})")
+                        opt_result["optimized_profiler_statuses"] = dict(optimized_profiler_statuses)
                         _reap_run_descendants(f"{chapter_name}:{example_name}:{technique}:optimized_profiling")
                         
                         # Display extracted metrics
@@ -5484,6 +5578,7 @@ def _test_chapter_impl(
                             pair_dir.mkdir(parents=True, exist_ok=True)
                             logger.info(f"\n    Profiling optimized (best only: {best_key})...")
                             profiler_results = []
+                            optimized_profiler_statuses: Dict[str, str] = {}
                             optimized_metrics = {}
 
                             optimized_benchmark = cand.get("benchmark")
@@ -5522,6 +5617,7 @@ def _test_chapter_impl(
                                 if nsys_path:
                                     best_opt["optimized_nsys_rep"] = _repo_relative_path(nsys_path, repo_root)
                                     profiler_results.append("nsys✓")
+                                    _set_profiler_status(optimized_profiler_statuses, "nsys", "succeeded")
                                     nsys_metrics = extract_from_nsys_report(nsys_path)
                                     if nsys_metrics:
                                         optimized_metrics["nsys"] = nsys_metrics
@@ -5541,6 +5637,7 @@ def _test_chapter_impl(
                                     )
                                 else:
                                     profiler_results.append("nsys✗")
+                                    _set_profiler_status(optimized_profiler_statuses, "nsys", "failed")
                                     emit_event(
                                         event_logger,
                                         logger,
@@ -5557,6 +5654,7 @@ def _test_chapter_impl(
                                     )
                             else:
                                 profiler_results.append("nsys-")
+                                _set_profiler_status(optimized_profiler_statuses, "nsys", "skipped")
                                 emit_event(
                                     event_logger,
                                     logger,
@@ -5604,6 +5702,7 @@ def _test_chapter_impl(
                                 if ncu_path:
                                     best_opt["optimized_ncu_rep"] = _repo_relative_path(ncu_path, repo_root)
                                     profiler_results.append("ncu✓")
+                                    _set_profiler_status(optimized_profiler_statuses, "ncu", "succeeded")
                                     ncu_metrics = extract_from_ncu_report(ncu_path)
                                     if ncu_metrics:
                                         optimized_metrics["ncu"] = ncu_metrics
@@ -5623,6 +5722,7 @@ def _test_chapter_impl(
                                     )
                                 else:
                                     profiler_results.append("ncu✗")
+                                    _set_profiler_status(optimized_profiler_statuses, "ncu", "failed")
                                     emit_event(
                                         event_logger,
                                         logger,
@@ -5639,6 +5739,7 @@ def _test_chapter_impl(
                                     )
                             else:
                                 profiler_results.append("ncu-")
+                                _set_profiler_status(optimized_profiler_statuses, "ncu", "skipped")
                                 emit_event(
                                     event_logger,
                                     logger,
@@ -5685,6 +5786,7 @@ def _test_chapter_impl(
                                 if torch_path:
                                     best_opt["optimized_torch_trace"] = _repo_relative_path(torch_path, repo_root)
                                     profiler_results.append("torch✓")
+                                    _set_profiler_status(optimized_profiler_statuses, "torch", "succeeded")
                                     torch_metrics = extract_from_pytorch_trace(torch_path)
                                     if torch_metrics:
                                         optimized_metrics["torch"] = torch_metrics
@@ -5704,6 +5806,7 @@ def _test_chapter_impl(
                                     )
                                 else:
                                     profiler_results.append("torch✗")
+                                    _set_profiler_status(optimized_profiler_statuses, "torch", "failed")
                                     emit_event(
                                         event_logger,
                                         logger,
@@ -5720,6 +5823,7 @@ def _test_chapter_impl(
                                     )
                             else:
                                 profiler_results.append("torch-")
+                                _set_profiler_status(optimized_profiler_statuses, "torch", "skipped")
                                 emit_event(
                                     event_logger,
                                     logger,
@@ -5736,6 +5840,7 @@ def _test_chapter_impl(
                                 )
 
                             logger.info(f" ({', '.join(profiler_results)})")
+                            best_opt["optimized_profiler_statuses"] = dict(optimized_profiler_statuses)
                             if optimized_metrics:
                                 logger.info("        📈 Profiler Metrics:")
                                 log_profiler_metrics_table(logger, optimized_metrics, indent="          ")
@@ -5788,6 +5893,9 @@ def _test_chapter_impl(
                         timestamp=datetime.now().isoformat(),
                         iterations=int(iterations),
                         warmup_iterations=int(warmup),
+                        execution_environment=execution_environment.kind,
+                        validity_profile=validity_profile,
+                        dmi_product_name=execution_environment.dmi_product_name,
                     )
                     entry = ExpectationEntry(
                         example=result_entry.get("example", example_key),
@@ -5863,7 +5971,17 @@ def _test_chapter_impl(
                     and update_result.status == "rejected"
                     and any(issue.issue_type == "regression" for issue in update_result.validation_issues)
                 )
-                if is_rejected_regression:
+                profiler_failures = _collect_required_profiler_failures(
+                    result_entry,
+                    best_opt,
+                    profiling_requested=bool(enable_profiling and profiling_output_dir),
+                )
+                if profiler_failures:
+                    result_entry["status"] = "failed_profiler"
+                    result_entry["error"] = _format_required_profiler_failure(profiler_failures)
+                    logger.warning("    WARNING: %s", result_entry["error"])
+                    failed_error += 1
+                elif is_rejected_regression:
                     regression_metrics = None
                     if best_opt and isinstance(best_opt, dict):
                         regression_metrics = best_opt.get("gpu_metrics")
@@ -5884,8 +6002,19 @@ def _test_chapter_impl(
                     result_entry['status'] = 'succeeded'
                     successful += 1
             elif baseline_ok and (all_skipped_opt or not optimizations):
-                result_entry['status'] = 'succeeded'
-                successful += 1
+                profiler_failures = _collect_required_profiler_failures(
+                    result_entry,
+                    None,
+                    profiling_requested=bool(enable_profiling and profiling_output_dir),
+                )
+                if profiler_failures:
+                    result_entry["status"] = "failed_profiler"
+                    result_entry["error"] = _format_required_profiler_failure(profiler_failures)
+                    logger.warning("    WARNING: %s", result_entry["error"])
+                    failed_error += 1
+                else:
+                    result_entry['status'] = 'succeeded'
+                    successful += 1
             elif baseline_ok and (not has_success) and any_failed_verification and (not any_failed_error_opt):
                 result_entry['status'] = 'failed_verification'
                 result_entry['error'] = result_entry.get('error') or 'No optimizations passed verification'
@@ -5953,6 +6082,7 @@ def _test_chapter_impl(
                 'type': 'cuda',
                 'baseline_time_ms': None,
                 'baseline_throughput': None,
+                'baseline_profiler_statuses': {},
                 'optimizations': [],
                 'best_speedup': 1.0,
                 'status': 'failed_error',
@@ -6148,6 +6278,7 @@ def _test_chapter_impl(
             if enable_profiling and profiling_output_dir:
                 logger.info(f"    Profiling baseline...")
                 profiler_results = []
+                baseline_profiler_statuses: Dict[str, str] = {}
                 baseline_metrics = {}
 
                 # nsys profiling
@@ -6180,6 +6311,7 @@ def _test_chapter_impl(
                     if nsys_path:
                         result_entry['baseline_nsys_rep'] = _repo_relative_path(nsys_path, repo_root)
                         profiler_results.append("nsys✓")
+                        _set_profiler_status(baseline_profiler_statuses, "nsys", "succeeded")
                         baseline_profile_paths["nsys"] = nsys_path
                         # Extract metrics
                         nsys_metrics = extract_from_nsys_report(nsys_path)
@@ -6200,6 +6332,7 @@ def _test_chapter_impl(
                         )
                     else:
                         profiler_results.append("nsys✗")
+                        _set_profiler_status(baseline_profiler_statuses, "nsys", "failed")
                         emit_event(
                             event_logger,
                             logger,
@@ -6215,6 +6348,7 @@ def _test_chapter_impl(
                         )
                 else:
                     profiler_results.append("nsys-")
+                    _set_profiler_status(baseline_profiler_statuses, "nsys", "skipped")
                     emit_event(
                         event_logger,
                         logger,
@@ -6259,6 +6393,7 @@ def _test_chapter_impl(
                     if ncu_path:
                         result_entry['baseline_ncu_rep'] = _repo_relative_path(ncu_path, repo_root)
                         profiler_results.append("ncu✓")
+                        _set_profiler_status(baseline_profiler_statuses, "ncu", "succeeded")
                         baseline_profile_paths["ncu"] = ncu_path
                         # Extract metrics
                         ncu_metrics = extract_from_ncu_report(ncu_path)
@@ -6279,6 +6414,7 @@ def _test_chapter_impl(
                         )
                     else:
                         profiler_results.append("ncu✗")
+                        _set_profiler_status(baseline_profiler_statuses, "ncu", "failed")
                         emit_event(
                             event_logger,
                             logger,
@@ -6294,6 +6430,7 @@ def _test_chapter_impl(
                         )
                 else:
                     profiler_results.append("ncu-")
+                    _set_profiler_status(baseline_profiler_statuses, "ncu", "skipped")
                     emit_event(
                         event_logger,
                         logger,
@@ -6309,6 +6446,7 @@ def _test_chapter_impl(
                     )
 
                 logger.info(f" ({', '.join(profiler_results)})")
+                result_entry["baseline_profiler_statuses"] = dict(baseline_profiler_statuses)
                 _reap_run_descendants(f"{chapter_name}:{example_name}:cuda_baseline_profiling")
 
                 # Display extracted metrics
@@ -6598,6 +6736,7 @@ def _test_chapter_impl(
                     pair_dir.mkdir(parents=True, exist_ok=True)
                     logger.info(f"\n    Profiling optimized...")
                     profiler_results = []
+                    optimized_profiler_statuses: Dict[str, str] = {}
                     optimized_metrics = {}
 
                     # nsys profiling
@@ -6631,6 +6770,7 @@ def _test_chapter_impl(
                         if nsys_path:
                             opt_result['optimized_nsys_rep'] = _repo_relative_path(nsys_path, repo_root)
                             profiler_results.append("nsys✓")
+                            _set_profiler_status(optimized_profiler_statuses, "nsys", "succeeded")
                             # Extract metrics
                             nsys_metrics = extract_from_nsys_report(nsys_path)
                             if nsys_metrics:
@@ -6651,6 +6791,7 @@ def _test_chapter_impl(
                             )
                         else:
                             profiler_results.append("nsys✗")
+                            _set_profiler_status(optimized_profiler_statuses, "nsys", "failed")
                             emit_event(
                                 event_logger,
                                 logger,
@@ -6667,6 +6808,7 @@ def _test_chapter_impl(
                             )
                     else:
                         profiler_results.append("nsys-")
+                        _set_profiler_status(optimized_profiler_statuses, "nsys", "skipped")
                         emit_event(
                             event_logger,
                             logger,
@@ -6713,6 +6855,7 @@ def _test_chapter_impl(
                         if ncu_path:
                             opt_result['optimized_ncu_rep'] = _repo_relative_path(ncu_path, repo_root)
                             profiler_results.append("ncu✓")
+                            _set_profiler_status(optimized_profiler_statuses, "ncu", "succeeded")
                             # Extract metrics
                             ncu_metrics = extract_from_ncu_report(ncu_path)
                             if ncu_metrics:
@@ -6733,6 +6876,7 @@ def _test_chapter_impl(
                             )
                         else:
                             profiler_results.append("ncu✗")
+                            _set_profiler_status(optimized_profiler_statuses, "ncu", "failed")
                             emit_event(
                                 event_logger,
                                 logger,
@@ -6749,6 +6893,7 @@ def _test_chapter_impl(
                             )
                     else:
                         profiler_results.append("ncu-")
+                        _set_profiler_status(optimized_profiler_statuses, "ncu", "skipped")
                         emit_event(
                             event_logger,
                             logger,
@@ -6764,25 +6909,26 @@ def _test_chapter_impl(
                             metrics=None,
                         )
 
-                        logger.info(f" ({', '.join(profiler_results)})")
-                        _reap_run_descendants(f"{chapter_name}:{example_name}:{best_key}:cuda_optimized_profiling")
+                    logger.info(f" ({', '.join(profiler_results)})")
+                    opt_result["optimized_profiler_statuses"] = dict(optimized_profiler_statuses)
+                    _reap_run_descendants(f"{chapter_name}:{example_name}:{technique}:cuda_optimized_profiling")
 
-                        # Display extracted metrics
-                        if optimized_metrics:
-                            logger.info("        📈 Profiler Metrics:")
-                            log_profiler_metrics_table(logger, optimized_metrics, indent="          ")
-                            opt_result['optimized_profiler_metrics'] = optimized_metrics
-                            emit_event(
-                                event_logger,
-                                logger,
-                                "profiler_summary",
-                                chapter=chapter_name,
-                                example=example_name,
-                                example_type="cuda",
-                                variant="optimized",
-                                technique=technique,
-                                metrics=optimized_metrics,
-                            )
+                    # Display extracted metrics
+                    if optimized_metrics:
+                        logger.info("        📈 Profiler Metrics:")
+                        log_profiler_metrics_table(logger, optimized_metrics, indent="          ")
+                        opt_result['optimized_profiler_metrics'] = optimized_metrics
+                        emit_event(
+                            event_logger,
+                            logger,
+                            "profiler_summary",
+                            chapter=chapter_name,
+                            example=example_name,
+                            example_type="cuda",
+                            variant="optimized",
+                            technique=technique,
+                            metrics=optimized_metrics,
+                        )
 
                 result_entry['optimizations'].append(opt_result)
                 emit_event(
@@ -6842,6 +6988,7 @@ def _test_chapter_impl(
                             pair_dir.mkdir(parents=True, exist_ok=True)
                             logger.info(f"\n    Profiling optimized (best only: {best_key})...")
                             profiler_results = []
+                            optimized_profiler_statuses: Dict[str, str] = {}
                             optimized_metrics = {}
 
                             optimized_executable = cand.get("executable")
@@ -6877,6 +7024,7 @@ def _test_chapter_impl(
                                 if nsys_path:
                                     best_opt["optimized_nsys_rep"] = _repo_relative_path(nsys_path, repo_root)
                                     profiler_results.append("nsys✓")
+                                    _set_profiler_status(optimized_profiler_statuses, "nsys", "succeeded")
                                     nsys_metrics = extract_from_nsys_report(nsys_path)
                                     if nsys_metrics:
                                         optimized_metrics["nsys"] = nsys_metrics
@@ -6896,6 +7044,7 @@ def _test_chapter_impl(
                                     )
                                 else:
                                     profiler_results.append("nsys✗")
+                                    _set_profiler_status(optimized_profiler_statuses, "nsys", "failed")
                                     emit_event(
                                         event_logger,
                                         logger,
@@ -6912,6 +7061,7 @@ def _test_chapter_impl(
                                     )
                             else:
                                 profiler_results.append("nsys-")
+                                _set_profiler_status(optimized_profiler_statuses, "nsys", "skipped")
                                 emit_event(
                                     event_logger,
                                     logger,
@@ -6957,6 +7107,7 @@ def _test_chapter_impl(
                                 if ncu_path:
                                     best_opt["optimized_ncu_rep"] = _repo_relative_path(ncu_path, repo_root)
                                     profiler_results.append("ncu✓")
+                                    _set_profiler_status(optimized_profiler_statuses, "ncu", "succeeded")
                                     ncu_metrics = extract_from_ncu_report(ncu_path)
                                     if ncu_metrics:
                                         optimized_metrics["ncu"] = ncu_metrics
@@ -6976,6 +7127,7 @@ def _test_chapter_impl(
                                     )
                                 else:
                                     profiler_results.append("ncu✗")
+                                    _set_profiler_status(optimized_profiler_statuses, "ncu", "failed")
                                     emit_event(
                                         event_logger,
                                         logger,
@@ -6992,6 +7144,7 @@ def _test_chapter_impl(
                                     )
                             else:
                                 profiler_results.append("ncu-")
+                                _set_profiler_status(optimized_profiler_statuses, "ncu", "skipped")
                                 emit_event(
                                     event_logger,
                                     logger,
@@ -7008,6 +7161,7 @@ def _test_chapter_impl(
                                 )
 
                             logger.info(f" ({', '.join(profiler_results)})")
+                            best_opt["optimized_profiler_statuses"] = dict(optimized_profiler_statuses)
                             if optimized_metrics:
                                 logger.info("        📈 Profiler Metrics:")
                                 log_profiler_metrics_table(logger, optimized_metrics, indent="          ")
@@ -7052,6 +7206,9 @@ def _test_chapter_impl(
                         timestamp=datetime.now().isoformat(),
                         iterations=int(iterations),
                         warmup_iterations=int(warmup),
+                        execution_environment=execution_environment.kind,
+                        validity_profile=validity_profile,
+                        dmi_product_name=execution_environment.dmi_product_name,
                     )
                     entry = ExpectationEntry(
                         example=result_entry.get("example", example_key),
@@ -7127,7 +7284,17 @@ def _test_chapter_impl(
                     and update_result.status == "rejected"
                     and any(issue.issue_type == "regression" for issue in update_result.validation_issues)
                 )
-                if is_rejected_regression:
+                profiler_failures = _collect_required_profiler_failures(
+                    result_entry,
+                    best_opt,
+                    profiling_requested=bool(enable_profiling and profiling_output_dir),
+                )
+                if profiler_failures:
+                    result_entry["status"] = "failed_profiler"
+                    result_entry["error"] = _format_required_profiler_failure(profiler_failures)
+                    logger.warning("    WARNING: %s", result_entry["error"])
+                    failed_error += 1
+                elif is_rejected_regression:
                     regression_metrics = None
                     if best_opt and isinstance(best_opt, dict):
                         regression_metrics = best_opt.get("gpu_metrics")
@@ -7159,8 +7326,19 @@ def _test_chapter_impl(
                     result_entry["status"] = "succeeded"
                     successful += 1
             elif baseline_ok and (all_skipped_opt or not optimizations):
-                result_entry['status'] = 'succeeded'
-                successful += 1
+                profiler_failures = _collect_required_profiler_failures(
+                    result_entry,
+                    None,
+                    profiling_requested=bool(enable_profiling and profiling_output_dir),
+                )
+                if profiler_failures:
+                    result_entry["status"] = "failed_profiler"
+                    result_entry["error"] = _format_required_profiler_failure(profiler_failures)
+                    logger.warning("    WARNING: %s", result_entry["error"])
+                    failed_error += 1
+                else:
+                    result_entry['status'] = 'succeeded'
+                    successful += 1
             else:
                 result_entry['status'] = 'failed_error'
                 if not result_entry.get('error'):
@@ -7524,13 +7702,19 @@ def _test_chapter_impl(
     failed_error_final = final_status_counts.get("failed_error", 0)
     failed_verification_final = final_status_counts.get("failed_verification", 0)
     failed_regression_final = final_status_counts.get("failed_regression", 0)
+    failed_profiler_final = final_status_counts.get("failed_profiler", 0)
     failed_plain_final = final_status_counts.get("failed", 0)
     total_failed = sum(
         count for status, count in final_status_counts.items() if status == "failed" or status.startswith("failed_")
     )
     failed_other_final = max(
         0,
-        total_failed - failed_error_final - failed_verification_final - failed_regression_final - failed_plain_final,
+        total_failed
+        - failed_error_final
+        - failed_verification_final
+        - failed_regression_final
+        - failed_profiler_final
+        - failed_plain_final,
     )
     total_skipped = final_status_counts.get("skipped", 0)
 
@@ -7539,7 +7723,8 @@ def _test_chapter_impl(
     logger.info(
         f"Benchmarks: {len(benchmark_results)} | Succeeded: {successful_final} | "
         f"Failed: {total_failed} (errors={failed_error_final}, verification={failed_verification_final}, "
-        f"regressions={failed_regression_final}, generic={failed_plain_final}, other={failed_other_final}) | "
+        f"regressions={failed_regression_final}, profiler={failed_profiler_final}, generic={failed_plain_final}, "
+        f"other={failed_other_final}) | "
         f"Skipped: {total_skipped} (HW: {skipped_hw}, Dist: {skipped_distributed}) | "
         f"Informational: {informational_skipped}"
     )
@@ -7560,6 +7745,7 @@ def _test_chapter_impl(
         failed_error=failed_error_final,
         failed_verification=failed_verification_final,
         failed_regression=failed_regression_final,
+        failed_profiler=failed_profiler_final,
         failed_generic=failed_plain_final,
         failed_other=failed_other_final,
         skipped_hardware=skipped_hw,

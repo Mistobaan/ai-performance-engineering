@@ -69,6 +69,11 @@ TOOLS: Dict[str, ToolSpec] = {
         script_path=REPO_ROOT / "core" / "scripts" / "utilities" / "probe_hardware_capabilities.py",
         description="Probe hardware capabilities (recommended).",
     ),
+    "benchmark-contracts": ToolSpec(
+        name="benchmark-contracts",
+        script_path=REPO_ROOT / "core" / "scripts" / "utilities" / "benchmark_contracts.py",
+        description="Show the benchmark methodology, warehouse, and BenchmarkRun contract surfaces.",
+    ),
     "roofline": ToolSpec(
         name="roofline",
         script_path=REPO_ROOT / "ch08" / "roofline.py",

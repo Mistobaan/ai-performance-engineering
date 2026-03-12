@@ -21,6 +21,7 @@ export const DASHBOARD_TABS: DashboardTab[] = [
   { id: 'tier1', label: 'Tier-1', href: '/tier1', shortcut: '7' },
   { id: 'system', label: 'System', href: '/system', shortcut: '8' },
   { id: 'cluster', label: 'Cluster', href: '/cluster', shortcut: '9' },
+  { id: 'contracts', label: 'Contracts', href: '/contracts', shortcut: '0' },
 ];
 
 export function Navigation() {

@@ -11,7 +11,9 @@ from labs.flashattention4.optimized_best_available_attention_alibi import (
     OptimizedBestAvailableAttentionAlibiBenchmark,
 )
 from labs.flashattention4.flashattention4_common import (
+    FlashAttention4Inputs,
     FlashAttention4Config,
+    _experimental_windowed_skip_reason,
     best_available_candidate_providers,
     build_flashattention4_mode_table_payload,
     build_reference_inputs,
@@ -188,3 +190,41 @@ def test_explicit_mode_targets_override_default_mode() -> None:
     alibi_bench = OptimizedBestAvailableAttentionAlibiBenchmark()
     assert dense_bench.config.mode == "dense"
     assert alibi_bench.config.mode == "alibi"
+
+
+def test_experimental_windowed_skip_reason_requires_nonfinite_failures() -> None:
+    assert _experimental_windowed_skip_reason(
+        "windowed",
+        {"flash_backend": "failed correctness smoke test: non-finite output"},
+    ) is not None
+    assert _experimental_windowed_skip_reason(
+        "windowed",
+        {"flash_backend": "failed correctness smoke test: max_diff=1.23"},
+    ) is None
+    assert _experimental_windowed_skip_reason(
+        "causal",
+        {"flash_backend": "failed correctness smoke test: non-finite output"},
+    ) is None
+
+
+def test_flashattention_capture_verification_payload_uses_small_cpu_slice() -> None:
+    bench = BaselineFlashAttention4DenseBenchmark()
+    bench.inputs = FlashAttention4Inputs(
+        q=torch.randn(2, 8, 256, 32),
+        k=torch.randn(2, 8, 256, 32),
+        v=torch.randn(2, 8, 256, 32),
+        dense_mask=None,
+        block_mask=None,
+        alibi_slopes=None,
+        softcap_scale=None,
+        mode="dense",
+        window_size=256,
+        block_size=128,
+    )
+    bench.output = torch.randn(2, 8, 256, 32)
+
+    bench.capture_verification_payload()
+
+    verify_output = bench.get_verify_output()
+    assert verify_output.shape == (1, 1, 128, 16)
+    assert verify_output.device.type == "cpu"

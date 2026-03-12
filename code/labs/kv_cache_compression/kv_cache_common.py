@@ -9,6 +9,9 @@ import sys
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
+from core.harness.arch_config import prefer_sdpa_backends
 
 
 def resolve_device() -> torch.device:
@@ -56,10 +59,10 @@ def build_token_batches(
         torch.randn(batch_size, prefill_seq, hidden_dim, device=device, dtype=dtype),
         torch.randn(batch_size, prefill_seq, hidden_dim, device=device, dtype=dtype),
     ]
-    decode = [
-        torch.randn(batch_size, decode_seq, hidden_dim, device=device, dtype=dtype)
-        for _ in range(decode_steps)
-    ]
+    # Decode inputs are read-only; reuse one deterministic batch across steps to
+    # keep setup memory bounded while preserving the per-step decode workload.
+    decode_batch = torch.randn(batch_size, decode_seq, hidden_dim, device=device, dtype=dtype)
+    decode = [decode_batch for _ in range(decode_steps)]
     return prefill, decode
 
 
@@ -125,10 +128,21 @@ class KVCacheAttention(nn.Module):
         k_ctx = cache.cache_k[:, : start_offset + seq_len]
         v_ctx = cache.cache_v[:, : start_offset + seq_len]
 
-        q = q * self.scale
-        attn = torch.softmax(torch.einsum("bthd,bThd->bhtT", q, k_ctx), dim=-1)
-        out = torch.einsum("bhtT,bThd->bthd", attn, v_ctx)
-        out = out.reshape(batch, seq_len, self.hidden_dim)
+        # Use the fused SDPA path so this lab measures KV-cache tradeoffs rather
+        # than materializing a giant [batch, heads, query, context] tensor.
+        q_t = q.transpose(1, 2)
+        k_t = k_ctx.transpose(1, 2)
+        v_t = v_ctx.transpose(1, 2)
+        with prefer_sdpa_backends():
+            out = F.scaled_dot_product_attention(
+                q_t,
+                k_t,
+                v_t,
+                dropout_p=0.0,
+                is_causal=False,
+                scale=self.scale,
+            )
+        out = out.transpose(1, 2).contiguous().reshape(batch, seq_len, self.hidden_dim)
         return self.proj(out)
 
 

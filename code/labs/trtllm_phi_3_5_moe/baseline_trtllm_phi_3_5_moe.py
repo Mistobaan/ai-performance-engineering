@@ -15,7 +15,7 @@ from labs.trtllm_phi_3_5_moe.trtllm_common import (
     ensure_trtllm_assets,
     parse_trtllm_args,
     resolve_model_path,
-    slice_logits,
+    slice_generated_token_ids,
 )
 
 
@@ -34,6 +34,9 @@ class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.tokenizer = None
         self.input_ids: Optional[torch.Tensor] = None
         self.attention_mask: Optional[torch.Tensor] = None
+        self.prompt_lengths: Optional[list[int]] = None
+        self.pad_token_id: int = 0
+        self._generated_output_ids: Optional[torch.Tensor] = None
         self.output: Optional[torch.Tensor] = None
         tokens = float(self.prompt_len + self.max_new_tokens)
         self._workload = WorkloadMetadata(
@@ -60,11 +63,13 @@ class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
             raise RuntimeError("SKIPPED: transformers is required for the baseline TRT-LLM lab") from exc
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        self.pad_token_id = int(self.tokenizer.pad_token_id)
         input_ids, attention_mask = build_prompt_tokens(
             self.tokenizer,
             prompt_len=self.prompt_len,
             batch_size=self.batch_size,
         )
+        self.prompt_lengths = [int(length) for length in attention_mask.sum(dim=1).tolist()]
         self.input_ids = input_ids.to(self.device)
         self.attention_mask = attention_mask.to(self.device)
 
@@ -89,20 +94,22 @@ class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
                     do_sample=False,
                     num_beams=1,
                     use_cache=True,
-                    output_scores=True,
                     return_dict_in_generate=True,
                 )
-                if not outputs.scores:
-                    raise RuntimeError("Transformers generate did not return scores")
-                logits = outputs.scores[0]
-                self.output = slice_logits(logits, self.vocab_slice).float()
-        if self.output is None:
+                self._generated_output_ids = outputs.sequences.detach()
+                self.output = self._generated_output_ids
+        if self._generated_output_ids is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 
     def capture_verification_payload(self) -> None:
-        if self.output is None or self.input_ids is None:
+        if self._generated_output_ids is None or self.input_ids is None or self.prompt_lengths is None:
             raise RuntimeError("setup() and benchmark_fn() must run before capture_verification_payload()")
-        verify_output = self.output[:1, :128]
+        verify_output = slice_generated_token_ids(
+            self._generated_output_ids[:1],
+            prompt_lengths=[self.prompt_lengths[0]],
+            max_new_tokens=self.max_new_tokens,
+            pad_token_id=self.pad_token_id,
+        )[:, : min(self.max_new_tokens, 128)].detach().cpu().clone()
         # Keep signature fields backend-agnostic so baseline Transformers and optimized
         # TRT-LLM engine runs compare on equivalent workload semantics.
         parameter_count = 0
@@ -117,7 +124,7 @@ class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 "fp8": False,
                 "tf32": torch.backends.cuda.matmul.allow_tf32,
             },
-            output_tolerance=(5e-2, 5e-2),
+            output_tolerance=(0.0, 0.0),
         )
 
     def teardown(self) -> None:
@@ -125,17 +132,24 @@ class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.tokenizer = None
         self.input_ids = None
         self.attention_mask = None
+        self.prompt_lengths = None
+        self._generated_output_ids = None
         self.output = None
         torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:
-        return BenchmarkConfig(iterations=5, warmup=5)
+        return BenchmarkConfig(
+            iterations=5,
+            warmup=5,
+            timing_method="wall_clock",
+            full_device_sync=True,
+        )
 
     def get_workload_metadata(self) -> Optional[WorkloadMetadata]:
         return self._workload
 
     def validate_result(self) -> Optional[str]:
-        if self.output is None:
+        if self._generated_output_ids is None:
             return "benchmark_fn() did not produce output"
         return None
 

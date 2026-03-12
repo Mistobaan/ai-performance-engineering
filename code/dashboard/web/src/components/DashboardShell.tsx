@@ -55,10 +55,10 @@ export function DashboardShell({
         }
         return;
       }
-      const tabIndex = Number(event.key);
-      if (!Number.isNaN(tabIndex) && tabIndex > 0 && tabIndex <= DASHBOARD_TABS.length) {
+      const matchedTab = DASHBOARD_TABS.find((tab) => tab.shortcut === event.key);
+      if (matchedTab) {
         event.preventDefault();
-        router.push(DASHBOARD_TABS[tabIndex - 1].href);
+        router.push(matchedTab.href);
       }
     };
 

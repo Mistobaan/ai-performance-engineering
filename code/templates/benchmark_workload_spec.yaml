@@ -1,0 +1,147 @@
+# Copy this file next to the artifacts for any benchmark that needs to be
+# repeatable across releases, hardware tiers, or external benchmark packets.
+
+run_metadata:
+  benchmark_layer: component             # micro | component | end_to_end
+  benchmark_grade: publication          # publication | realism
+  use_case: release_gate                # engineering_debug | canary | nightly | release_gate | rfp | analyst_briefing | publication
+  owner: ""
+  ticket_or_epic: ""
+
+comparison_axis:
+  variable_under_test: runtime_version  # hardware_generation | runtime_version | scheduler_path | batching_policy | concurrency_model
+  control: ""
+  candidate: ""
+  constants_locked:
+    - model
+    - sequence_length_mix
+    - precision
+    - batching_policy
+    - concurrency_model
+
+workload:
+  type: inference                       # inference | training
+  name: ""
+  model:
+    name: ""
+    parameter_count_b: null
+    precision: bf16
+    weights_source: ""                  # repo@sha256:... | sha256:<image_id> | local path with content hash recorded elsewhere
+  input_distribution:
+    sequence_length_mix:
+      p50: null
+      p95: null
+      max: null
+    prompt_tokens:
+      p50: null
+      p95: null
+      max: null
+    completion_tokens:
+      p50: null
+      p95: null
+      max: null
+  batching_policy:
+    mode: continuous                    # static | continuous | dynamic
+    max_batch_size: null
+    max_num_seqs: null
+    max_tokens_in_batch: null
+  concurrency_model:
+    mode: closed_loop                   # closed_loop | open_loop
+    values: []                          # e.g. [1, 2, 4, 8] or request-rate points
+  serving_contract:
+    stack_under_test: ""                # llm-d | vllm | triton | kserve | custom
+    protocol: ""                        # openai_compatible_http | grpc | triton_http | custom
+    deployment_model: ""                # deployment_per_gpu | kserve_service | multinode_service | custom
+    fairness_constraints:
+      protocol_fixed_across_candidates: true
+      deployment_model_fixed_across_candidates: true
+      api_behavior_fixed_across_candidates: true
+  quality_constraints:
+    correctness_suite: []
+    max_accuracy_delta_pct: 0.0
+    allowed_quality_exceptions: []
+
+execution:
+  image: ""                             # immutable repo@sha256:... or local sha256:<image_id>
+  runtime_versions:
+    driver: ""
+    cuda: ""
+    nccl: ""
+    pytorch: ""
+    runtime_or_server: ""
+  hardware_tier:
+    gpu_model: ""
+    gpu_count: null
+    cpu_model: ""
+    ram_gb: null
+    network_fabric: ""
+    storage_tier: ""
+  topology:
+    gpu_to_gpu: ""                      # pointer to captured topo output / figure
+    gpu_to_nic_affinity: ""
+    numa_layout: ""
+    pcie_layout: ""
+  scheduler_path:
+    platform: kubernetes                # bare_metal | kubernetes | slurm
+    queue_or_scheduler: ""
+    placement_policy: ""                # topology_exclusive | normal | spread | pack
+    control_plane_path: ""              # e.g. slinky + kueue
+
+measurement_policy:
+  trials: 5
+  warmup_trials: 1
+  report_statistics:
+    - median
+    - mean
+    - stddev
+    - p95
+    - p99
+    - cv_pct
+  outlier_policy:
+    method: tukey_iqr_and_mad
+    keep_raw_samples: true
+    auto_flag_only: true
+    discard_requires_written_reason: true
+  confidence_policy:
+    method: bootstrap_95_ci
+    min_effect_size_pct: 5.0
+  environment_controls:
+    gpu_clocks_locked: true
+    app_clocks_recorded: true
+    topology_recorded: true
+    background_load_recorded: true
+
+metrics:
+  primary: ""                           # time_to_train_hours | mfu_pct | scaling_efficiency_pct | ttft_ms | tokens_per_second | p99_latency_ms | cost_per_token_usd
+  secondary: []
+
+diagnosis_policy:
+  bottleneck_classes:
+    - compute_bound
+    - comm_bound
+    - input_bound
+    - control_plane_bound
+  required_signals:
+    - model_server_metrics
+    - gpu_counters
+    - nccl_traces
+    - storage_or_network_probes
+    - scheduler_timing
+  distributed:
+    rank_level_visibility: true
+    isolate_suspected_straggler_node: true
+    cordon_on_repeated_failure: false
+
+artifacts:
+  artifact_root: artifacts/runs/<run_id>
+  raw_artifacts_immutable: true
+  require_manifest: true
+  require_profiler_artifacts: true
+  require_sha256: true
+  provenance_signing:
+    required: true
+    status: gap_in_current_repo          # record the gap explicitly until signing is implemented
+  publication_packet:
+    include_methodology_writeup: true
+    include_comparison_report: true
+    include_audit_ledger: true

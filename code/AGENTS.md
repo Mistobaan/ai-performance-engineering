@@ -190,6 +190,13 @@
 - Keep benchmark-specific semantics local to the benchmark. If an example declares the wrong timing model, publishes outputs during `setup()`, misstates metadata, or needs profile-specific replay/metric preferences, fix that in the chapter/example code instead of weakening the harness.
 - Do not relax harness validity checks to make broken examples pass. Keep the harness strict, fix the example to satisfy the contract, and only add harness abstractions when the same safe pattern clearly repeats across multiple benchmarks.
 
+## Provenance Review (CRITICAL)
+- Review the provenance of each benchmark, profiling, expectation-refresh, and analysis request before trusting the result. If provenance is incomplete, ambiguous, or mixed, improve the system first instead of hand-waving the gap away.
+- Preserve and surface the provenance needed to explain a result end to end: `run_id`, target list, git commit, hardware key, profile name, timestamp, iterations, warmup iterations, clock-lock/app-clock state, and any validation issues or rejection reasons.
+- Prefer structured provenance in machine-readable artifacts over console-only explanations. If a result can only be explained from log text, add fields, ledgers, or reports so the next review is trustworthy and auditable.
+- When expectation updates are rejected, separate true performance drift from provenance-only rejection. Record which provenance fields differ and rerun unstable cases before refreshing stored expectations.
+- When analyzing mismatches, improve the artifact trail as needed to make the conclusion more trustworthy, explainable, verifiable, and auditable rather than relying on manual reconstruction.
+
 ## NVFP4 Grouped GEMM Perf Playbook (CRITICAL)
 - Treat `--verify` as the hard gate for every tuning candidate; do not promote non-verified wins.
 - Use paired A/B runs (old/new interleaved) before changing defaults; single-run wins are not sufficient.

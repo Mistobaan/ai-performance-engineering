@@ -33,6 +33,17 @@ Presets:
 - `modern-llm`: the canonical full bundle with advanced LLM/distributed signals.
 - `multinode-readiness`: checks contract and environment only; no workloads.
 
+## Declarative BenchmarkRuns
+When you need the benchmarking service contract instead of just the scripts:
+
+- freeze the workload first with `templates/performance_intake.yaml` and `templates/benchmark_workload_spec.yaml`
+- start from `templates/benchmark_run.yaml`
+- validate it with `python -m core.scripts.validate_benchmark_run --file templates/benchmark_run.yaml`
+- use `cluster/configs/benchmarkrun-crd.yaml` as the Kubernetes CRD shape
+- read `cluster/docs/kubernetes_benchmark_service.md` for the intended SLINKY + Kueue operator mapping
+
+That path is for declarative scheduling, CI automation, and publication-vs-realism policy. The existing `common-eval` presets remain the current execution backend.
+
 ## What To Open
 - `cluster/runs/<run_id>/`: new run results.
 - `cluster/published/current/`: the current published canonical package.

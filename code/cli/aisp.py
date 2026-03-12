@@ -1977,7 +1977,7 @@ if typer:
         test: Optional[str] = typer.Option(None, "--test", help="Test a specific tool"),
         serve: bool = typer.Option(False, "--serve", help="Start MCP server (stdio)"),
     ) -> None:
-        from mcp import server
+        import mcp.mcp_server as server
 
         old_argv = sys.argv
         new_argv = [old_argv[0]]

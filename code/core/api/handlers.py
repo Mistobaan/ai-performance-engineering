@@ -403,6 +403,12 @@ def benchmark_data(params: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def benchmark_contracts(_: Dict[str, Any]) -> Dict[str, Any]:
+    from core.benchmark.contracts_surface import get_benchmark_contracts_summary
+
+    return get_benchmark_contracts_summary()
+
+
 def benchmark_overview(_: Dict[str, Any]) -> Dict[str, Any]:
     data = get_engine().benchmark.data()
     benchmarks = [_normalize_benchmark_record(b) for b in data.get("benchmarks", [])]
@@ -718,6 +724,7 @@ def ai_tools(_: Dict[str, Any]) -> Dict[str, Any]:
             "ncu_summary",
         ],
         "benchmarks": [
+            "benchmark_contracts",
             "run_benchmarks",
             "benchmark_targets",
             "list_chapters",

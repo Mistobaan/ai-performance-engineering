@@ -1,0 +1,291 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: benchmarkruns.benchmarking.aisp.dev
+spec:
+  group: benchmarking.aisp.dev
+  scope: Namespaced
+  names:
+    plural: benchmarkruns
+    singular: benchmarkrun
+    kind: BenchmarkRun
+    shortNames:
+      - brun
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - apiVersion
+            - kind
+            - metadata
+            - spec
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+              enum:
+                - BenchmarkRun
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - intent
+                - layers
+                - workload
+                - comparison
+                - metrics
+                - trials
+                - bottleneckAnalysis
+                - distributed
+                - observability
+                - provenance
+                - executionPolicy
+                - sinks
+                - automation
+              properties:
+                intent:
+                  type: object
+                  required:
+                    - benchmarkClass
+                    - workloadType
+                    - schedulerPath
+                    - cadence
+                  properties:
+                    benchmarkClass:
+                      type: string
+                      enum:
+                        - publication_grade
+                        - realism_grade
+                    workloadType:
+                      type: string
+                      enum:
+                        - training
+                        - inference
+                        - mixed
+                    schedulerPath:
+                      type: string
+                    cadence:
+                      type: string
+                layers:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - enabled
+                      - suites
+                    properties:
+                      name:
+                        type: string
+                        enum:
+                          - micro
+                          - component
+                          - end_to_end
+                      enabled:
+                        type: boolean
+                      objective:
+                        type: string
+                      suites:
+                        type: array
+                        minItems: 1
+                        items:
+                          type: object
+                          required:
+                            - name
+                          properties:
+                            name:
+                              type: string
+                            repoCommand:
+                              type: string
+                workload:
+                  type: object
+                  required:
+                    - model
+                    - sequenceLengthMix
+                    - precision
+                    - batchingPolicy
+                    - concurrencyModel
+                  properties:
+                    model:
+                      type: string
+                    sequenceLengthMix:
+                      type: array
+                      minItems: 1
+                      items:
+                        type: object
+                        properties:
+                          inputTokens:
+                            type: integer
+                          outputTokens:
+                            type: integer
+                          weight:
+                            type: number
+                    precision:
+                      type: string
+                    batchingPolicy:
+                      type: string
+                    concurrencyModel:
+                      type: string
+                    datasetRef:
+                      type: string
+                    fixedAcrossTrials:
+                      type: array
+                      items:
+                        type: string
+                comparison:
+                  type: object
+                  required:
+                    - variableUnderTest
+                    - controls
+                  properties:
+                    variableUnderTest:
+                      type: string
+                    baseline:
+                      type: object
+                    candidate:
+                      type: object
+                    controls:
+                      type: object
+                      required:
+                        - fixed
+                        - compareOneVariableAtATime
+                      properties:
+                        fixed:
+                          type: object
+                          additionalProperties: true
+                        compareOneVariableAtATime:
+                          type: boolean
+                metrics:
+                  type: object
+                  properties:
+                    training:
+                      type: object
+                    inference:
+                      type: object
+                trials:
+                  type: object
+                  required:
+                    - minReplicates
+                    - confidenceLevel
+                    - outlierPolicy
+                  properties:
+                    minReplicates:
+                      type: integer
+                      minimum: 3
+                    confidenceLevel:
+                      type: number
+                      minimum: 0.8
+                      maximum: 0.999
+                    outlierPolicy:
+                      type: object
+                    report:
+                      type: object
+                bottleneckAnalysis:
+                  type: object
+                distributed:
+                  type: object
+                observability:
+                  type: object
+                  required:
+                    - correlation
+                    - telemetrySources
+                    - scenarioPlaybooks
+                  properties:
+                    correlation:
+                      type: object
+                      required:
+                        - stableJoinKeys
+                        - publishedNumberLineage
+                      properties:
+                        stableJoinKeys:
+                          type: array
+                          minItems: 1
+                          items:
+                            type: string
+                        publishedNumberLineage:
+                          type: object
+                    telemetrySources:
+                      type: object
+                      properties:
+                        service:
+                          type: array
+                          items:
+                            type: string
+                        infrastructure:
+                          type: array
+                          items:
+                            type: string
+                        scheduler:
+                          type: array
+                          items:
+                            type: string
+                    scenarioPlaybooks:
+                      type: array
+                      minItems: 1
+                      items:
+                        type: string
+                provenance:
+                  type: object
+                executionPolicy:
+                  type: object
+                sinks:
+                  type: object
+                  required:
+                    - rawArtifacts
+                    - hotMetrics
+                    - curatedWarehouse
+                  properties:
+                    rawArtifacts:
+                      type: object
+                    hotMetrics:
+                      type: object
+                    curatedWarehouse:
+                      type: object
+                automation:
+                  type: object
+              additionalProperties: false
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                runId:
+                  type: string
+                runDirectory:
+                  type: string
+                selectedSchedulerPath:
+                  type: string
+                hotMetricsRef:
+                  type: string
+                warehouseRef:
+                  type: string
+                outlierSummary:
+                  type: string
+                stragglerNodes:
+                  type: array
+                  items:
+                    type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+      additionalPrinterColumns:
+        - name: Class
+          type: string
+          jsonPath: .spec.intent.benchmarkClass
+        - name: Workload
+          type: string
+          jsonPath: .spec.intent.workloadType
+        - name: Scheduler
+          type: string
+          jsonPath: .spec.intent.schedulerPath
+        - name: Phase
+          type: string
+          jsonPath: .status.phase

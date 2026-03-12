@@ -70,14 +70,28 @@ class RunProvenance:
     timestamp: str  # ISO format
     iterations: int
     warmup_iterations: int
+    execution_environment: str = "unknown"
+    validity_profile: Optional[str] = None
+    dmi_product_name: Optional[str] = None
+
+    def mismatch_fields(self, other: "RunProvenance") -> List[str]:
+        """Return the provenance fields that materially differ."""
+        mismatches: List[str] = []
+        comparable_fields = [
+            "git_commit",
+            "hardware_key",
+            "profile_name",
+            "execution_environment",
+            "validity_profile",
+        ]
+        for field_name in comparable_fields:
+            if getattr(self, field_name) != getattr(other, field_name):
+                mismatches.append(field_name)
+        return mismatches
 
     def matches(self, other: "RunProvenance") -> bool:
         """Check if two runs are from the same configuration (ignores timestamp)."""
-        return (
-            self.git_commit == other.git_commit
-            and self.hardware_key == other.hardware_key
-            and self.profile_name == other.profile_name
-        )
+        return not self.mismatch_fields(other)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON storage."""
@@ -88,6 +102,9 @@ class RunProvenance:
             "timestamp": self.timestamp,
             "iterations": self.iterations,
             "warmup_iterations": self.warmup_iterations,
+            "execution_environment": self.execution_environment,
+            "validity_profile": self.validity_profile,
+            "dmi_product_name": self.dmi_product_name,
         }
 
     @classmethod
@@ -100,6 +117,9 @@ class RunProvenance:
             timestamp=data.get("timestamp", ""),
             iterations=data.get("iterations", 0),
             warmup_iterations=data.get("warmup_iterations", 0),
+            execution_environment=data.get("execution_environment", "unknown"),
+            validity_profile=data.get("validity_profile"),
+            dmi_product_name=data.get("dmi_product_name"),
         )
 
 
@@ -726,22 +746,13 @@ class ExpectationsStore:
             existing_provenance = existing.get("provenance")
             if existing_provenance:
                 existing_prov = RunProvenance.from_dict(existing_provenance)
-                if not entry.provenance.matches(existing_prov):
+                mismatch_fields = entry.provenance.mismatch_fields(existing_prov)
+                if mismatch_fields:
                     mismatches: List[str] = []
-                    if entry.provenance.git_commit != existing_prov.git_commit:
+                    for field_name in mismatch_fields:
                         mismatches.append(
-                            f"git_commit: new='{entry.provenance.git_commit}' "
-                            f"stored='{existing_prov.git_commit}'"
-                        )
-                    if entry.provenance.hardware_key != existing_prov.hardware_key:
-                        mismatches.append(
-                            f"hardware_key: new='{entry.provenance.hardware_key}' "
-                            f"stored='{existing_prov.hardware_key}'"
-                        )
-                    if entry.provenance.profile_name != existing_prov.profile_name:
-                        mismatches.append(
-                            f"profile_name: new='{entry.provenance.profile_name}' "
-                            f"stored='{existing_prov.profile_name}'"
+                            f"{field_name}: new='{getattr(entry.provenance, field_name)}' "
+                            f"stored='{getattr(existing_prov, field_name)}'"
                         )
                     mismatch_summary = ", ".join(mismatches) if mismatches else "unknown mismatch"
                     return UpdateResult(

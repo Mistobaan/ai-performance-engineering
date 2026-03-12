@@ -130,6 +130,14 @@ _ROUTES: List[ApiRoute] = [
     ),
     ApiRoute(
         "GET",
+        "/api/benchmark/contracts",
+        "benchmark.contracts",
+        handlers.benchmark_contracts,
+        mcp_tool="benchmark_contracts",
+        meta=True,
+    ),
+    ApiRoute(
+        "GET",
         "/api/benchmark/data",
         "benchmark.data",
         handlers.benchmark_data,

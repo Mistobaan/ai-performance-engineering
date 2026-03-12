@@ -144,7 +144,8 @@ class PagedKVOffloadBenchmark(VerificationPayloadMixin, BaseBenchmark):
             if not _supports_fused_fp8_attention():
                 if self.cfg.require_fused_fp8:
                     raise RuntimeError(
-                        "FP8 KV requested with require_fused_fp8=True, but FP8 SDPA kernel is unavailable."
+                        "SKIPPED: FP8 KV requested with require_fused_fp8=True, but FP8 SDPA "
+                        "kernel is unavailable on this torch/runtime stack."
                     )
                 self._fp8_reason = (
                     "FP8 requested but FP8 SDPA kernel unavailable; "

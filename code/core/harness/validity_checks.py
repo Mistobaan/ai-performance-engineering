@@ -549,6 +549,15 @@ class EnvironmentProbe:
             return None
 
 
+@dataclass(frozen=True)
+class ExecutionEnvironment:
+    """High-level host execution context for benchmark provenance."""
+
+    kind: str
+    virtualized: Optional[bool]
+    dmi_product_name: Optional[str] = None
+
+
 def _parse_int_set(spec: str) -> Set[int]:
     """Parse Linux list formats like '0-3,8,10-12' into a set of ints."""
     spec = spec.strip()
@@ -579,6 +588,30 @@ def _read_optional(probe: EnvironmentProbe, path: str | Path) -> Optional[str]:
         return resolved.read_text(encoding="utf-8").strip()
     except Exception:
         return None
+
+
+def detect_execution_environment(probe: Optional[EnvironmentProbe] = None) -> ExecutionEnvironment:
+    """Detect whether the current host context is bare metal or virtualized."""
+    probe = probe or EnvironmentProbe()
+    cpuinfo = _read_optional(probe, "/proc/cpuinfo")
+    product_name = _read_optional(probe, "/sys/devices/virtual/dmi/id/product_name")
+
+    if cpuinfo is None and product_name is None:
+        return ExecutionEnvironment(kind="unknown", virtualized=None, dmi_product_name=None)
+
+    is_virtualized = False
+    if cpuinfo is not None and "hypervisor" in cpuinfo.lower():
+        is_virtualized = True
+    if product_name is not None and any(
+        tag in product_name.lower() for tag in ("qemu", "kvm", "vmware", "virtualbox", "hyper-v")
+    ):
+        is_virtualized = True
+
+    return ExecutionEnvironment(
+        kind="virtualized" if is_virtualized else "bare_metal",
+        virtualized=is_virtualized,
+        dmi_product_name=product_name,
+    )
 
 
 def _parse_cgroup_v2_path(cgroup_text: str) -> Optional[str]:
@@ -802,14 +835,11 @@ def validate_environment(
     details["device_type"] = device.type
 
     # Virtualization detection (used by multiple validity checks)
-    cpuinfo = _read_optional(probe, "/proc/cpuinfo")
-    product_name = _read_optional(probe, "/sys/devices/virtual/dmi/id/product_name")
+    execution_environment = detect_execution_environment(probe)
+    product_name = execution_environment.dmi_product_name
+    is_virtualized = bool(execution_environment.virtualized)
+    details["execution_environment"] = execution_environment.kind
     details["dmi_product_name"] = product_name
-    is_virtualized = False
-    if cpuinfo is not None and "hypervisor" in cpuinfo.lower():
-        is_virtualized = True
-    if product_name is not None and any(tag in product_name.lower() for tag in ("qemu", "kvm", "vmware", "virtualbox", "hyper-v")):
-        is_virtualized = True
     details["virtualized"] = is_virtualized
 
     # CUDA availability (required if running on CUDA device)
@@ -2029,7 +2059,9 @@ __all__ = [
     # Environment
     "validate_environment",
     "EnvironmentProbe",
+    "ExecutionEnvironment",
     "EnvironmentValidationResult",
+    "detect_execution_environment",
     
     # Stream Auditing
     "StreamUsageInfo",

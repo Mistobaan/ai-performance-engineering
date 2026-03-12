@@ -1,7 +1,8 @@
-"""Optimized paged KV-cache benchmark with pinned staging + FP8 KV.
+"""Optimized paged KV-cache benchmark with pinned staging + opportunistic FP8 KV.
 
 - Uses pinned staging buffers with direct H2D copies.
-- Enables FP8 KV only when a fused FlashAttention path is available on B200/GB200.
+- Uses FP8 KV only when a fused FlashAttention path is available on B200/GB200.
+- Falls back to FP16 when the runtime/profiler stack disables that fused FP8 path.
 """
 
 from __future__ import annotations
@@ -24,7 +25,10 @@ def get_benchmark() -> PagedKVOffloadBenchmark:
         use_async_stream=False,
         use_memmap=True,
         prefer_fp8=True,
-        require_fused_fp8=True,
+        # Keep timing and profiler runs on the same semantic path: prefer FP8 when
+        # fused attention is available, otherwise fall back to FP16 instead of
+        # making profiling-only subprocesses fail.
+        require_fused_fp8=False,
         fallback_dtype=torch.float16,
         prefetch_next_page=False,
         use_direct_h2d=True,

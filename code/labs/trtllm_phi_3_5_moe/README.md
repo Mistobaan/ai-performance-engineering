@@ -15,6 +15,7 @@ End-to-end serving optimizations are easy to misread because setup, engine build
 - TensorRT-LLM-oriented optimized serving path
 - same workload and verification contract
 - tuned to show the practical inference-stack win, not just a kernel-local result
+- verifies deterministic generated token ids rather than the more fragile full-logits path
 
 ## Measured Delta
 Representative validated result from `artifacts/runs/20260303_trtllm_phi35moe_minimal_expectations_mixedprov_clean17/`:

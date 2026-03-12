@@ -1,0 +1,134 @@
+# Use this file when defining the warehouse contract that sits behind BenchmarkRun
+# and benchmark publication. It is a design template, not a deployment-specific
+# manifest.
+
+identity:
+  run_keys:
+    - run_id
+    - benchmark_case_id
+    - workload_spec_digest
+    - artifact_manifest_digest
+    - scheduler_run_id
+  workload_specific_keys:
+    training:
+      - rank_id
+    inference:
+      - request_id
+      - trace_id
+  resource_keys:
+    - job_uid
+    - pod_uid
+    - node_name
+    - gpu_uuid
+
+raw_artifact_store:
+  backend: object_storage
+  uri_template: s3://benchmarks/raw/${RUN_ID}/
+  immutability: true
+  retention_tier: cold
+  required_artifacts:
+    - logs
+    - traces
+    - profiler_reports
+    - manifests
+    - exported_metrics
+    - scheduler_events
+
+curated_warehouse:
+  backend: parquet_duckdb              # parquet_duckdb | clickhouse | bigquery | snowflake | iceberg
+  tables:
+    facts:
+      - benchmark_run_fact
+      - serving_outcome_fact
+      - training_outcome_fact
+      - telemetry_slice_fact
+    dimensions:
+      - software_version_dim
+      - hardware_topology_dim
+      - cluster_region_dim
+      - workload_dim
+      - artifact_lineage_dim
+  stable_dimensions:
+    software_versions:
+      - image_digest
+      - driver_version
+      - cuda_version
+      - nccl_version
+      - framework_version
+      - runtime_version
+    hardware_topology:
+      - gpu_model
+      - gpu_count
+      - pcie_layout
+      - nvlink_topology
+      - gpu_nic_affinity
+      - numa_layout
+    cluster_metadata:
+      - cluster
+      - region
+      - availability_zone
+      - node_pool
+      - scheduler_path
+      - resource_flavor
+    workload_parameters:
+      - model
+      - precision
+      - protocol
+      - deployment_model
+      - batching_policy
+      - concurrency_point
+      - prompt_distribution
+      - completion_distribution
+  lineage:
+    published_numbers_traceable_to_raw: true
+    manifest_digest_column: true
+    workload_spec_digest_column: true
+    query_spec_digest_column: true
+
+hot_metrics:
+  backend: prometheus
+  retention_days: 30
+  cardinality_budget:
+    max_active_series: 2000000
+    allowed_labels:
+      - run_id
+      - benchmark_case_id
+      - cluster
+      - region
+      - node_pool
+      - gpu_model
+      - scheduler_path
+      - concurrency_bucket
+    forbidden_labels:
+      - request_id
+      - trace_id
+      - prompt_hash
+      - arbitrary_user_label
+
+telemetry_sources:
+  service:
+    - model_server_metrics
+    - request_traces
+    - queue_time
+  infrastructure:
+    - dcgm-exporter
+    - nvlink-exporter
+    - node-pci-exporter
+    - ping-exporter
+    - node-problem-detector
+    - hpc-verification
+  scheduler:
+    - kubernetes_events
+    - kueue
+    - slinky
+
+retention_tiers:
+  hot_days: 30
+  warm_days: 180
+  cold_days: 730
+
+scenario_playbooks:
+  - tail_latency_regression
+  - low_gpu_utilization
+  - distributed_straggler
+  - scheduler_backpressure

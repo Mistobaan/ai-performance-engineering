@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 import importlib.machinery
 import importlib.metadata
@@ -26,17 +26,22 @@ PROMPT_TEXT = "Explain GPU kernel fusion in one sentence."
 _ACCELERATE_IMPORT_PATCHED = False
 
 
-def _suppress_optional_vllm_plugin_warning() -> None:
-    """Suppress known non-fatal modelopt vLLM plugin ABI warnings.
+def _suppress_optional_modelopt_plugin_warnings() -> None:
+    """Suppress known non-fatal modelopt optional plugin ABI warnings.
 
     modelopt eagerly imports its optional vLLM plugin and emits a warning when
     the host vLLM extension ABI does not match the active torch build. This lab
-    does not use that plugin path, so suppress this specific warning pattern
-    while preserving all other warnings.
+    also does not need the optional Transformer Engine plugin path. Suppress
+    those specific warning patterns while preserving all other warnings.
     """
     warnings.filterwarnings(
         "ignore",
         message=r"Failed to import vllm plugin due to: .*You may ignore this warning if you do not need this plugin\.",
+        category=UserWarning,
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Failed to import transformer[_ ]engine plugin due to: .*You may ignore this warning if you do not need this plugin\.",
         category=UserWarning,
     )
 
@@ -174,8 +179,9 @@ def parse_trtllm_args() -> argparse.Namespace:
 
 def load_trtllm_runtime():
     """Load TensorRT-LLM runtime without importing the full package __init__."""
-    _suppress_optional_vllm_plugin_warning()
+    _suppress_optional_modelopt_plugin_warnings()
     os.environ.setdefault("OMPI_MCA_coll_ucc_enable", "0")
+    os.environ.setdefault("TORCH_DISABLE_ADDR2LINE", "1")
     if platform.system() == "Linux":
         try:
             from ctypes import cdll
@@ -231,3 +237,57 @@ def slice_logits(logits: torch.Tensor, vocab_slice: int) -> torch.Tensor:
     if logits.dim() != 2:
         raise ValueError("Expected logits of shape [batch, vocab]")
     return logits[:, :vocab_slice]
+
+
+def slice_generated_token_ids(
+    output_ids: torch.Tensor,
+    *,
+    prompt_lengths: Sequence[int],
+    max_new_tokens: int,
+    pad_token_id: int,
+) -> torch.Tensor:
+    """Normalize generated token ids into a fixed [batch, max_new_tokens] tensor.
+
+    TRT-LLM returns full prompt+generation token ids with an explicit beam
+    dimension, while Transformers returns prompt+generation sequences without a
+    beam dimension. The lab only needs a deterministic generated-token suffix
+    for verification, so normalize both paths into the same shape and right-pad
+    shorter generations with the tokenizer pad token.
+    """
+    if output_ids.dim() == 3:
+        output_ids = output_ids[:, 0, :]
+    if output_ids.dim() != 2:
+        raise ValueError(
+            "Expected generated token ids with shape [batch, seq] or [batch, beam, seq]; "
+            f"got {tuple(output_ids.shape)}"
+        )
+    if len(prompt_lengths) != output_ids.size(0):
+        raise ValueError(
+            f"prompt_lengths must have one entry per batch item: got {len(prompt_lengths)} "
+            f"for batch size {output_ids.size(0)}"
+        )
+    if max_new_tokens <= 0:
+        raise ValueError(f"max_new_tokens must be positive, got {max_new_tokens}")
+
+    rows = []
+    pad_value = int(pad_token_id)
+    for batch_idx, prompt_len in enumerate(prompt_lengths):
+        prompt_len = int(prompt_len)
+        if prompt_len < 0 or prompt_len > output_ids.size(1):
+            raise ValueError(
+                f"Prompt length {prompt_len} is out of bounds for output_ids shape "
+                f"{tuple(output_ids.shape)}"
+            )
+        generated = output_ids[batch_idx, prompt_len:]
+        if generated.numel() > max_new_tokens:
+            generated = generated[:max_new_tokens]
+        elif generated.numel() < max_new_tokens:
+            pad = torch.full(
+                (max_new_tokens - generated.numel(),),
+                pad_value,
+                dtype=output_ids.dtype,
+                device=output_ids.device,
+            )
+            generated = torch.cat((generated, pad), dim=0)
+        rows.append(generated)
+    return torch.stack(rows, dim=0).contiguous()

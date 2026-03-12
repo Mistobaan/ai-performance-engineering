@@ -61,6 +61,34 @@ export interface BenchmarkOverview {
   }>;
 }
 
+export interface BenchmarkContractYamlSummary {
+  top_level_keys: string[];
+  spec_keys?: string[];
+  enabled_layers?: string[];
+  has_observability?: boolean;
+  has_sinks?: boolean;
+}
+
+export interface BenchmarkContractEntry {
+  name: string;
+  path: string;
+  exists: boolean;
+  kind: 'doc' | 'yaml';
+  description: string;
+  summary?: BenchmarkContractYamlSummary;
+}
+
+export interface BenchmarkContractsSummary {
+  available: boolean;
+  repo_root: string;
+  interfaces: {
+    cli: string;
+    dashboard_api: string;
+    mcp_tool: string;
+  };
+  contracts: Record<string, BenchmarkContractEntry>;
+}
+
 export interface BenchmarkPage {
   timestamp?: string;
   summary: BenchmarkSummary;

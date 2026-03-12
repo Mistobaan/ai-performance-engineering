@@ -16,7 +16,7 @@ from labs.trtllm_phi_3_5_moe.trtllm_common import (
     load_trtllm_runtime,
     parse_trtllm_args,
     resolve_model_path,
-    slice_logits,
+    slice_generated_token_ids,
 )
 
 
@@ -38,6 +38,8 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.input_ids: Optional[torch.Tensor] = None
         self.attention_mask: Optional[torch.Tensor] = None
         self.prompt_lengths: Optional[list[int]] = None
+        self.pad_token_id: int = 0
+        self._generated_output_ids: Optional[torch.Tensor] = None
         self.output: Optional[torch.Tensor] = None
         tokens = float(self.prompt_len + self.max_new_tokens)
         self._workload = WorkloadMetadata(
@@ -63,6 +65,7 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
             raise RuntimeError("SKIPPED: transformers is required for tokenizer support") from exc
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        self.pad_token_id = int(self.tokenizer.pad_token_id)
         input_ids, attention_mask = build_prompt_tokens(
             self.tokenizer,
             prompt_len=self.prompt_len,
@@ -93,6 +96,7 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
             max_new_tokens=self.max_new_tokens,
             num_beams=1,
             return_dict=True,
+            output_sequence_lengths=True,
             top_k=1,
             top_p=0.0,
         )
@@ -111,48 +115,42 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
             batch_inputs = []
             for i, valid_len in enumerate(self.prompt_lengths):
                 batch_inputs.append(self.input_ids[i, :valid_len].contiguous())
-            outputs = self.runner.generate(
-                batch_inputs,
-                sampling_config=self.sampling_config,
-                output_generation_logits=True,
-            )
-            if not isinstance(outputs, dict) or "generation_logits" not in outputs:
-                raise RuntimeError("TensorRT-LLM generate must return generation_logits when requested")
-            logits = self._normalize_generation_logits(outputs["generation_logits"])
-            self.output = slice_logits(logits, self.vocab_slice).float()
-        if self.output is None:
+            outputs = self.runner.generate(batch_inputs, sampling_config=self.sampling_config)
+            output_ids = self._normalize_output_ids(outputs)
+            self._generated_output_ids = output_ids.detach()
+            self.output = self._generated_output_ids
+        if self._generated_output_ids is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 
     @staticmethod
-    def _normalize_generation_logits(generation_logits) -> torch.Tensor:
-        """Normalize TRT-LLM generation logits into [batch, vocab] for verification parity."""
-        if isinstance(generation_logits, (list, tuple)):
-            if len(generation_logits) == 0:
-                raise RuntimeError("TensorRT-LLM generate returned empty generation_logits sequence")
-            generation_logits = generation_logits[0]
+    def _normalize_output_ids(outputs) -> torch.Tensor:
+        """Normalize TRT-LLM outputs into a token-id tensor for verification parity."""
+        if isinstance(outputs, dict):
+            if "output_ids" not in outputs:
+                raise RuntimeError("TensorRT-LLM generate must return output_ids when return_dict=True")
+            outputs = outputs["output_ids"]
 
-        if not isinstance(generation_logits, torch.Tensor):
+        if not isinstance(outputs, torch.Tensor):
             raise RuntimeError(
-                "Unsupported generation_logits type "
-                f"{type(generation_logits).__name__}; expected Tensor or sequence of Tensor."
+                "Unsupported TRT-LLM output type "
+                f"{type(outputs).__name__}; expected Tensor or dict containing output_ids."
             )
-
-        logits = generation_logits
-        # TRT-LLM may return [batch, beam, step, vocab] or [batch, step, vocab].
-        while logits.dim() > 2:
-            logits = logits.select(1, 0)
-
-        if logits.dim() != 2:
+        if outputs.dim() not in (2, 3):
             raise RuntimeError(
-                "TensorRT-LLM generation_logits could not be normalized to [batch, vocab]; "
-                f"got shape={tuple(generation_logits.shape)}"
+                "TensorRT-LLM output_ids could not be normalized to [batch, seq] or [batch, beam, seq]; "
+                f"got shape={tuple(outputs.shape)}"
             )
-        return logits
+        return outputs
 
     def capture_verification_payload(self) -> None:
-        if self.output is None or self.input_ids is None:
+        if self._generated_output_ids is None or self.input_ids is None or self.prompt_lengths is None:
             raise RuntimeError("setup() and benchmark_fn() must run before capture_verification_payload()")
-        verify_output = self.output[:1, :128]
+        verify_output = slice_generated_token_ids(
+            self._generated_output_ids[:1],
+            prompt_lengths=[self.prompt_lengths[0]],
+            max_new_tokens=self.max_new_tokens,
+            pad_token_id=self.pad_token_id,
+        )[:, : min(self.max_new_tokens, 128)].detach().cpu().clone()
         # Keep signature fields backend-agnostic so baseline Transformers and optimized
         # TRT-LLM engine runs compare on equivalent workload semantics.
         self._set_verification_payload(
@@ -166,7 +164,7 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 "fp8": False,
                 "tf32": torch.backends.cuda.matmul.allow_tf32,
             },
-            output_tolerance=(5e-2, 5e-2),
+            output_tolerance=(0.0, 0.0),
         )
 
     def teardown(self) -> None:
@@ -176,17 +174,28 @@ class OptimizedTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.input_ids = None
         self.attention_mask = None
         self.prompt_lengths = None
+        self._generated_output_ids = None
         self.output = None
         torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:
-        return BenchmarkConfig(iterations=5, warmup=5)
+        # TensorRT-LLM's Python runtime spawns an `orted` helper even for world_size=1.
+        # ModelRunner does not expose a public shutdown/finalize hook for that daemon,
+        # so the isolated-runner descendant reaper will eventually SIGKILL it and the
+        # subprocess exits 195 during teardown. Run this benchmark in-process instead.
+        return BenchmarkConfig(
+            iterations=5,
+            warmup=5,
+            timing_method="wall_clock",
+            full_device_sync=True,
+            use_subprocess=False,
+        )
 
     def get_workload_metadata(self) -> Optional[WorkloadMetadata]:
         return self._workload
 
     def validate_result(self) -> Optional[str]:
-        if self.output is None:
+        if self._generated_output_ids is None:
             return "benchmark_fn() did not produce output"
         return None
 

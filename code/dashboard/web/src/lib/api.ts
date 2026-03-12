@@ -92,6 +92,10 @@ export async function getBenchmarkOverview() {
   return fetchAPI('/benchmark/overview');
 }
 
+export async function getBenchmarkContracts() {
+  return fetchAPI('/benchmark/contracts');
+}
+
 export async function getBenchmarkHistory() {
   return fetchAPI('/benchmark/history');
 }

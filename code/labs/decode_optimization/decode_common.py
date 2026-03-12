@@ -842,11 +842,15 @@ class DecodeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         super().teardown()
 
     def get_config(self) -> BenchmarkConfig:
+        # Decode variants mix CUDA graphs, torch.compile, custom streams, and TE state.
+        # Running them in one long-lived interpreter is not robust: the labs minimal
+        # sweep hit a teardown-time segfault after a graph variant completed timing.
+        # Per-variant subprocess isolation is the correct benchmark-local fix.
         return BenchmarkConfig(
             iterations=self.cfg.iterations,
             warmup=self.cfg.warmup,
             percentiles=[50, 90, 99],
-            use_subprocess=False,
+            use_subprocess=True,
         )
 
 

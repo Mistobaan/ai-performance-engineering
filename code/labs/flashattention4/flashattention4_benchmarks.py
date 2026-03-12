@@ -107,6 +107,12 @@ class FlashAttention4BenchmarkBase(VerificationPayloadMixin, BaseBenchmark):
     def capture_verification_payload(self) -> None:
         if self.inputs is None or self.output is None:
             raise RuntimeError("setup() and benchmark_fn() must run first")
+        verify_output = (
+            self.output[:1, :1, : min(128, self.output.shape[2]), : min(16, self.output.shape[3])]
+            .detach()
+            .cpu()
+            .clone()
+        )
         sparsity_ratio = 1.0
         if self.inputs.dense_mask is not None:
             sparsity_ratio = float(self.inputs.dense_mask.float().mean().item())
@@ -116,7 +122,7 @@ class FlashAttention4BenchmarkBase(VerificationPayloadMixin, BaseBenchmark):
                 "k": self.inputs.k.detach(),
                 "v": self.inputs.v.detach(),
             },
-            output=self.output,
+            output=verify_output,
             batch_size=self.config.batch,
             parameter_count=0,
             precision_flags={

@@ -9057,6 +9057,21 @@ def tool_tools_probe_hw(params: Dict[str, Any]) -> Dict[str, Any]:
 # =============================================================================
 
 @register_tool(
+    "benchmark_contracts",
+    "Tags: benchmark, methodology, warehouse, docs, contract. "
+    "Return the repo benchmark methodology, warehouse, and BenchmarkRun contract surfaces. "
+    "Returns: {contracts, interfaces}. "
+    "⚡ FAST (<1s). USE when: You need the stable methodology/warehouse contract or want the CLI, dashboard, and MCP entrypoints in one place.",
+    {"type": "object", "properties": with_context_params({})},
+)
+def tool_benchmark_contracts(params: Dict[str, Any]) -> Dict[str, Any]:
+    include_context, context_level = extract_context_opts(params)
+    from core.benchmark.contracts_surface import get_benchmark_contracts_summary
+
+    result = get_benchmark_contracts_summary()
+    return attach_context_if_requested(result, include_context, context_level)
+
+@register_tool(
     "suggest_tools",
     "Tags: suggest, recommend, navigation, intent, which-tool, discovery, help, lost. "
     "🧭 TOOL NAVIGATOR: Get ranked tool suggestions based on your intent or problem. "

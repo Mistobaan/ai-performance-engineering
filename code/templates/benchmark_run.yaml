@@ -1,0 +1,259 @@
+apiVersion: benchmarking.aisp.dev/v1alpha1
+kind: BenchmarkRun
+metadata:
+  name: publication-inference-stack-b200
+  labels:
+    aisp.dev/benchmark-class: publication_grade
+    aisp.dev/owner: performance-engineering
+spec:
+  intent:
+    benchmarkClass: publication_grade
+    workloadType: inference
+    schedulerPath: slinky-kueue
+    cadence: pre_release
+  layers:
+    - name: micro
+      enabled: true
+      objective: Isolate subsystem ceilings and regressions before rolling up to user-visible behavior.
+      suites:
+        - name: nccl-allreduce
+          repoCommand: cluster/scripts/run_allreduce_stability.sh --run-id ${RUN_ID} --hosts ${HOSTS} --ssh-user ${SSH_USER}
+        - name: fio-storage
+          repoCommand: cluster/scripts/run_fio_all_nodes.sh --run-id ${RUN_ID} --hosts ${HOSTS} --ssh-user ${SSH_USER} --runtime 30 --repeats 3
+        - name: model-server-kernels
+          repoCommand: python -m cli.aisp bench run --targets labs/persistent_decode:persistent_decode --profile deep_dive --single-gpu
+    - name: component
+      enabled: true
+      objective: Measure serving, data pipeline, and control-plane subsystems with stable workload specs.
+      suites:
+        - name: vllm-concurrency-sweep
+          repoCommand: python -m cli.aisp cluster common-eval --preset common-answer-fast
+        - name: dataloader
+          repoCommand: python -m cli.aisp bench run --targets labs/async_input_pipeline --profile minimal
+        - name: job-startup
+          repoCommand: python -m cli.aisp cluster common-eval --preset multinode-readiness
+    - name: end_to_end
+      enabled: true
+      objective: Validate realistic workflows after micro and component bottlenecks are understood.
+      suites:
+        - name: customer-serving-workflow
+          repoCommand: python -m cli.aisp cluster common-eval --preset modern-llm
+  workload:
+    model: openai/gpt-oss-20b
+    sequenceLengthMix:
+      - inputTokens: 512
+        outputTokens: 128
+        weight: 0.7
+      - inputTokens: 1024
+        outputTokens: 256
+        weight: 0.3
+    precision: bf16
+    batchingPolicy: continuous
+    concurrencyModel: closed_loop
+    datasetRef: eval_datasets/README.md
+    fixedAcrossTrials:
+      - model
+      - sequenceLengthMix
+      - precision
+      - batchingPolicy
+      - concurrencyModel
+  comparison:
+    variableUnderTest: runtime_version
+    baseline:
+      artifactRef: cluster/published/current
+      description: currently published canonical package
+    candidate:
+      artifactRef: cluster/runs/${RUN_ID}
+      description: run under test
+    controls:
+      fixed:
+        model: openai/gpt-oss-20b
+        sequenceLengthMix: "[{512/128@0.7},{1024/256@0.3}]"
+        precision: bf16
+        batchingPolicy: continuous
+        concurrencyModel: closed_loop
+      compareOneVariableAtATime: true
+  metrics:
+    training:
+      enabled: false
+      primary:
+        - time_to_train_hours
+        - mfu_pct
+        - scaling_efficiency_pct
+        - training_reliability_pct
+    inference:
+      enabled: true
+      primary:
+        - ttft_ms
+        - tokens_per_second
+        - p99_latency_ms
+        - jitter_ms
+        - cost_per_request_usd
+        - cost_per_token_usd
+      secondary:
+        - request_goodput
+        - p50_latency_ms
+        - gpu_utilization_pct
+  trials:
+    minReplicates: 5
+    confidenceLevel: 0.95
+    outlierPolicy:
+      method: mad
+      action: flag_and_keep
+    report:
+      distributions: true
+      confidenceIntervals: true
+      rankLevelOutliers: true
+  bottleneckAnalysis:
+    taxonomy:
+      - compute_bound
+      - comm_bound
+      - input_bound
+      - control_plane_bound
+    decomposeOverheads:
+      - compute
+      - communication
+      - storage
+      - orchestration
+    instrumentation:
+      compute_bound:
+        - model_server_metrics
+        - gpu_counters
+        - ncu
+      comm_bound:
+        - nccl_traces
+        - rdma_probes
+        - nvlink_exporter
+      input_bound:
+        - storage_probes
+        - dataloader_metrics
+        - network_probes
+      control_plane_bound:
+        - scheduler_timing
+        - queue_depth
+        - job_startup_trace
+  distributed:
+    requireRankLevelVisibility: true
+    collectives:
+      - latency
+      - bandwidth
+      - outliers
+    nodeDiagnosis:
+      validate:
+        - rdma_pathing
+        - gpu_nic_affinity
+        - pcie_link_health
+        - nvlink_health
+        - thermal_throttling
+      remediation:
+        - isolate_bad_node
+        - cordon_problematic_node
+      exporters:
+        - node-pci-exporter
+        - nvlink-exporter
+        - gpu-thermal-exporter
+  observability:
+    correlation:
+      stableJoinKeys:
+        - run_id
+        - benchmark_case_id
+        - scheduler_run_id
+        - job_uid
+        - pod_uid
+        - node_name
+        - gpu_uuid
+        - rank_id
+        - request_id
+        - trace_id
+      publishedNumberLineage:
+        rawArtifactManifestDigest: true
+        warehouseRowLineage: true
+        querySpecCaptured: true
+    telemetrySources:
+      service:
+        - model_server_metrics
+        - request_traces
+        - queue_time
+      infrastructure:
+        - dcgm-exporter
+        - nvlink-exporter
+        - node-pci-exporter
+        - ping-exporter
+        - node-problem-detector
+        - hpc-verification
+      scheduler:
+        - kubernetes_events
+        - kueue
+        - slinky
+    scenarioPlaybooks:
+      - tail_latency_regression
+      - low_gpu_utilization
+      - distributed_straggler
+      - scheduler_backpressure
+  provenance:
+    capture:
+      pinnedWorkloadSpec: true
+      imageDigest: true
+      driverCudaNcclRuntimeVersions: true
+      hardwareTopology: true
+      immutableRawArtifacts: true
+      auditTrail: true
+    signing:
+      required: true
+      backend: sigstore
+      attestationFormat: in_toto
+  executionPolicy:
+    publicationGrade:
+      dedicatedNodes: true
+      stableBackgroundLoad: true
+      fixedTopology: true
+      topologyExclusiveScheduling: true
+    realismGrade:
+      multiTenantScenarios: false
+      captureClusterContext: true
+  sinks:
+    rawArtifacts:
+      store: object_storage
+      pathTemplate: s3://benchmarks/raw/${RUN_ID}/
+      retentionClass: cold_immutable
+      artifacts:
+        - logs
+        - traces
+        - profiler_reports
+        - manifests
+        - exported_metrics
+    hotMetrics:
+      store: prometheus
+      retentionDays: 30
+      cardinalityBudget:
+        maxActiveSeries: 2000000
+        dropDimensions:
+          - request_id
+          - trace_id
+          - prompt_hash
+    curatedWarehouse:
+      store: parquet_duckdb
+      layout:
+        facts:
+          - benchmark_run_fact
+          - serving_outcome_fact
+          - telemetry_slice_fact
+        dimensions:
+          - software_version_dim
+          - hardware_topology_dim
+          - cluster_region_dim
+          - workload_dim
+          - artifact_lineage_dim
+      retention:
+        hotDays: 30
+        warmDays: 180
+        coldDays: 730
+      lineage:
+        publishedNumbersTraceableToRaw: true
+        manifestDigestColumn: true
+        workloadSpecDigestColumn: true
+  automation:
+    ci:
+      canary: true
+      nightly: true
+      preRelease: true

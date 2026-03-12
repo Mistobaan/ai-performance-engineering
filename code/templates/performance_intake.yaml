@@ -2,8 +2,13 @@
 # The goal is to tighten the loop between goals, baselines, and proof-of-benefit.
 
 objective:
-  primary_kpi: tokens_per_second            # or samples_per_second | p50_latency_ms | p99_latency_ms | $/1M_tokens | J/1M_tokens
+  primary_kpi: tokens_per_second            # or time_to_train_hours | mfu_pct | scaling_efficiency_pct | ttft_ms | p99_latency_ms | jitter_cv_pct | cost_per_token_usd | cost_per_request_usd
   secondary_kpis: [throughput_per_dollar, throughput_per_watt, SLA_attainment_%]
+
+benchmark:
+  layer: component                          # micro | component | end_to_end
+  grade: publication                        # publication | realism
+  variable_under_test: runtime_version      # hardware_generation | runtime_version | scheduler_path | batching_policy | concurrency_model
 
 workload:
   type: inference                           # or training
@@ -47,13 +52,20 @@ environment:
   data_pipeline: []                         # where inputs come from, caching, prefetching, pin-memory
 
 current_baseline:
+  time_to_train_hours: null
+  mfu_pct: null
+  scaling_efficiency_pct: null
   tokens_per_second: null
+  ttft_ms: null
   p50_ms: null
   p99_ms: null
+  jitter_cv_pct: null
   gpu_util_percent: null
   mem_bw_percent: null
   nic_gbps: null
   goodput_percent: null                     # useful GPU time / total step/request time
+  cost_per_token_usd: null
+  cost_per_request_usd: null
 
 known_issues_or_hypotheses: []
 

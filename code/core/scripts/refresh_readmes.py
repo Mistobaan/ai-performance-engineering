@@ -577,6 +577,25 @@ ENTRIES["README.md"] = Entry(
             ),
         ),
         MarkdownSection(
+            "Benchmark Methodology",
+            dedent(
+                """\
+                This repo now exposes one repeatable benchmarking methodology instead of leaving performance work as a collection of scripts.
+
+                Start with:
+                - [`docs/benchmark_methodology.md`](/home/cfregly/ai-performance-engineering/code/docs/benchmark_methodology.md) for the three-layer model (`micro`, `component`, `end_to_end`), bottleneck taxonomy, publication-vs-realism policy, and straggler playbook.
+                - [`docs/performance_warehouse.md`](/home/cfregly/ai-performance-engineering/code/docs/performance_warehouse.md) for the stable event schema, raw-versus-curated storage split, retention tiers, and telemetry lineage back to raw evidence.
+                - [`templates/performance_intake.yaml`](/home/cfregly/ai-performance-engineering/code/templates/performance_intake.yaml) for KPIs, constraints, and the variable under test.
+                - [`templates/benchmark_workload_spec.yaml`](/home/cfregly/ai-performance-engineering/code/templates/benchmark_workload_spec.yaml) for the frozen workload definition and measurement policy.
+                - [`templates/benchmark_run.yaml`](/home/cfregly/ai-performance-engineering/code/templates/benchmark_run.yaml) for the CRD-aligned declarative `BenchmarkRun` shape the repo would map onto a Kubernetes-native service.
+                - [`cluster/docs/kubernetes_benchmark_service.md`](/home/cfregly/ai-performance-engineering/code/cluster/docs/kubernetes_benchmark_service.md) plus [`cluster/configs/benchmarkrun-crd.yaml`](/home/cfregly/ai-performance-engineering/code/cluster/configs/benchmarkrun-crd.yaml) for the cluster-native operator/CRD direction already being sketched in the repo.
+
+                Thin surfaces for these contracts are also exposed through `python -m cli.aisp tools benchmark-contracts`, dashboard API `GET /api/benchmark/contracts`, and MCP tool `benchmark_contracts`.
+
+                The current harness already captures manifests, profiler artifacts, raw timings, and artifact hashes. Cryptographic provenance signing is still a documented gap, so external publication packets should record that explicitly rather than assuming hashes alone are sufficient."""
+            ),
+        ),
+        MarkdownSection(
             "Cluster Evaluation",
             dedent(
                 """\
@@ -641,6 +660,8 @@ ENTRIES["README.md"] = Entry(
     notes=[
         "`core/scripts/profile_all_workloads.sh` and `ncu_template.ini` capture Nsight traces with consistent metric sets.",
         "`artifacts/runs/` holds run outputs (results/profiles/reports/logs); clean via `python cleanup.py` when rotating hardware.",
+        "`docs/benchmark_methodology.md` defines the repo-wide benchmarking method that ties harness runs, cluster packages, and publication-grade evidence together.",
+        "`docs/performance_warehouse.md` defines the warehouse contract that ties published numbers back to raw evidence and telemetry joins.",
         "`docs/perf_intake_and_triage.md` outlines the standard intake bundle for performance investigations.",
     ],
 )
