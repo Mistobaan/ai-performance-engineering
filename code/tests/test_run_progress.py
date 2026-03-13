@@ -77,6 +77,21 @@ def test_progress_phases_include_llm() -> None:
         assert key in phases
 
 
+def test_global_progress_percent_uses_run_offset_instead_of_resetting() -> None:
+    corrected = run_benchmarks._compute_global_progress_percent(
+        completed_benchmarks=0,
+        total_benchmarks=276,
+        phase_index=4,
+        total_phases=run_benchmarks.PROGRESS_TOTAL_PHASES,
+        benchmark_offset=236,
+    )
+    local_reset = ((0 + ((4 - 1) / run_benchmarks.PROGRESS_TOTAL_PHASES)) / 14) * 100.0
+
+    assert corrected is not None
+    assert corrected > 80.0
+    assert local_reset < 2.0
+
+
 def test_job_status_running_without_artifacts_reports_effective_queued(tmp_path: Path) -> None:
     store = mcp_server.JOB_STORE
     job_id = f"run_benchmarks-{uuid.uuid4().hex[:8]}"

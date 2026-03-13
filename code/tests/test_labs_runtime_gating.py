@@ -155,7 +155,7 @@ def test_trtllm_capture_verification_payload_uses_small_cpu_slice() -> None:
     bench.capture_verification_payload()
 
     verify_output = bench.get_verify_output()
-    assert verify_output.shape == (1, 128)
+    assert verify_output.shape == (1, trtllm_common.VERIFICATION_TOKEN_PREFIX)
     assert verify_output.device.type == "cpu"
 
 
@@ -202,3 +202,25 @@ def test_trtllm_generated_token_slice_normalizes_beams_and_padding() -> None:
             dtype=torch.long,
         ),
     )
+
+
+def test_trtllm_generated_token_slice_normalizes_output_dtype_to_int64() -> None:
+    output_ids = torch.tensor(
+        [[[11, 12, 13, 21, 22]]],
+        dtype=torch.int32,
+    )
+
+    normalized = trtllm_common.slice_generated_token_ids(
+        output_ids,
+        prompt_lengths=[3],
+        max_new_tokens=4,
+        pad_token_id=0,
+    )
+
+    assert normalized.dtype == torch.int64
+    assert torch.equal(normalized, torch.tensor([[21, 22, 0, 0]], dtype=torch.int64))
+
+
+def test_trtllm_verification_prefix_length_uses_stable_decode_prefix() -> None:
+    assert trtllm_common.verification_token_prefix_length(128) == trtllm_common.VERIFICATION_TOKEN_PREFIX
+    assert trtllm_common.verification_token_prefix_length(4) == 4

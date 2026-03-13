@@ -169,6 +169,7 @@ def _reap_descendant_processes(grace_seconds: float = 5.0) -> None:
 def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """Run benchmark and return results in harness-expected format."""
     import importlib.util
+    from core.harness.verify_output_codec import serialize_verify_tensor
     
     def _execute() -> Dict[str, Any]:
         """Execute a single benchmark inside an isolated subprocess.
@@ -331,13 +332,6 @@ def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
             def _dict_nbytes(tensors: Dict[str, "torch.Tensor"]) -> int:
                 return int(sum(_tensor_nbytes(t) for t in tensors.values()))
 
-            def _serialize_tensor(t: "torch.Tensor") -> Dict[str, Any]:
-                return {
-                    "shape": list(t.shape),
-                    "dtype": str(t.dtype),
-                    "data": t.detach().cpu().float().tolist(),
-                }
-
             if isinstance(verify_output, torch.Tensor):
                 if verify_output_max_bytes and _tensor_nbytes(verify_output) > verify_output_max_bytes:
                     if not verify_output_path:
@@ -347,7 +341,7 @@ def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     torch.save(verify_output.detach().cpu(), verify_output_path)
                     verify_output_data = {"kind": "tensor_file", "path": verify_output_path}
                 else:
-                    verify_output_data = {"kind": "tensor", **_serialize_tensor(verify_output)}
+                    verify_output_data = {"kind": "tensor", **serialize_verify_tensor(verify_output)}
             elif isinstance(verify_output, dict):
                 tensor_map: Dict[str, torch.Tensor] = {}
                 for name, tensor in verify_output.items():
@@ -364,7 +358,7 @@ def run_benchmark(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 else:
                     tensors: Dict[str, Any] = {}
                     for name, tensor in tensor_map.items():
-                        tensors[name] = _serialize_tensor(tensor)
+                        tensors[name] = serialize_verify_tensor(tensor)
                     verify_output_data = {"kind": "dict", "tensors": tensors}
             else:
                 raise TypeError(

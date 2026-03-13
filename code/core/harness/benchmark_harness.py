@@ -40,6 +40,7 @@ import torch
 from core.utils.compile_utils import enable_tf32
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.backend_policy import apply_backend_policy, normalize_backend_policy, restore_backend_policy
+from core.harness.verify_output_codec import deserialize_verify_tensor
 
 if TYPE_CHECKING:
     from core.benchmark.models import (
@@ -2985,19 +2986,9 @@ class BenchmarkHarness:
                             try:
                                 import torch
 
-                                def _deserialize_tensor(obj: Dict[str, Any]) -> torch.Tensor:
-                                    data = obj.get("data")
-                                    shape = obj.get("shape")
-                                    if data is None:
-                                        raise ValueError("verify_output missing 'data'")
-                                    tensor = torch.tensor(data, dtype=torch.float32)
-                                    if shape:
-                                        tensor = tensor.view(*shape)
-                                    return tensor
-
                                 kind = verify_output_data.get("kind") or "tensor"
                                 if kind == "tensor":
-                                    benchmark._subprocess_verify_output = _deserialize_tensor(verify_output_data)
+                                    benchmark._subprocess_verify_output = deserialize_verify_tensor(verify_output_data)
                                 elif kind == "tensor_file":
                                     path = verify_output_data.get("path")
                                     if not path:
@@ -3013,7 +3004,7 @@ class BenchmarkHarness:
                                     if not isinstance(tensors_obj, dict) or not tensors_obj:
                                         raise ValueError("verify_output kind='dict' missing tensors")
                                     benchmark._subprocess_verify_output = {
-                                        name: _deserialize_tensor(tensor_dict)
+                                        name: deserialize_verify_tensor(tensor_dict)
                                         for name, tensor_dict in tensors_obj.items()
                                     }
                                 elif kind == "dict_file":

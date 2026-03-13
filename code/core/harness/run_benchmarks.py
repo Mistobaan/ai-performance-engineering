@@ -214,6 +214,76 @@ def _format_required_profiler_failure(failures: List[str]) -> str:
 PROGRESS_TOTAL_PHASES = max(PROGRESS_PHASES.values())
 _SERVING_STACK_PINS = get_serving_stack_pins()
 
+
+def _discover_chapter_benchmark_pairs(
+    chapter_dir: Path,
+    *,
+    only_examples: Optional[List[str]] = None,
+    only_cuda: bool = False,
+    only_python: bool = False,
+) -> Tuple[List[Tuple[Any, ...]], List[Tuple[Any, ...]], Optional[Set[str]], int, int]:
+    """Return chapter benchmark pairs using the same filtering as execution."""
+
+    python_pairs = discover_benchmarks(chapter_dir)
+    example_filters = None
+    if only_examples:
+        example_filters = {name.strip() for name in only_examples if name.strip()}
+        if example_filters:
+            python_pairs = [pair for pair in python_pairs if pair[2] in example_filters]
+
+    suppressed_alias_pairs = 0
+    if not example_filters:
+        before_pairs = len(python_pairs)
+        python_pairs = [
+            pair
+            for pair in python_pairs
+            if pair[2] == pair[0].stem.replace("baseline_", "", 1)
+        ]
+        suppressed_alias_pairs = before_pairs - len(python_pairs)
+
+    python_pairs, suppressed_variant_opts = _canonicalize_optimized_variants_for_full_sweep(
+        python_pairs,
+    )
+
+    if only_cuda or only_python:
+        cuda_wrapped_pairs = [pair for pair in python_pairs if is_cuda_binary_benchmark_file(pair[0])]
+        if only_cuda:
+            python_pairs = cuda_wrapped_pairs
+        elif only_python:
+            python_pairs = [pair for pair in python_pairs if pair not in cuda_wrapped_pairs]
+
+    cuda_pairs = discover_cuda_benchmarks(chapter_dir)
+    if example_filters:
+        cuda_pairs = [pair for pair in cuda_pairs if pair[2] in example_filters]
+    if only_python:
+        cuda_pairs = []
+
+    return (
+        python_pairs,
+        cuda_pairs,
+        example_filters,
+        suppressed_alias_pairs,
+        suppressed_variant_opts,
+    )
+
+
+def _compute_global_progress_percent(
+    *,
+    completed_benchmarks: int,
+    total_benchmarks: int,
+    phase_index: int,
+    total_phases: int,
+    benchmark_offset: int = 0,
+) -> Optional[float]:
+    """Compute monotonic run-global progress for a benchmark phase."""
+
+    if total_benchmarks <= 0:
+        return None
+    phase_progress = 0.0
+    if phase_index > 0 and total_phases > 0:
+        phase_progress = (phase_index - 1) / total_phases
+    return ((benchmark_offset + completed_benchmarks + phase_progress) / total_benchmarks) * 100.0
+
 # Import metric extraction utilities
 try:
     from core.analysis.metric_extractor import (
@@ -3319,6 +3389,8 @@ def _test_chapter_impl(
     use_llm_cache: bool = True,
     llm_explain: bool = False,
     progress_recorder: Optional[ProgressRecorder] = None,
+    progress_completed_benchmarks: int = 0,
+    progress_total_benchmarks: Optional[int] = None,
     event_logger: Optional["BenchmarkEventLogger"] = None,
     fail_on_no_benchmarks: bool = False,
 ) -> Dict[str, Any]:
@@ -3521,62 +3593,39 @@ def _test_chapter_impl(
             # If we can't create the directory, that's okay - env_defaults.py should have handled it
             pass
     
-    # Discover Python benchmarks
+    # Discover benchmark pairs using the same filters as the outer run planner.
     logger.info(f"  Discovering Python benchmarks...")
-    python_pairs = discover_benchmarks(chapter_dir)
-    def _is_cuda_wrapper(path: Path) -> bool:
-        return is_cuda_binary_benchmark_file(path)
-
-    example_filters = None
     if only_examples:
         logger.info(f"  Requested examples: {only_examples}")
-        example_filters = {name.strip() for name in only_examples if name.strip()}
-        if example_filters:
-            python_pairs = [
-                pair for pair in python_pairs if pair[2] in example_filters
-            ]
-            logger.info(f"  Filtered to {len(python_pairs)} example(s): {', '.join(sorted(example_filters))}")
-    if not example_filters:
-        # Full chapter runs should execute canonical baseline->optimized pairings once.
-        # Alias entries (added for chapter:example_variant targeting) duplicate work.
-        before_pairs = len(python_pairs)
-        python_pairs = [
-            pair
-            for pair in python_pairs
-            if pair[2] == pair[0].stem.replace("baseline_", "", 1)
-        ]
-        suppressed_pairs = before_pairs - len(python_pairs)
-        if suppressed_pairs:
-            logger.info(
-                "  Suppressed %d alias benchmark pair(s) for full chapter run.",
-                suppressed_pairs,
-            )
-    python_pairs, suppressed_variant_opts = _canonicalize_optimized_variants_for_full_sweep(
+    (
         python_pairs,
+        cuda_pairs,
+        example_filters,
+        suppressed_pairs,
+        suppressed_variant_opts,
+    ) = _discover_chapter_benchmark_pairs(
+        chapter_dir,
+        only_examples=only_examples,
+        only_cuda=only_cuda,
+        only_python=only_python,
     )
+    if example_filters:
+        logger.info(f"  Filtered to {len(python_pairs)} example(s): {', '.join(sorted(example_filters))}")
+    elif suppressed_pairs:
+        logger.info(
+            "  Suppressed %d alias benchmark pair(s) for full chapter run.",
+            suppressed_pairs,
+        )
     if suppressed_variant_opts:
         logger.info(
             "  Canonicalized %d optimization variant(s) for %s full sweep.",
             suppressed_variant_opts,
             chapter_id,
         )
-    if only_cuda or only_python:
-        cuda_wrapped_pairs = [pair for pair in python_pairs if _is_cuda_wrapper(pair[0])]
-        if only_cuda:
-            python_pairs = cuda_wrapped_pairs
-        elif only_python:
-            python_pairs = [pair for pair in python_pairs if pair not in cuda_wrapped_pairs]
     logger.info(f"  Found {len(python_pairs)} Python benchmark pair(s)")
 
     # Discover CUDA benchmarks and ensure executables are built
     logger.info(f"  Discovering CUDA benchmarks...")
-    cuda_pairs = discover_cuda_benchmarks(chapter_dir)
-    if example_filters:
-        cuda_pairs = [
-            pair for pair in cuda_pairs if pair[2] in example_filters
-        ]
-    if only_python:
-        cuda_pairs = []
     cuda_build_ok = True
     cuda_build_warning = None
     if cuda_pairs:
@@ -3824,6 +3873,7 @@ def _test_chapter_impl(
     
     done_count = 0
     progress_ok = True
+    progress_total = progress_total_benchmarks or total_benchmarks
 
     def emit_progress(
         phase: str,
@@ -3842,11 +3892,14 @@ def _test_chapter_impl(
             return
         phase_index = PROGRESS_PHASES.get(phase, 0)
         percent_complete = percent_override
-        if percent_complete is None and total_benchmarks:
-            phase_progress = 0.0
-            if phase_index > 0 and PROGRESS_TOTAL_PHASES:
-                phase_progress = (phase_index - 1) / PROGRESS_TOTAL_PHASES
-            percent_complete = ((done_count + phase_progress) / total_benchmarks) * 100.0
+        if percent_complete is None and progress_total:
+            percent_complete = _compute_global_progress_percent(
+                completed_benchmarks=done_count,
+                total_benchmarks=progress_total,
+                phase_index=phase_index,
+                total_phases=PROGRESS_TOTAL_PHASES,
+                benchmark_offset=progress_completed_benchmarks,
+            )
         event = ProgressEvent(
             phase=phase,
             phase_index=phase_index,
@@ -3893,14 +3946,19 @@ def _test_chapter_impl(
     def mark_progress(example_label: str) -> None:
         nonlocal done_count
         done_count += 1
-        if total_benchmarks:
-            percent = (done_count / total_benchmarks) * 100.0
+        if progress_total:
+            percent = ((progress_completed_benchmarks + done_count) / progress_total) * 100.0
         else:
             percent = None
+        step_detail = f"completed {done_count}/{total_benchmarks}"
+        if progress_total and progress_total != total_benchmarks:
+            step_detail = (
+                f"{step_detail} (global {progress_completed_benchmarks + done_count}/{progress_total})"
+            )
         emit_progress(
             "complete",
             step=f"{chapter_name}:{example_label}",
-            step_detail=f"completed {done_count}/{total_benchmarks}",
+            step_detail=step_detail,
             percent_override=percent,
         )
         if watchdog_record:
@@ -9275,6 +9333,8 @@ def test_chapter(
     use_llm_cache: bool = True,
     llm_explain: bool = False,
     progress_recorder: Optional[ProgressRecorder] = None,
+    progress_completed_benchmarks: int = 0,
+    progress_total_benchmarks: Optional[int] = None,
     event_logger: Optional["BenchmarkEventLogger"] = None,
     fail_on_no_benchmarks: bool = False,
 ) -> Dict[str, Any]:
@@ -9327,6 +9387,8 @@ def test_chapter(
         use_llm_cache=use_llm_cache,
         llm_explain=llm_explain,
         progress_recorder=progress_recorder,
+        progress_completed_benchmarks=progress_completed_benchmarks,
+        progress_total_benchmarks=progress_total_benchmarks,
         event_logger=event_logger,
         fail_on_no_benchmarks=fail_on_no_benchmarks,
     )
@@ -10166,9 +10228,32 @@ def main():
             base_dir=default_artifacts_root(active_bench_root),
         )
         profile_output_root = default_artifacts_root(active_bench_root) / profile_run_id / "profiles"
+
+    chapter_progress_totals: Dict[Path, int] = {}
+    global_total_benchmarks = 0
+    for chapter_dir in chapter_dirs:
+        if not chapter_dir.exists():
+            continue
+        example_filters = chapter_filters.get(chapter_slug(chapter_dir, repo_root))
+        only_examples = sorted(example_filters) if example_filters else None
+        planned_python_pairs, planned_cuda_pairs, _, _, _ = _discover_chapter_benchmark_pairs(
+            chapter_dir,
+            only_examples=only_examples,
+            only_cuda=bool(args.only_cuda),
+            only_python=bool(args.only_python),
+        )
+        planned_total = len(planned_python_pairs) + len(planned_cuda_pairs)
+        chapter_progress_totals[chapter_dir.resolve()] = planned_total
+        global_total_benchmarks += planned_total
+    logger.info(
+        "Progress planning: %d benchmark(s) across %d chapter target(s)",
+        global_total_benchmarks,
+        len(chapter_progress_totals),
+    )
     
     # Test all chapters
     all_results = []
+    completed_benchmarks = 0
     explicit_targets = bool(
         args.targets and not any(str(token).strip().lower() == "all" for token in args.targets)
     )
@@ -10195,6 +10280,7 @@ def main():
 
         example_filters = chapter_filters.get(chapter_slug(chapter_dir, repo_root))
         only_examples = sorted(example_filters) if example_filters else None
+        chapter_progress_total = chapter_progress_totals.get(chapter_dir.resolve(), 0)
         result = test_chapter(
             chapter_dir,
             enable_profiling=args.profile != 'none',
@@ -10227,10 +10313,13 @@ def main():
             only_cuda=bool(args.only_cuda),
             only_python=bool(args.only_python),
             force_synchronize=bool(args.force_sync),
+            progress_completed_benchmarks=completed_benchmarks,
+            progress_total_benchmarks=global_total_benchmarks,
             event_logger=event_logger,
             fail_on_no_benchmarks=explicit_targets,
         )
         all_results.append(result)
+        completed_benchmarks += chapter_progress_total
         if args.format in ['json', 'both']:
             with open(args.output, 'w') as f:
                 json.dump({

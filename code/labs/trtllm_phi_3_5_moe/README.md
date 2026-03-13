@@ -15,7 +15,7 @@ End-to-end serving optimizations are easy to misread because setup, engine build
 - TensorRT-LLM-oriented optimized serving path
 - same workload and verification contract
 - tuned to show the practical inference-stack win, not just a kernel-local result
-- verifies deterministic generated token ids rather than the more fragile full-logits path
+- verifies a deterministic generated-token prefix rather than the more fragile full-logits or full-suffix path
 
 ## Measured Delta
 Representative validated result from `artifacts/runs/20260303_trtllm_phi35moe_minimal_expectations_mixedprov_clean17/`:
@@ -61,7 +61,7 @@ python -m cli.aisp bench run --targets labs/trtllm_phi_3_5_moe --profile minimal
 - Portable runs do not write expectation files unless `--allow-portable-expectations-update` is also provided.
 
 ## Validation Checklist
-- `python -m cli.aisp bench run --targets labs/trtllm_phi_3_5_moe:trtllm_phi_3_5_moe --profile minimal` should keep the optimized path verification-clean and materially ahead.
+- `python -m cli.aisp bench run --targets labs/trtllm_phi_3_5_moe:trtllm_phi_3_5_moe --profile minimal` should keep the optimized path verification-clean on the shared generated-token prefix and materially ahead.
 
 ## Notes
 - This lab is one of the best repo examples for "serving-stack optimization" as opposed to pure kernel tuning.

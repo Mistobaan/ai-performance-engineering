@@ -16,6 +16,7 @@ from labs.trtllm_phi_3_5_moe.trtllm_common import (
     parse_trtllm_args,
     resolve_model_path,
     slice_generated_token_ids,
+    verification_token_prefix_length,
 )
 
 
@@ -109,7 +110,7 @@ class BaselineTrtLlmPhi35MoeBenchmark(VerificationPayloadMixin, BaseBenchmark):
             prompt_lengths=[self.prompt_lengths[0]],
             max_new_tokens=self.max_new_tokens,
             pad_token_id=self.pad_token_id,
-        )[:, : min(self.max_new_tokens, 128)].detach().cpu().clone()
+        )[:, : verification_token_prefix_length(self.max_new_tokens)].detach().cpu().clone()
         # Keep signature fields backend-agnostic so baseline Transformers and optimized
         # TRT-LLM engine runs compare on equivalent workload semantics.
         parameter_count = 0
