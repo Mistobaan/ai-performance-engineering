@@ -1,0 +1,331 @@
+{
+  "summary": {
+    "original_run_id": "20260313_full_chapter_deep_dive_single_gpu_v3",
+    "recheck_run_ids": [
+      "20260314_deep_dive_failed_targets_recheck_v6_clean",
+      "20260314_deep_dive_failed_targets_recheck_v7_regional_compilation",
+      "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "20260314_deep_dive_dsmem_v3_recheck_v14",
+      "20260314_deep_dive_dsmem_v3_recheck_v15_direct"
+    ],
+    "total_original_failures": 18,
+    "resolved_count": 18,
+    "unresolved_count": 0
+  },
+  "rows": [
+    {
+      "target": "ch09:compute_bound",
+      "chapter": "ch09",
+      "example": "compute_bound",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_compute_bound:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 1.7138188914005734,
+      "resolved": true
+    },
+    {
+      "target": "ch09:cublas_gemm_fp4_perchannel",
+      "chapter": "ch09",
+      "example": "cublas_gemm_fp4_perchannel",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "baseline:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v6_clean",
+      "best_speedup": 1.1406476240621297,
+      "resolved": true
+    },
+    {
+      "target": "ch10:dsmem_reduction",
+      "chapter": "ch10",
+      "example": "dsmem_reduction",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "baseline:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v6_clean",
+      "best_speedup": 1.5486725663716814,
+      "resolved": true
+    },
+    {
+      "target": "ch10:dsmem_reduction_v3",
+      "chapter": "ch10",
+      "example": "dsmem_reduction_v3",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "baseline:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_dsmem_v3_recheck_v15_direct",
+      "best_speedup": 1.851063829787234,
+      "resolved": true
+    },
+    {
+      "target": "ch10:dsmem_reduction_warp_specialized",
+      "chapter": "ch10",
+      "example": "dsmem_reduction_warp_specialized",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "baseline:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v6_clean",
+      "best_speedup": 2.0348837209302326,
+      "resolved": true
+    },
+    {
+      "target": "ch12:cuda_graphs",
+      "chapter": "ch12",
+      "example": "cuda_graphs",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_cuda_graphs:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 3.490420000151685,
+      "resolved": true
+    },
+    {
+      "target": "ch12:cuda_graphs_router",
+      "chapter": "ch12",
+      "example": "cuda_graphs_router",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_cuda_graphs_router:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 3.316841319440978,
+      "resolved": true
+    },
+    {
+      "target": "ch12:graph_bandwidth",
+      "chapter": "ch12",
+      "example": "graph_bandwidth",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_graph_bandwidth:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 2.4653453426975895,
+      "resolved": true
+    },
+    {
+      "target": "ch12:graph_conditional_runtime",
+      "chapter": "ch12",
+      "example": "graph_conditional_runtime",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_graph_conditional_runtime:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 3.00187030218131,
+      "resolved": true
+    },
+    {
+      "target": "ch12:kernel_launches",
+      "chapter": "ch12",
+      "example": "kernel_launches",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_kernel_launches:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 2.9769248514542905,
+      "resolved": true
+    },
+    {
+      "target": "ch13:autograd_standard",
+      "chapter": "ch13",
+      "example": "autograd_standard",
+      "original_status": "failed_verification",
+      "original_issues": [
+        {
+          "kind": "failed_verification",
+          "detail": "optimized_autograd_standard:failed_verification"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 6.315473173044752,
+      "resolved": true
+    },
+    {
+      "target": "ch13:fp8_static",
+      "chapter": "ch13",
+      "example": "fp8_static",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_fp8_static:nsys:failed"
+        },
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_fp8_static:ncu:failed"
+        },
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_fp8_static:torch:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 1.2565107986196997,
+      "resolved": true
+    },
+    {
+      "target": "ch13:matmul_pytorch",
+      "chapter": "ch13",
+      "example": "matmul_pytorch",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_matmul_pytorch:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 1.4784954265929497,
+      "resolved": true
+    },
+    {
+      "target": "ch13:memory_profiling",
+      "chapter": "ch13",
+      "example": "memory_profiling",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_memory_profiling:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 2.776929410674037,
+      "resolved": true
+    },
+    {
+      "target": "ch13:precisionfp8_te",
+      "chapter": "ch13",
+      "example": "precisionfp8_te",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_precisionfp8_te:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 5.261409777677633,
+      "resolved": true
+    },
+    {
+      "target": "ch16:regional_compilation",
+      "chapter": "ch16",
+      "example": "regional_compilation",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_regional_compilation:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v7_regional_compilation",
+      "best_speedup": 1.113436620335057,
+      "resolved": true
+    },
+    {
+      "target": "ch17:memory",
+      "chapter": "ch17",
+      "example": "memory",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_memory:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 12.215912537488453,
+      "resolved": true
+    },
+    {
+      "target": "ch20:end_to_end_bandwidth",
+      "chapter": "ch20",
+      "example": "end_to_end_bandwidth",
+      "original_status": "failed_profiler",
+      "original_issues": [
+        {
+          "kind": "failed_profiler",
+          "detail": "optimized_end_to_end_bandwidth:nsys:failed"
+        }
+      ],
+      "latest_status": "succeeded",
+      "latest_issues": [],
+      "latest_run_id": "20260314_deep_dive_failed_targets_recheck_v13_clean",
+      "best_speedup": 4.508271786469141,
+      "resolved": true
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+# Deep-Dive Final Disposition
+
+- Original run: `20260313_full_chapter_deep_dive_single_gpu_v3`
+- Failure rechecks: `20260314_deep_dive_failed_targets_recheck_v6_clean, 20260314_deep_dive_failed_targets_recheck_v7_regional_compilation, 20260314_deep_dive_failed_targets_recheck_v13_clean, 20260314_deep_dive_dsmem_v3_recheck_v14, 20260314_deep_dive_dsmem_v3_recheck_v15_direct`
+- Weak-case source run: `20260313_full_chapter_deep_dive_single_gpu_v3`
+- Total targets in disposition ledger: `46`
+- Disposition counts: `{'hold_expectations_family_investigation': 7, 'hold_expectations_reframe_narrative': 7, 'hold_expectations_hardware_or_capability_gated': 2, 'refresh_with_qualified_narrative': 11, 'refresh_expectations': 18, 'evaluate_non_speed_goal': 1}`
+
+| Target | Disposition | Expectations | Narrative | Failure Status | Note |
+| --- | --- | --- | --- | --- | --- |
+| `ch01:nvfp4_mlp` | `hold_expectations_family_investigation` | `hold` | `reframe` | `n/a` | All chapters use the same shared NVFP4 MLP benchmark shape and the same Transformer Engine NVFP4 path. On this environment the optimized path shows near-identical kernel metrics and no durable end-to-end win over the BF16 baseline, so the family is weak by construction rather than by one chapter-specific bug. |
+| `ch04:symmetric_memory_perf` | `hold_expectations_reframe_narrative` | `hold` | `reframe` | `n/a` | Do not refresh expectations upward or present this as a strong win; either improve the benchmark or demote the narrative. |
+| `ch05:ai` | `hold_expectations_reframe_narrative` | `hold` | `reframe` | `n/a` | Do not refresh expectations upward or present this as a strong win; either improve the benchmark or demote the narrative. |
+| `ch05:distributed` | `hold_expectations_hardware_or_capability_gated` | `hold` | `reframe` | `n/a` | The optimized path is intentionally multi-GPU/distributed and is skipped on this 1-GPU host, while the baseline still runs as a single-GPU host-staged reduction. This is not an optimization miss; it is a scope/hardware mismatch for the current environment. |
+| `ch08:nvfp4_mlp` | `hold_expectations_family_investigation` | `hold` | `reframe` | `n/a` | All chapters use the same shared NVFP4 MLP benchmark shape and the same Transformer Engine NVFP4 path. On this environment the optimized path shows near-identical kernel metrics and no durable end-to-end win over the BF16 baseline, so the family is weak by construction rather than by one chapter-specific bug. |
+| `ch08:tiling_tcgen05` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch09:compute_bound` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch09:cublas_gemm_fp4_perchannel` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch09:cublaslt_gemm_fp4` | `hold_expectations_hardware_or_capability_gated` | `hold` | `reframe` | `n/a` | The optimized cuBLASLt NVFP4 algorithm is unavailable on the current driver/toolchain stack, so no optimized winner is produced. |
+| `ch09:cutlass_gemm_fp4_perchannel` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch10:cooperative_persistent` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch10:dsmem_reduction` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch10:dsmem_reduction_v3` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch10:dsmem_reduction_warp_specialized` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch10:matmul_tcgen05_epilogue` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch10:persistent_matmul_tma` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch10:tcgen05_cluster_pipeline` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch10:tcgen05_warp_specialization_cutlass` | `hold_expectations_reframe_narrative` | `hold` | `reframe` | `n/a` | Do not refresh expectations upward or present this as a strong win; either improve the benchmark or demote the narrative. |
+| `ch10:warp_specialized_cluster_pipeline` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch11:tensor_cores_streams` | `hold_expectations_reframe_narrative` | `hold` | `reframe` | `n/a` | Do not refresh expectations upward or present this as a strong win; either improve the benchmark or demote the narrative. |
+| `ch12:cuda_graphs` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch12:cuda_graphs_router` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch12:graph_bandwidth` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch12:graph_conditional_runtime` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch12:kernel_launches` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch12:nvfp4_mlp` | `hold_expectations_family_investigation` | `hold` | `reframe` | `n/a` | All chapters use the same shared NVFP4 MLP benchmark shape and the same Transformer Engine NVFP4 path. On this environment the optimized path shows near-identical kernel metrics and no durable end-to-end win over the BF16 baseline, so the family is weak by construction rather than by one chapter-specific bug. |
+| `ch13:autograd_standard` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch13:fp8_static` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch13:kv_cache_naive_pool` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch13:matmul_pytorch` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch13:memory_profiling` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch13:precisionfp8_te` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch13:training_standard` | `evaluate_non_speed_goal` | `goal_specific` | `goal_specific` | `n/a` | Do not score this example as a speed story; evaluate it against its declared non-speed goal. |
+| `ch15:allreduce_rmsnorm` | `hold_expectations_reframe_narrative` | `hold` | `reframe` | `n/a` | Do not refresh expectations upward or present this as a strong win; either improve the benchmark or demote the narrative. |
+| `ch15:disaggregated_inference` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch15:moe_overlap` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch15:moe_overlap_shared_expert` | `refresh_with_qualified_narrative` | `refresh` | `qualify` | `n/a` | Keep the example, but describe it as a small or context-dependent win rather than a headline optimization. |
+| `ch15:nvfp4_mlp` | `hold_expectations_family_investigation` | `hold` | `reframe` | `n/a` | All chapters use the same shared NVFP4 MLP benchmark shape and the same Transformer Engine NVFP4 path. On this environment the optimized path shows near-identical kernel metrics and no durable end-to-end win over the BF16 baseline, so the family is weak by construction rather than by one chapter-specific bug. |
+| `ch16:nvfp4_mlp` | `hold_expectations_family_investigation` | `hold` | `reframe` | `n/a` | All chapters use the same shared NVFP4 MLP benchmark shape and the same Transformer Engine NVFP4 path. On this environment the optimized path shows near-identical kernel metrics and no durable end-to-end win over the BF16 baseline, so the family is weak by construction rather than by one chapter-specific bug. |
+| `ch16:regional_compilation` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch17:memory` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch17:nvfp4_mlp` | `hold_expectations_family_investigation` | `hold` | `reframe` | `n/a` | All chapters use the same shared NVFP4 MLP benchmark shape and the same Transformer Engine NVFP4 path. On this environment the optimized path shows near-identical kernel metrics and no durable end-to-end win over the BF16 baseline, so the family is weak by construction rather than by one chapter-specific bug. |
+| `ch17:prefill_decode_disagg_tpot_long` | `hold_expectations_reframe_narrative` | `hold` | `reframe` | `n/a` | Do not refresh expectations upward or present this as a strong win; either improve the benchmark or demote the narrative. |
+| `ch19:vectorization_memory` | `hold_expectations_reframe_narrative` | `hold` | `reframe` | `n/a` | Do not refresh expectations upward or present this as a strong win; either improve the benchmark or demote the narrative. |
+| `ch20:end_to_end_bandwidth` | `refresh_expectations` | `refresh` | `keep` | `succeeded` | Resolved on clean reruns and not flagged as a weak-case holdout. |
+| `ch20:nvfp4_mlp` | `hold_expectations_family_investigation` | `hold` | `reframe` | `n/a` | All chapters use the same shared NVFP4 MLP benchmark shape and the same Transformer Engine NVFP4 path. On this environment the optimized path shows near-identical kernel metrics and no durable end-to-end win over the BF16 baseline, so the family is weak by construction rather than by one chapter-specific bug. |
