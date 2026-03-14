@@ -215,6 +215,14 @@ PROGRESS_TOTAL_PHASES = max(PROGRESS_PHASES.values())
 _SERVING_STACK_PINS = get_serving_stack_pins()
 
 
+def _is_cuda_wrapper(path: Path) -> bool:
+    """Best-effort check for Python benchmarks that wrap CUDA binaries."""
+    try:
+        return is_cuda_binary_benchmark_file(path)
+    except Exception:
+        return False
+
+
 def _discover_chapter_benchmark_pairs(
     chapter_dir: Path,
     *,
@@ -246,7 +254,7 @@ def _discover_chapter_benchmark_pairs(
     )
 
     if only_cuda or only_python:
-        cuda_wrapped_pairs = [pair for pair in python_pairs if is_cuda_binary_benchmark_file(pair[0])]
+        cuda_wrapped_pairs = [pair for pair in python_pairs if _is_cuda_wrapper(pair[0])]
         if only_cuda:
             python_pairs = cuda_wrapped_pairs
         elif only_python:
@@ -3965,13 +3973,6 @@ def _test_chapter_impl(
             watchdog_record(f"{chapter_name}:{example_label} ({done_count}/{total_benchmarks})")
 
     from contextlib import ExitStack
-
-    def _is_cuda_wrapper(path: Path) -> bool:
-        try:
-            text = path.read_text(encoding="utf-8")
-        except Exception:
-            return False
-        return "CudaBinaryBenchmark" in text and "cuda_binary_path" in text
 
     with ExitStack() as cleanup_stack:
         if stop_watchdog:
@@ -9805,15 +9806,6 @@ def _preflight_target_coverage_and_assets(
 ) -> List[str]:
     issues: List[str] = []
 
-    def _is_cuda_wrapper_pair(pair: Tuple[Path, List[Path], str]) -> bool:
-        baseline_path = pair[0]
-        try:
-            text = baseline_path.read_text(encoding="utf-8")
-        except Exception:
-            return False
-        # Match the harness wrapper contract used across chapter/lab CUDA wrappers.
-        return "CudaBinaryBenchmark" in text and "cuda_binary_path" in text
-
     for chapter_dir in chapter_dirs:
         chapter_id = chapter_slug(chapter_dir, repo_root)
         chapter_name = chapter_id.replace("/", "_")
@@ -9832,7 +9824,7 @@ def _preflight_target_coverage_and_assets(
             python_pairs,
         )
         if only_cuda or only_python:
-            cuda_wrapped_pairs = [pair for pair in python_pairs if _is_cuda_wrapper_pair(pair)]
+            cuda_wrapped_pairs = [pair for pair in python_pairs if _is_cuda_wrapper(pair[0])]
             if only_cuda:
                 python_pairs = cuda_wrapped_pairs
             elif only_python:
