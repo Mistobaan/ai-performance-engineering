@@ -5,10 +5,27 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from core.analysis.history_index import update_history_index
 from core.benchmark.suites.tier1 import load_tier1_suite
+
+
+def _load_summary(path: Path) -> dict:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"Failed to read tier-1 summary JSON {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected JSON object in tier-1 summary JSON {path}, got {type(payload).__name__}")
+    run_id = payload.get("run_id")
+    if not isinstance(run_id, str) or not run_id:
+        raise ValueError(f"Missing run_id in tier-1 summary JSON {path}")
+    summary = payload.get("summary")
+    if not isinstance(summary, dict):
+        raise ValueError(f"Expected summary object in tier-1 summary JSON {path}, got {type(summary).__name__}")
+    return payload
 
 
 def main() -> int:
@@ -22,7 +39,11 @@ def main() -> int:
     args = parser.parse_args()
 
     suite = load_tier1_suite(args.config)
-    summary = json.loads(args.summary_json.read_text(encoding="utf-8"))
+    try:
+        summary = _load_summary(args.summary_json)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     updated = update_history_index(
         history_root=args.history_root,
         suite=suite,
