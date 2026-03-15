@@ -539,8 +539,24 @@ def _format_rel_link(target: Path, base_dir: Path) -> str:
 
 def _safe_read_text(path: Path) -> Optional[str]:
     try:
-        return path.read_text()
+        return path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _safe_read_text_with_warning(
+    path: Path,
+    *,
+    label: str,
+    warnings_list: Optional[List[str]] = None,
+) -> Optional[str]:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        warning = f"Failed to read {label} from {path}: {exc}"
+        logger.warning(warning)
+        if warnings_list is not None and warning not in warnings_list:
+            warnings_list.append(warning)
         return None
 
 
@@ -7586,7 +7602,10 @@ def _test_chapter_impl(
                                     optimized_file = chapter_dir / best_opt['file']
                                 
                                 if optimized_file.exists() and optimized_file.is_file():
-                                    original_optimized_code = optimized_file.read_text()
+                                    original_optimized_code = _safe_read_text_with_warning(
+                                        optimized_file,
+                                        label=f"original optimized source code for {example_name}",
+                                    )
                                 
                                 for patch in benchmarkable:
                                     patch_name = _patch_label(patch)
@@ -7643,7 +7662,15 @@ def _test_chapter_impl(
                                         
                                         # Try refinement (up to llm_patch_retries attempts)
                                         if original_optimized_code:
-                                            patched_code = Path(patch['patched_file']).read_text() if Path(patch['patched_file']).exists() else None
+                                            patched_file_path = Path(patch['patched_file'])
+                                            patched_code = (
+                                                _safe_read_text_with_warning(
+                                                    patched_file_path,
+                                                    label=f"patched source code for {patch_name}",
+                                                )
+                                                if patched_file_path.exists()
+                                                else None
+                                            )
                                             if patched_code:
                                                 for attempt in range(llm_patch_retries):
                                                     logger.info(f"      🔄 Refinement attempt {attempt + 1}/{llm_patch_retries}...")
@@ -7739,7 +7766,12 @@ def _test_chapter_impl(
                                     if llm_explain and original_optimized_code:
                                         patched_file_path = Path(best_patch.get('patched_file', ''))
                                         if patched_file_path.exists():
-                                            patched_code = patched_file_path.read_text()
+                                            patched_code = _safe_read_text_with_warning(
+                                                patched_file_path,
+                                                label=f"best patched source code for {_patch_label(best_patch)}",
+                                            )
+                                            if patched_code is None:
+                                                continue
                                             logger.info(f"    📚 Generating educational explanation...")
                                             emit_progress(
                                                 "llm_explain",
@@ -7942,17 +7974,27 @@ def _run_llm_analysis_for_benchmark(
     # Load source code
     baseline_code = None
     optimized_code = None
+    source_warnings: List[str] = []
     
     for ext in ['.py', '.cu']:
         baseline_file = chapter_dir / f"baseline_{example_name}{ext}"
         if baseline_file.exists():
-            baseline_code = baseline_file.read_text()
-            break
+            baseline_code = _safe_read_text_with_warning(
+                baseline_file,
+                label=f"baseline source code for {example_name}",
+                warnings_list=source_warnings,
+            )
+            if baseline_code is not None:
+                break
     
     if best_opt and best_opt.get('file'):
         opt_file = chapter_dir / best_opt['file']
         if opt_file.exists():
-            optimized_code = opt_file.read_text()
+            optimized_code = _safe_read_text_with_warning(
+                opt_file,
+                label=f"optimized source code for {example_name}",
+                warnings_list=source_warnings,
+            )
     
     # Setup output directory
     output_dir = chapter_dir / "llm_analysis"
@@ -7963,7 +8005,12 @@ def _run_llm_analysis_for_benchmark(
     # Check cache
     cache_key = _compute_cache_key(baseline_code, optimized_code, best_speedup)
     if use_cache and llm_md_path.exists() and cache_key_path.exists():
-        cached_key = cache_key_path.read_text().strip()
+        cached_text = _safe_read_text_with_warning(
+            cache_key_path,
+            label=f"LLM cache key for {example_name}",
+            warnings_list=source_warnings,
+        )
+        cached_key = cached_text.strip() if cached_text is not None else None
         if cached_key == cache_key:
             logger.info(f"    📦 Using cached LLM analysis for {example_name}")
             return {
@@ -7972,6 +8019,7 @@ def _run_llm_analysis_for_benchmark(
                 'model': 'cached',
                 'latency_seconds': 0.0,
                 'cached': True,
+                'warnings': source_warnings,
             }
     
     diff_report = {
@@ -7992,6 +8040,7 @@ def _run_llm_analysis_for_benchmark(
         optimized_code=optimized_code,
         environment=env_ctx,
     )
+    result.warnings.extend(w for w in source_warnings if w not in result.warnings)
     
     # Save output and cache key
     llm_md_path.write_text(result.to_markdown())
@@ -8002,6 +8051,7 @@ def _run_llm_analysis_for_benchmark(
         'provider': result.provider,
         'model': result.model,
         'latency_seconds': result.latency_seconds,
+        'warnings': source_warnings,
     }
 
 
