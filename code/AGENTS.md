@@ -15,6 +15,13 @@
 - Do not introduce new symlink-dependent profile-pair flows; if a symlink appears in inputs, copy it to a real file before pairing/comparison.
 - The Amazon book link in `README.md` is expected to fail automated link checks due to bot protection; treat it as an allowlisted exception.
 
+## Dogfood + Verification (CRITICAL)
+- Always dogfood changed runtime paths with a real repo invocation when feasible; do not stop at unit tests if the code is reachable through a CLI, MCP tool, benchmark harness, profiler flow, or report path.
+- Every fix must include explicit verification evidence in the same change: targeted tests, syntax/import validation, and at least one realistic execution path that exercises the changed code.
+- If the change touches GPU, profiling, benchmarking, or runtime environment logic, prefer running the verification on the local GPU host instead of relying on CPU-only mocks.
+- Treat silent fallback removal as incomplete unless the failure or degraded state is visible in structured outputs, logs, reports, or tests.
+- Record the exact verification commands and outcomes in the task summary so the next reviewer can reproduce the evidence trail quickly.
+
 ## Cluster Field Report Mode (ONLY when working in `code/cluster*` or writing the cluster field report)
 - This section adds constraints specific to cluster evaluation work; all other rules in this file still apply.
 - Discovery/inventory may use `nvidia-smi` and related commands. Benchmarks/profiling must still lock clocks via the harness (`lock_gpu_clocks`); do not manually lock clocks via `nvidia-smi`.

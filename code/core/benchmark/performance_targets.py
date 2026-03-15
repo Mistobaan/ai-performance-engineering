@@ -12,7 +12,7 @@ from core.utils import compile_utils as _compile_utils_patch  # noqa: F401
 import json
 import copy
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
 # Hints for Nsight Compute counter names when collecting bandwidth/efficiency.
 # These are informational; metrics remain numeric (min/target/unit).
@@ -181,7 +181,9 @@ _DEFAULT_TARGETS: TargetsDict = {
 }
 
 
-def _load_peak_benchmark_results(search_dir: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+def _load_peak_benchmark_results(
+    search_dir: Optional[Path] = None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str]]:
     """Load peak performance results from benchmark_peak_results_*.json."""
     if search_dir is None:
         # Try to find the project root (assume we're in benchmark/)
@@ -195,25 +197,36 @@ def _load_peak_benchmark_results(search_dir: Optional[Path] = None) -> Optional[
         # Fallback to old uppercase pattern for backwards compatibility
         json_files = list(search_dir.glob("BENCHMARK_PEAK_RESULTS_*.json"))
     if not json_files:
-        return None
+        return None, None, None
     
     # Sort by modification time, get most recent
     json_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    
+    latest_file = json_files[0]
+
     try:
-        with open(json_files[0]) as f:
+        with open(latest_file, encoding="utf-8") as f:
             data: Dict[str, Any] = json.load(f)
-            return data
-    except Exception:
-        return None
+            if not isinstance(data, dict):
+                return (
+                    None,
+                    f"Failed to read peak benchmark results from {latest_file}: expected JSON object, got {type(data).__name__}",
+                    str(latest_file),
+                )
+            return data, None, str(latest_file)
+    except Exception as exc:
+        return None, f"Failed to read peak benchmark results from {latest_file}: {exc}", str(latest_file)
 
 
-def _get_peak_values() -> Dict[str, float]:
+def _get_peak_values(search_dir: Optional[Path] = None) -> Tuple[Dict[str, float], List[str], Optional[str], str]:
     """Get measured peak values from benchmark results."""
-    benchmark_data = _load_peak_benchmark_results()
+    benchmark_data, warning, artifact_path = _load_peak_benchmark_results(search_dir)
+    warnings: List[str] = []
+    if warning:
+        warnings.append(warning)
     if not benchmark_data:
-        return {}
-    
+        source = "defaults" if artifact_path is None else "defaults_due_to_peak_results_warning"
+        return {}, warnings, artifact_path, source
+
     peak_values = {}
     
     # Extract HBM memory bandwidth (previously hbm3e, now hbm)
@@ -246,8 +259,8 @@ def _get_peak_values() -> Dict[str, float]:
     # Extract torch.compile speedup
     if "torch_compile" in benchmark_data and "speedup" in benchmark_data["torch_compile"]:
         peak_values["torch_compile_speedup"] = benchmark_data["torch_compile"]["speedup"]
-    
-    return peak_values
+
+    return peak_values, warnings, artifact_path, "measured_peak_results"
 
 
 def _get_metrics_section(chapter_entry: Dict[str, Any]) -> Optional[Dict[str, Dict[str, Any]]]:
@@ -267,13 +280,15 @@ def _ensure_metrics_section(chapter_entry: Dict[str, Any]) -> Dict[str, Dict[str
     return metrics_section
 
 
-def _build_targets() -> TargetsDict:
+def _build_targets(
+    search_dir: Optional[Path] = None,
+) -> Tuple[TargetsDict, List[str], Optional[str], str]:
     """Build TARGETS dict with measured peak values if available."""
     targets = copy.deepcopy(_DEFAULT_TARGETS)
-    peak_values = _get_peak_values()
-    
+    peak_values, warnings, artifact_path, source = _get_peak_values(search_dir)
+
     if not peak_values:
-        return targets
+        return targets, warnings, artifact_path, source
     
     # Update overall targets with measured peak values
     # Use peak as target, and set min to 85% of peak
@@ -393,11 +408,20 @@ def _build_targets() -> TargetsDict:
                     "unit": "x",
                 }
     
-    return targets
+    return targets, warnings, artifact_path, source
 
 
 # Build TARGETS with measured peak values (if available)
-TARGETS = _build_targets()
+TARGETS, TARGETS_BUILD_WARNINGS, TARGETS_ARTIFACT_PATH, TARGETS_SOURCE = _build_targets()
+
+
+def get_targets_metadata() -> Dict[str, Any]:
+    """Return provenance and warning metadata for target construction."""
+    return {
+        "source": TARGETS_SOURCE,
+        "artifact_path": TARGETS_ARTIFACT_PATH,
+        "warnings": list(TARGETS_BUILD_WARNINGS),
+    }
 
 
 def _read_only_metrics(chapter: str) -> Dict[str, Dict[str, Any]]:

@@ -15,6 +15,7 @@ from core.benchmark.performance_targets import (
     get_all_chapters,
     compute_status,
     format_value,
+    get_targets_metadata,
 )
 
 
@@ -93,6 +94,21 @@ class PerformanceReport:
         lines.append(f"")
         lines.append(f"**Generated:** {timestamp}")
         lines.append(f"")
+
+        target_metadata = get_targets_metadata()
+        target_source = target_metadata.get("source")
+        target_artifact = target_metadata.get("artifact_path")
+        target_warnings = target_metadata.get("warnings") or []
+        if target_source:
+            lines.append(f"**Target Source:** {target_source}")
+        if target_artifact:
+            lines.append(f"**Target Artifact:** `{target_artifact}`")
+        if target_warnings:
+            lines.append("")
+            lines.append("**Target Provenance Warnings:**")
+            for warning in target_warnings:
+                lines.append(f"- {warning}")
+        lines.append("")
         
         # Summary
         lines.append("## Summary")

@@ -13,10 +13,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_THRESHOLD_PCT = 25.0
 
 _chapter_metrics_loader: Optional[Callable[[str], Dict[str, Dict[str, Any]]]] = None
+_target_metadata_loader: Optional[Callable[[], Dict[str, Any]]] = None
+_target_metadata_warning_logged = False
 
 try:
     from core.benchmark.performance_targets import (
         get_chapter_metrics as _chapter_metrics_loader,
+        get_targets_metadata as _target_metadata_loader,
     )
 except (ImportError, AttributeError, TypeError):
     pass
@@ -440,6 +443,17 @@ def get_chapter_metric_config(chapter: str) -> Dict[str, Tuple[str, MetricDirect
     Returns:
         Dictionary mapping metric paths to METRIC_CONFIG tuples
     """
+    global _target_metadata_warning_logged
+    if not _target_metadata_warning_logged and _target_metadata_loader is not None:
+        try:
+            target_metadata = _target_metadata_loader()
+        except Exception:
+            target_metadata = {}
+        warnings = target_metadata.get("warnings") or []
+        if warnings:
+            logger.warning("Performance target metadata warnings: %s", "; ".join(str(w) for w in warnings))
+            _target_metadata_warning_logged = True
+
     try:
         chapter_metrics = get_chapter_metrics(chapter)
     except (ImportError, TypeError, AttributeError) as exc:
