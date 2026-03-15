@@ -507,14 +507,16 @@ class PerformanceCoreBase:
         except Exception:
             return (CODE_ROOT / "artifacts" / "history" / "tier1").resolve()
 
-    def _load_json_if_exists(self, path: Optional[Path]) -> Optional[dict]:
+    def _load_json_if_exists(self, path: Optional[Path]) -> tuple[Optional[dict], Optional[str]]:
         if path is None or not path.exists() or not path.is_file():
-            return None
+            return None, None
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return None
-        return payload if isinstance(payload, dict) else None
+        except Exception as exc:
+            return None, f"Failed to read JSON artifact {path}: {exc}"
+        if not isinstance(payload, dict):
+            return None, f"Expected JSON object in {path}, got {type(payload).__name__}"
+        return payload, None
 
     def _resolve_repo_path_string(self, raw_path: Optional[str]) -> Optional[str]:
         if not raw_path:
@@ -537,6 +539,7 @@ class PerformanceCoreBase:
         latest_summary: Optional[dict] = None
         latest_regression: Optional[dict] = None
         latest_run: Optional[dict] = None
+        warnings_list: List[str] = []
 
         for entry in run_entries:
             summary_path = Path(entry.get("summary_path") or "")
@@ -547,8 +550,12 @@ class PerformanceCoreBase:
             )
             regression_path = Path(regression_path_raw)
             trend_path = Path(entry.get("trend_snapshot_path") or "")
-            summary_payload = self._load_json_if_exists(summary_path)
-            regression_payload = self._load_json_if_exists(regression_path)
+            summary_payload, summary_warning = self._load_json_if_exists(summary_path)
+            regression_payload, regression_warning = self._load_json_if_exists(regression_path)
+            if summary_warning:
+                warnings_list.append(summary_warning)
+            if regression_warning:
+                warnings_list.append(regression_warning)
             if not summary_payload:
                 continue
 
@@ -597,6 +604,7 @@ class PerformanceCoreBase:
                 "new_targets": (latest_regression or {}).get("new_targets", []),
                 "missing_targets": (latest_regression or {}).get("missing_targets", []),
             },
+            "warnings": warnings_list,
         }
 
     def get_tier1_trends(self) -> dict:
@@ -612,10 +620,16 @@ class PerformanceCoreBase:
         if runs:
             trend_path_str = runs[-1].get("trend_snapshot_path")
         trend_path = Path(trend_path_str) if trend_path_str else None
-        trend_payload = self._load_json_if_exists(trend_path)
+        trend_payload, trend_warning = self._load_json_if_exists(trend_path)
         if trend_payload:
-            return trend_payload
-        return build_trend_snapshot(index)
+            result = dict(trend_payload)
+            if trend_warning:
+                result.setdefault("warnings", []).append(trend_warning)
+            return result
+        result = build_trend_snapshot(index)
+        if trend_warning:
+            result.setdefault("warnings", []).append(trend_warning)
+        return result
 
     def get_tier1_target_history(self, *, key: Optional[str] = None, target: Optional[str] = None) -> dict:
         """Return canonical tier-1 history for a single benchmark target."""
@@ -635,10 +649,13 @@ class PerformanceCoreBase:
         latest_point: Optional[dict] = None
         category: Optional[str] = None
         rationale: Optional[str] = None
+        warnings_list: List[str] = []
 
         for entry in run_entries:
             summary_path = Path(entry.get("summary_path") or "")
-            summary_payload = self._load_json_if_exists(summary_path)
+            summary_payload, summary_warning = self._load_json_if_exists(summary_path)
+            if summary_warning:
+                warnings_list.append(summary_warning)
             if not summary_payload:
                 continue
             for target_payload in summary_payload.get("targets", []) or []:
@@ -697,6 +714,7 @@ class PerformanceCoreBase:
             "best_speedup_seen": best_speedup_seen,
             "latest": latest_point,
             "history": points,
+            "warnings": warnings_list,
         }
 
     # ------------------------------------------------------------------
