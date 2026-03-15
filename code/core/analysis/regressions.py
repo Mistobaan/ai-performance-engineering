@@ -150,6 +150,12 @@ def render_regression_summary(
         "",
     ]
 
+    if comparison.get("warnings"):
+        lines.extend(["## Warnings", ""])
+        for warning in comparison["warnings"]:
+            lines.append(f"- {warning}")
+        lines.append("")
+
     def _render_rows(title: str, rows: List[Dict[str, Any]]) -> None:
         lines.extend([f"## {title}", "", "| Target | Reason | Before | After | Delta |", "| --- | --- | ---: | ---: | ---: |"])
         for row in rows:

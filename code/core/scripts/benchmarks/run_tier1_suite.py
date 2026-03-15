@@ -47,6 +47,7 @@ def main() -> int:
                 "regression_summary_path": str(result["regression_summary_path"]),
                 "trend_snapshot_path": str(result["trend_snapshot_path"]),
                 "history_root": str(result["history_root"]),
+                "warnings": result.get("warnings", []),
             },
             indent=2,
         )

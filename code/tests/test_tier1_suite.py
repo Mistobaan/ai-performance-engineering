@@ -13,6 +13,7 @@ from core.benchmark.suites.tier1 import (
     _confirm_speedup_regressions,
     build_tier1_suite_summary,
     load_tier1_suite,
+    run_tier1_suite,
 )
 from typer.testing import CliRunner
 
@@ -210,6 +211,22 @@ def test_compare_suite_summaries_detects_speedup_regression_and_new_targets(tmp_
     )
 
 
+def test_build_tier1_suite_summary_raises_clear_error_for_malformed_results(tmp_path: Path) -> None:
+    suite = load_tier1_suite()
+    result_json = tmp_path / "results.json"
+    result_json.write_text("[]", encoding="utf-8")
+
+    try:
+        build_tier1_suite_summary(result_json, suite, run_id="tier1_bad")
+    except ValueError as exc:
+        message = str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected malformed result JSON to raise ValueError")
+
+    assert "tier-1 benchmark result JSON" in message
+    assert str(result_json) in message
+
+
 def test_compare_suite_summaries_ignores_small_absolute_speedup_drift(tmp_path: Path) -> None:
     suite = load_tier1_suite()
     baseline_json = tmp_path / "baseline.json"
@@ -322,6 +339,49 @@ def test_confirm_speedup_regressions_suppresses_unconfirmed_noise(tmp_path: Path
         for row in updated["suppressed_regressions"]
     )
     assert updated["rechecks"][0]["confirmed_regression"] is False
+
+
+def test_run_tier1_suite_surfaces_history_warnings(tmp_path: Path, monkeypatch) -> None:
+    result_json = tmp_path / "results.json"
+    _write_result_payload(result_json, block_scaling_speedup=1.45, flash_speedup=14.45)
+
+    history_root = tmp_path / "history"
+    history_root.mkdir()
+    bad_index = history_root / "index.json"
+    bad_index.write_text("{not-json", encoding="utf-8")
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+    report_path = tmp_path / "report.md"
+    report_path.write_text("# report\n", encoding="utf-8")
+
+    def _fake_execute_benchmarks(**kwargs):
+        return {
+            "run_id": "tier1_history_warning_demo",
+            "output_json": str(result_json),
+            "manifest_path": str(manifest_path),
+            "output_markdown": str(report_path),
+            "total_failed": 0,
+        }
+
+    monkeypatch.setattr(bench_commands, "_execute_benchmarks", _fake_execute_benchmarks)
+
+    result = run_tier1_suite(
+        history_root=history_root,
+        bench_root=tmp_path,
+        profile_type="minimal",
+        output_format="json",
+        artifacts_dir=str(tmp_path / "artifacts"),
+        run_id="tier1_history_warning_demo",
+    )
+
+    assert result["warnings"]
+    assert any(str(bad_index) in warning for warning in result["warnings"])
+    assert result["comparison"]["warnings"]
+    assert any(str(bad_index) in warning for warning in result["comparison"]["warnings"])
+    regression_text = Path(result["regression_summary_path"]).read_text(encoding="utf-8")
+    assert "## Warnings" in regression_text
+    assert str(bad_index) in regression_text
 
 
 def test_tier1_doc_mentions_current_targets_and_artifacts() -> None:

@@ -528,18 +528,18 @@ class PerformanceCoreBase:
 
     def get_tier1_history_runs(self) -> dict:
         """Return canonical tier-1 history with latest-run details."""
-        from core.analysis.history_index import load_history_index
+        from core.analysis.history_index import load_history_index_with_warnings
 
         history_root = self._tier1_history_root()
         index_path = history_root / "index.json"
-        index = load_history_index(index_path)
+        index, index_warnings = load_history_index_with_warnings(index_path)
         run_entries = index.get("runs", []) or []
 
         runs: List[dict] = []
         latest_summary: Optional[dict] = None
         latest_regression: Optional[dict] = None
         latest_run: Optional[dict] = None
-        warnings_list: List[str] = []
+        warnings_list: List[str] = list(index_warnings)
 
         for entry in run_entries:
             summary_path = Path(entry.get("summary_path") or "")
@@ -609,12 +609,12 @@ class PerformanceCoreBase:
 
     def get_tier1_trends(self) -> dict:
         """Return canonical tier-1 trend data."""
-        from core.analysis.history_index import load_history_index
+        from core.analysis.history_index import load_history_index_with_warnings
         from core.analysis.trends import build_trend_snapshot
 
         history_root = self._tier1_history_root()
         index_path = history_root / "index.json"
-        index = load_history_index(index_path)
+        index, index_warnings = load_history_index_with_warnings(index_path)
         trend_path_str = None
         runs = index.get("runs", []) or []
         if runs:
@@ -623,17 +623,21 @@ class PerformanceCoreBase:
         trend_payload, trend_warning = self._load_json_if_exists(trend_path)
         if trend_payload:
             result = dict(trend_payload)
+            if index_warnings:
+                result.setdefault("warnings", []).extend(index_warnings)
             if trend_warning:
                 result.setdefault("warnings", []).append(trend_warning)
             return result
         result = build_trend_snapshot(index)
+        if index_warnings:
+            result.setdefault("warnings", []).extend(index_warnings)
         if trend_warning:
             result.setdefault("warnings", []).append(trend_warning)
         return result
 
     def get_tier1_target_history(self, *, key: Optional[str] = None, target: Optional[str] = None) -> dict:
         """Return canonical tier-1 history for a single benchmark target."""
-        from core.analysis.history_index import load_history_index
+        from core.analysis.history_index import load_history_index_with_warnings
 
         selected_key = (key or "").strip() or None
         selected_target = (target or "").strip() or None
@@ -642,14 +646,14 @@ class PerformanceCoreBase:
 
         history_root = self._tier1_history_root()
         index_path = history_root / "index.json"
-        index = load_history_index(index_path)
+        index, index_warnings = load_history_index_with_warnings(index_path)
         run_entries = index.get("runs", []) or []
 
         points: List[dict] = []
         latest_point: Optional[dict] = None
         category: Optional[str] = None
         rationale: Optional[str] = None
-        warnings_list: List[str] = []
+        warnings_list: List[str] = list(index_warnings)
 
         for entry in run_entries:
             summary_path = Path(entry.get("summary_path") or "")

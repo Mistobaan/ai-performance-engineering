@@ -64,3 +64,18 @@ def test_tier1_target_history_surfaces_summary_read_warnings(tmp_path: Path, mon
     assert result["run_count"] == 0
     assert result["warnings"]
     assert any(str(summary_path) in warning for warning in result["warnings"])
+
+
+def test_tier1_history_runs_surface_index_read_warnings(tmp_path: Path, monkeypatch) -> None:
+    history_root = tmp_path / "history"
+    history_root.mkdir()
+    bad_index = history_root / "index.json"
+    bad_index.write_text("{not-json", encoding="utf-8")
+
+    core = PerformanceCoreBase(bench_root=tmp_path)
+    monkeypatch.setattr(core, "_tier1_history_root", lambda: history_root)
+
+    result = core.get_tier1_history_runs()
+
+    assert result["warnings"]
+    assert any(str(bad_index) in warning for warning in result["warnings"])

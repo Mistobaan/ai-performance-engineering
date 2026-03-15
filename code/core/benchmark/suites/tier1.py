@@ -72,6 +72,29 @@ def load_tier1_suite(config_path: Optional[Path] = None) -> Tier1SuiteDefinition
     )
 
 
+def _load_json_object(
+    path: Path,
+    *,
+    label: str,
+    required: bool = False,
+) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        message = f"Failed to read {label} {path}: {exc}"
+        if required:
+            raise ValueError(message) from exc
+        return None, message
+
+    if not isinstance(payload, dict):
+        message = f"Expected JSON object in {label} {path}, got {type(payload).__name__}"
+        if required:
+            raise ValueError(message)
+        return None, message
+
+    return payload, None
+
+
 def _chapter_key_from_target(target: str) -> str:
     chapter = target.split(":", 1)[0].strip()
     return chapter.replace("/", "_").replace("-", "_")
@@ -314,7 +337,12 @@ def build_tier1_suite_summary(
     manifest_path: Optional[Path] = None,
     report_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    payload = json.loads(Path(result_json_path).read_text(encoding="utf-8"))
+    payload, _ = _load_json_object(
+        Path(result_json_path),
+        label="tier-1 benchmark result JSON",
+        required=True,
+    )
+    assert payload is not None
     target_map = suite.by_target()
 
     chapter_results = {
@@ -447,7 +475,7 @@ def run_tier1_suite(
     use_llm_cache: bool = True,
     llm_explain: bool = False,
 ) -> Dict[str, Any]:
-    from core.analysis.history_index import update_history_index
+    from core.analysis.history_index import load_history_index_with_warnings, update_history_index
     from core.analysis.regressions import compare_suite_summaries, render_regression_summary
     from core.analysis.trends import build_trend_snapshot
     from core.benchmark.bench_commands import _execute_benchmarks
@@ -518,16 +546,29 @@ def run_tier1_suite(
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
     index_path = history_root_path / "index.json"
-    previous_index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else {"suite_name": suite.name, "runs": []}
+    history_warnings: List[str] = []
+    previous_index, index_warnings = load_history_index_with_warnings(index_path)
+    history_warnings.extend(index_warnings)
     previous_summary = None
     for entry in reversed(previous_index.get("runs", [])):
-        previous_summary_path = Path(entry.get("summary_path", ""))
+        previous_summary_path_raw = str(entry.get("summary_path") or "").strip()
+        if not previous_summary_path_raw:
+            continue
+        previous_summary_path = Path(previous_summary_path_raw)
         if previous_summary_path.exists():
-            previous_summary = json.loads(previous_summary_path.read_text(encoding="utf-8"))
+            previous_summary, previous_summary_warning = _load_json_object(
+                previous_summary_path,
+                label="previous tier-1 summary",
+            )
+            if previous_summary_warning:
+                history_warnings.append(previous_summary_warning)
+                continue
             break
 
     regression_summary_path = suite_run_dir / "regression_summary.md"
     comparison = compare_suite_summaries(summary, previous_summary)
+    if history_warnings:
+        comparison.setdefault("warnings", []).extend(history_warnings)
     comparison = _confirm_speedup_regressions(
         comparison=comparison,
         current_summary=summary,
@@ -595,6 +636,8 @@ def run_tier1_suite(
         regression_summary_path=regression_summary_path,
         regression_json_path=regression_json_path,
     )
+    run_warnings = list(history_warnings)
+    run_warnings.extend(updated_index.get("warnings", []))
 
     trend_snapshot = build_trend_snapshot(updated_index)
     trend_snapshot_path = suite_run_dir / "trend_snapshot.json"
@@ -620,4 +663,6 @@ def run_tier1_suite(
         "trend_snapshot_path": trend_snapshot_path,
         "index": updated_index,
         "history_root": history_root_path,
+        "comparison": comparison,
+        "warnings": list(dict.fromkeys(run_warnings)),
     }

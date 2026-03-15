@@ -4,15 +4,42 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from core.benchmark.suites.tier1 import Tier1SuiteDefinition
 
 
-def load_history_index(index_path: Path) -> Dict[str, Any]:
-    if index_path.exists():
-        return json.loads(index_path.read_text(encoding="utf-8"))
+def _default_history_index() -> Dict[str, Any]:
     return {"suite_name": "tier1", "runs": []}
+
+
+def load_history_index_with_warnings(index_path: Path) -> tuple[Dict[str, Any], List[str]]:
+    if not index_path.exists():
+        return _default_history_index(), []
+
+    try:
+        payload = json.loads(index_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return _default_history_index(), [f"Failed to read tier-1 history index {index_path}: {exc}"]
+
+    if not isinstance(payload, dict):
+        return _default_history_index(), [
+            f"Expected JSON object in tier-1 history index {index_path}, got {type(payload).__name__}"
+        ]
+
+    normalized = dict(payload)
+    warnings: List[str] = []
+    runs = normalized.get("runs", [])
+    if not isinstance(runs, list):
+        warnings.append(f"Expected 'runs' list in tier-1 history index {index_path}, got {type(runs).__name__}")
+        normalized["runs"] = []
+    normalized.setdefault("suite_name", "tier1")
+    return normalized, warnings
+
+
+def load_history_index(index_path: Path) -> Dict[str, Any]:
+    index, _ = load_history_index_with_warnings(index_path)
+    return index
 
 
 def update_history_index(
@@ -27,7 +54,7 @@ def update_history_index(
 ) -> Dict[str, Any]:
     history_root.mkdir(parents=True, exist_ok=True)
     index_path = history_root / "index.json"
-    index = load_history_index(index_path)
+    index, warnings = load_history_index_with_warnings(index_path)
 
     entry = {
         "run_id": summary["run_id"],
@@ -58,4 +85,6 @@ def update_history_index(
         "runs": runs,
     }
     index_path.write_text(json.dumps(updated, indent=2), encoding="utf-8")
+    if warnings:
+        return {**updated, "warnings": warnings}
     return updated
