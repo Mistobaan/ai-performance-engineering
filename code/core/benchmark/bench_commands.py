@@ -9,7 +9,6 @@ import signal
 import subprocess
 import sys
 import time
-import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -29,12 +28,9 @@ except ImportError:  # pragma: no cover - Typer is optional for docs builds
 import os  # noqa: E402
 os.environ["NVCCFLAGS"] = f"-lineinfo {os.environ.get('NVCCFLAGS', '')}".strip()
 
-# Suppress CUDA capability warnings
-warnings.filterwarnings("ignore", message=".*Found GPU.*cuda capability.*", category=UserWarning)
-warnings.filterwarnings("ignore", message=".*Minimum and Maximum cuda capability supported.*", category=UserWarning)
-
 from core.analysis.performance_analyzer import PerformanceAnalyzer, load_benchmark_data as load_benchmark_results
 from core.plugins.loader import load_plugin_apps
+from core.utils.warning_filters import suppress_known_cuda_capability_warnings
 
 # Load plugins (if installed) to allow capability registration
 try:
@@ -322,15 +318,16 @@ except ImportError:
 
 # Import benchmark functionality
 try:
-    import torch  # noqa: F401
-    from core.utils.chapter_compare_template import discover_benchmarks
-    from core.harness.run_benchmarks import (
-        test_chapter,
-        generate_markdown_report,
-        BenchmarkEventLogger,
-        emit_event,
-        _preflight_target_coverage_and_assets,
-    )
+    with suppress_known_cuda_capability_warnings():
+        import torch  # noqa: F401
+        from core.utils.chapter_compare_template import discover_benchmarks
+        from core.harness.run_benchmarks import (
+            test_chapter,
+            generate_markdown_report,
+            BenchmarkEventLogger,
+            emit_event,
+            _preflight_target_coverage_and_assets,
+        )
 
     BENCHMARK_AVAILABLE = True
 except ImportError:

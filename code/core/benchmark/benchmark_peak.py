@@ -25,7 +25,6 @@ import shutil
 import subprocess
 import sys
 import time
-import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -34,36 +33,44 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
-# Suppress CUDA capability warnings for GB10 (12.1) - PyTorch supports up to 12.0
-warnings.filterwarnings("ignore", message=".*Found GPU.*which is of cuda capability.*", category=UserWarning)
-warnings.filterwarnings("ignore", message=".*Minimum and Maximum cuda capability supported.*", category=UserWarning)
-# Suppress TF32 API deprecation warnings
-warnings.filterwarnings("ignore", message=".*Please use the new API settings to control TF32.*", category=UserWarning)
-warnings.filterwarnings("ignore", message=".*TensorFloat32 tensor cores.*available but not enabled.*", category=UserWarning)
-# Suppress FlashAttention kernel override warnings (harmless - happens when FlashAttention is imported multiple times)
-warnings.filterwarnings("ignore", message=".*Overriding a previously registered kernel.*", category=UserWarning)
-warnings.filterwarnings("ignore", message=".*Warning only once for all operators.*", category=UserWarning)
-
-import torch
-
 from core.utils.compile_utils import enable_tf32
+from core.harness.serving_stack import (
+    configure_serving_stack_runtime_env,
+    preload_serving_stack_shared_libs,
+)
+from core.utils.warning_filters import suppress_benchmark_import_warnings, suppress_known_cuda_capability_warnings
+
+_SERVING_STACK_LIB_DIRS = configure_serving_stack_runtime_env()
+_SERVING_STACK_PRELOADED_LIBS = preload_serving_stack_shared_libs()
+
+with suppress_benchmark_import_warnings():
+    import torch
 
 # Configure TF32 using new API (PyTorch 2.10+)
 # Enable TF32 for optimal performance on Ampere+ GPUs using the shared helper
-if torch.cuda.is_available():
-    enable_tf32(matmul_precision="high", cudnn_precision="tf32", set_global_precision=True)
-    # Explicitly set the supported matmul precision knob to avoid legacy API warnings
-    if hasattr(torch, 'set_float32_matmul_precision'):
-        torch.set_float32_matmul_precision("high")
+with suppress_benchmark_import_warnings():
+    with suppress_known_cuda_capability_warnings():
+        cuda_available = torch.cuda.is_available()
+    if cuda_available:
+        enable_tf32(matmul_precision="high", cudnn_precision="tf32", set_global_precision=True)
+        # Explicitly set the supported matmul precision knob to avoid legacy API warnings
+        if hasattr(torch, 'set_float32_matmul_precision'):
+            torch.set_float32_matmul_precision("high")
 
 # FAIL FAST: Transformer Engine is REQUIRED
 try:
-    import transformer_engine.pytorch as te
-    import transformer_engine.pytorch.constants as te_constants
-except ImportError as e:
-    raise ImportError(
-        f"Transformer Engine is REQUIRED but not available: {e}\n"
-        "Install with: pip install transformer-engine"
+    with suppress_benchmark_import_warnings():
+        import transformer_engine.pytorch as te
+        import transformer_engine.pytorch.constants as te_constants
+except (ImportError, OSError) as e:
+    lib_dirs_hint = ", ".join(_SERVING_STACK_LIB_DIRS) if _SERVING_STACK_LIB_DIRS else "none discovered"
+    preloaded_hint = ", ".join(sorted(_SERVING_STACK_PRELOADED_LIBS)) if _SERVING_STACK_PRELOADED_LIBS else "none"
+    raise RuntimeError(
+        "Transformer Engine is REQUIRED but failed to import.\n"
+        f"Error: {e}\n"
+        f"Serving-stack CUDA library dirs: {lib_dirs_hint}\n"
+        f"Preloaded CUDA shared libs: {preloaded_hint}\n"
+        "Ensure the serving-stack CUDA wheel libraries are installed and visible."
     ) from e
 
 TE_AVAILABLE = True

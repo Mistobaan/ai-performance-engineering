@@ -23,12 +23,10 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, Callable, cast
 
-import warnings
-import torch
+from core.utils.warning_filters import suppress_known_cuda_capability_warnings
 
-# Suppress CUDA capability warnings (GPU is newer than officially supported but works fine)
-warnings.filterwarnings("ignore", message=".*Found GPU.*cuda capability.*", category=UserWarning)
-warnings.filterwarnings("ignore", message=".*Minimum and Maximum cuda capability.*", category=UserWarning)
+with suppress_known_cuda_capability_warnings():
+    import torch
 
 from core.harness.benchmark_harness import (
     BaseBenchmark,

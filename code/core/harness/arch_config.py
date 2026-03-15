@@ -7,20 +7,18 @@ import subprocess
 import shutil
 import warnings
 from pathlib import Path
-
-# Suppress CUDA capability warnings for GB10 (12.1) - PyTorch supports up to 12.0
-warnings.filterwarnings("ignore", message=".*Found GPU.*which is of cuda capability.*", category=UserWarning)
-warnings.filterwarnings("ignore", message=".*Minimum and Maximum cuda capability supported.*", category=UserWarning)
-
-import torch
 from importlib import metadata as importlib_metadata
 from contextlib import nullcontext
 
 from core.utils.compile_utils import enable_tf32
+from core.utils.warning_filters import suppress_known_cuda_capability_warnings
 from core.benchmark.triton_compat import (
     ENABLE_TRITON_PATCH as _TRITON_PATCH_ENABLED,
     ensure_triton_compat,
 )
+
+with suppress_known_cuda_capability_warnings():
+    import torch
 
 try:
     from torch.nn.attention import sdpa_kernel as _sdpa_kernel
@@ -94,10 +92,10 @@ class ArchitectureConfig:
         self.cutlass_version = None
 
     def _detect_architecture(self) -> str:
-        if not torch.cuda.is_available():
-            return "cpu"
-
-        props = torch.cuda.get_device_properties(0)
+        with suppress_known_cuda_capability_warnings():
+            if not torch.cuda.is_available():
+                return "cpu"
+            props = torch.cuda.get_device_properties(0)
         major, minor = props.major, props.minor
         compute_capability = f"{major}.{minor}"
 
@@ -265,8 +263,9 @@ class ArchitectureConfig:
             os.environ[key] = fallback
 
     def configure_pytorch_optimizations(self) -> None:
-        if not torch.cuda.is_available():
-            return
+        with suppress_known_cuda_capability_warnings():
+            if not torch.cuda.is_available():
+                return
 
         if self.arch in ("blackwell", "blackwell_ultra"):
             arch_list = "10.3" if self.arch == "blackwell_ultra" else "10.0"

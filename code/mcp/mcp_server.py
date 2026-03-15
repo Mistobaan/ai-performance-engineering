@@ -1055,21 +1055,23 @@ def _default_benchmark_report_path(result: Dict[str, Any], fmt: str) -> Optional
     return None
 
 
-def _parse_event_message(message: Any) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+def _parse_event_message(message: Any) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[str]]:
     """Parse benchmark event lines encoded as `EVENT <name> <json-payload>`."""
     if not isinstance(message, str):
-        return None, None
+        return None, None, "event message is not a string"
     if not message.startswith("EVENT "):
-        return None, None
+        return None, None, "message is not an EVENT payload"
     event_body = message[len("EVENT "):]
     if " " not in event_body:
-        return None, None
+        return None, None, "event payload is missing a JSON body"
     event_name, payload_text = event_body.split(" ", 1)
     try:
         payload = json.loads(payload_text)
-    except Exception:
-        return event_name, None
-    return event_name, payload if isinstance(payload, dict) else None
+    except Exception as exc:
+        return event_name, None, f"failed to parse EVENT payload JSON: {exc}"
+    if not isinstance(payload, dict):
+        return event_name, None, f"expected EVENT payload object, got {type(payload).__name__}"
+    return event_name, payload, None
 
 
 def _extract_speedup_attribution(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1097,13 +1099,25 @@ def _extract_speedup_attribution(result: Dict[str, Any]) -> Optional[Dict[str, A
     baseline_ncu: Dict[Tuple[str, str], Dict[str, float]] = {}
     optimized_ncu: Dict[Tuple[str, str, str], Dict[str, float]] = {}
     optimizations: List[Dict[str, Any]] = []
+    warning_samples: List[str] = []
+    warning_counts = {
+        "malformed_json_lines": 0,
+        "malformed_event_payloads": 0,
+    }
 
-    for raw_line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for line_no, raw_line in enumerate(log_path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
         try:
             line_obj = json.loads(raw_line)
-        except Exception:
+        except Exception as exc:
+            warning_counts["malformed_json_lines"] += 1
+            if len(warning_samples) < 5:
+                warning_samples.append(f"line {line_no}: failed to parse benchmark log JSON: {exc}")
             continue
-        event_name, payload = _parse_event_message(line_obj.get("message"))
+        event_name, payload, parse_warning = _parse_event_message(line_obj.get("message"))
+        if parse_warning and event_name:
+            warning_counts["malformed_event_payloads"] += 1
+            if len(warning_samples) < 5:
+                warning_samples.append(f"line {line_no}: {parse_warning}")
         if not event_name or not payload:
             continue
 
@@ -1139,7 +1153,7 @@ def _extract_speedup_attribution(result: Dict[str, Any]) -> Optional[Dict[str, A
         if event_name == "optimization_result":
             optimizations.append(payload)
 
-    if not optimizations:
+    if not optimizations and not any(warning_counts.values()):
         return None
 
     items: List[Dict[str, Any]] = []
@@ -1200,12 +1214,17 @@ def _extract_speedup_attribution(result: Dict[str, Any]) -> Optional[Dict[str, A
             }
         )
 
-    if not items:
+    if not items and not any(warning_counts.values()):
         return None
-    return {
+
+    response = {
         "source": str(log_path),
         "items": items,
     }
+    if any(warning_counts.values()):
+        response["warnings"] = warning_samples
+        response["warning_counts"] = warning_counts
+    return response
 
 
 def _maybe_run_post_benchmark_steps(
