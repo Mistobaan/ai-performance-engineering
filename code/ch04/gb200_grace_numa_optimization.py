@@ -65,7 +65,7 @@ def detect_grace_cpu() -> Dict[str, Any]:
         "cpu_count": psutil.cpu_count(logical=False),
         "cpu_threads": psutil.cpu_count(logical=True),
         "memory_gb": psutil.virtual_memory().total / 1e9,
-        "numa_nodes": 0,
+        "numa_nodes": None,
         "gpus": torch.cuda.device_count() if torch.cuda.is_available() else 0,
     }
     
@@ -444,9 +444,10 @@ def print_grace_system_info() -> None:
         print(f"  Architecture: {info['cpu_arch']}")
         print(f"  Model: {info.get('cpu_model', 'Unknown')}")
     
-    print(f"  Physical cores: {info['cpu_count']}")
-    print(f"  Logical cores: {info['cpu_threads']}")
-    print(f"  Memory: {info['memory_gb']:.1f} GB")
+        print(f"  Physical cores: {info['cpu_count']}")
+        print(f"  Logical cores: {info['cpu_threads']}")
+        print(f"  Memory: {info['memory_gb']:.1f} GB")
+        print(f"  NUMA nodes: {info['numa_nodes'] if info['numa_nodes'] is not None else 'unknown'}")
     
     # NUMA Topology
     if topology:

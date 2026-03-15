@@ -9,6 +9,7 @@ import ch03.bind_numa_affinity as bind_numa_affinity
 import ch04.gb200_grace_numa_optimization as grace_numa
 import core.optimization.parallelism_planner.topology_detector as planner_topology_detector
 import core.optimization.parallelism_planner.advisor as planner_advisor
+import core.optimization.parallelism_planner.cluster_config as planner_cluster_config
 import labs.dynamic_router.topology as dynamic_router_topology
 import labs.dynamic_router.driver as dynamic_router_driver
 
@@ -174,6 +175,19 @@ def test_planner_mock_topology_marks_gpu_numa_as_synthetic() -> None:
     topology = planner_advisor.create_mock_topology_b200_multigpu(num_gpus=4)
 
     assert topology.gpu_numa_status == "synthetic"
+
+
+def test_cluster_detector_preserves_unknown_numa_for_detected_node() -> None:
+    detector = planner_cluster_config.ClusterDetector()
+    topology = planner_advisor.create_mock_topology_b200_multigpu(num_gpus=4)
+    topology.numa_nodes = 0
+    topology.gpu_numa_mapping = {}
+    topology.gpu_numa_status = "unknown"
+
+    nodes = detector._build_node_specs(num_nodes=1, gpus_per_node=4, topology=topology)
+
+    assert len(nodes) == 1
+    assert nodes[0].numa_nodes is None
 
 
 def test_setup_grace_affinity_does_not_guess_numa_node_when_mapping_is_unknown(

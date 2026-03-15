@@ -53,7 +53,7 @@ class NodeSpec:
     gpu_name: str
     nvlink_bandwidth_gbps: float
     has_nvswitch: bool
-    numa_nodes: int = 2
+    numa_nodes: Optional[int] = None
 
 
 @dataclass
@@ -361,7 +361,7 @@ class ClusterDetector:
                     gpu_name=topology.gpus[0].name if topology.gpus else "Unknown",
                     nvlink_bandwidth_gbps=topology.max_nvlink_bandwidth_gbps,
                     has_nvswitch=topology.has_nvswitch,
-                    numa_nodes=topology.numa_nodes,
+                    numa_nodes=topology.numa_nodes if topology.numa_nodes > 0 else None,
                 )
             else:
                 # Assume identical nodes
@@ -506,4 +506,3 @@ def create_cluster_preset_b200_single_node(num_gpus: int = 8) -> ClusterTopology
         cross_node_nvlink_bandwidth_gbps=0,
         is_grace_blackwell=True,
     )
-
