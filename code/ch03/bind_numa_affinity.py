@@ -30,6 +30,7 @@ _NVML_INIT_DONE = False
 
 _libnuma = None
 _HAS_LIBNUMA = False
+_libcudart = None
 
 try:
     _libnuma = ctypes.CDLL("libnuma.so")
@@ -40,6 +41,13 @@ try:
 except (OSError, AttributeError):
     # libnuma.so not found or NUMA not available - degrade gracefully
     pass
+
+try:
+    _libcudart = ctypes.CDLL("libcudart.so")
+    _libcudart.cudaDeviceGetPCIBusId.restype = ctypes.c_int
+    _libcudart.cudaDeviceGetPCIBusId.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+except (OSError, AttributeError):
+    _libcudart = None
 
 
 # ---------------------------------------------------------------------------
@@ -169,8 +177,15 @@ def get_numa_cpus_and_memory() -> Tuple[List[int], int]:
 
 
 def _gpu_pci_bus(device_index: int) -> str:
+    if _libcudart is not None:
+        buffer = ctypes.create_string_buffer(20)
+        status = _libcudart.cudaDeviceGetPCIBusId(buffer, len(buffer), device_index)
+        if status == 0:
+            return buffer.value.decode()
     props = torch.cuda.get_device_properties(device_index)
-    return props.pci_bus_id  # e.g. '0000:03:00.0'
+    if isinstance(props.pci_bus_id, str):
+        return props.pci_bus_id  # e.g. '0000:03:00.0'
+    return f"{props.pci_domain_id:04x}:{int(props.pci_bus_id):02x}:{int(props.pci_device_id):02x}.0"
 
 
 def _normalize_pci_for_nvml(pci: str) -> str:
@@ -198,11 +213,11 @@ def _gpu_node_from_nvml(device_index: int) -> int | None:
 
         # Prefer explicit NUMA node if driver exposes it
         try:
-            numa_id = nvml.nvmlDeviceGetNUMANodeId(handle)
+            numa_id = nvml.nvmlDeviceGetNumaNodeId(handle)
             if isinstance(numa_id, int) and numa_id >= 0:
                 return numa_id
-        except AttributeError:
-            pass  # nvmlDeviceGetNUMANodeId not available in this nvml version
+        except Exception:
+            pass  # explicit NUMA query not available or not supported here
 
         # Derive from CPU affinity mask
         cpu_count = psutil.cpu_count(logical=True) or 0

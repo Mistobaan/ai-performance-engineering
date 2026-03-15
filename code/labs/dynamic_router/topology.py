@@ -81,7 +81,7 @@ def _nvml_gpu_bus_and_numa(max_gpus: Optional[int] = None) -> Dict[int, Dict[str
             pci = pynvml.nvmlDeviceGetPciInfo(handle)
             bus_id = pci.busId.decode() if hasattr(pci.busId, "decode") else str(pci.busId)
             try:
-                numa_id = pynvml.nvmlDeviceGetNUMANodeId(handle)
+                numa_id = pynvml.nvmlDeviceGetNumaNodeId(handle)
             except Exception:
                 numa_id = None
             mapping[idx] = {"bus_id": bus_id, "numa_node": None if numa_id is None or numa_id < 0 else numa_id}
