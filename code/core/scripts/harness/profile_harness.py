@@ -10,7 +10,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from core.scripts.harness.example_registry import (
     EXAMPLE_BY_NAME,
@@ -50,6 +50,25 @@ def log_progress(*parts: str) -> None:
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     message = " ".join(part for part in parts if part)
     print(f"[{timestamp}] {message}", flush=True)
+
+
+def _read_json_object(path: Path, *, label: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return None, f"Failed to read {label} {path}: {exc}"
+    if not isinstance(payload, dict):
+        return None, f"Expected JSON object in {label} {path}, got {type(payload).__name__}"
+    return payload, None
+
+
+def _write_reuse_warning(out_dir: Path, warning: str) -> None:
+    payload = {
+        "warning": warning,
+        "decided_to_rerun": True,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    (out_dir / "reuse_warning.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 @dataclass
@@ -1144,24 +1163,31 @@ def summarize(results: List[RunResult], session_dir: Path) -> None:
             latest_failures.write_text("All tasks succeeded.\n")
 
 
-def maybe_skip_output(out_dir: Path, skip_existing: bool) -> bool:
+def maybe_skip_output(out_dir: Path, skip_existing: bool) -> Tuple[bool, Optional[str]]:
     if not skip_existing:
-        return False
+        return False, None
     summary = out_dir / "command.json"
     if not out_dir.exists() or not summary.exists():
-        return False
-    try:
-        data = json.loads(summary.read_text())
-    except Exception:
-        return False
+        return False, None
+    _, summary_warning = _read_json_object(summary, label="existing profile harness command summary")
+    if summary_warning:
+        _write_reuse_warning(out_dir, summary_warning)
+        return False, summary_warning
     status_path = out_dir / "status.json"
     if not status_path.exists():
-        return False
+        return False, None
+    status, status_warning = _read_json_object(status_path, label="existing profile harness status")
+    if status_warning:
+        _write_reuse_warning(out_dir, status_warning)
+        return False, status_warning
+    exit_code_raw = status.get("exit_code", 1)
     try:
-        status = json.loads(status_path.read_text())
+        exit_code = int(exit_code_raw)
     except Exception:
-        return False
-    return status.get("exit_code", 1) == 0
+        warning = f"Expected integer exit_code in existing profile harness status {status_path}, got {exit_code_raw!r}"
+        _write_reuse_warning(out_dir, warning)
+        return False, warning
+    return exit_code == 0, None
 
 
 def write_status(out_dir: Path, *, exit_code: int, duration: float) -> None:
@@ -1220,7 +1246,10 @@ def main() -> None:
                 modes_to_run: List[str] = []
                 for mode in requested_modes:
                     out_dir = profiler_output_dir(session_dir, f"pytorch_{mode}", example)
-                    if maybe_skip_output(out_dir, args.skip_existing):
+                    skip_existing, reuse_warning = maybe_skip_output(out_dir, args.skip_existing)
+                    if reuse_warning:
+                        log_progress("profile", f"pytorch_{mode}", example.name, "reuse-warning", reuse_warning)
+                    if skip_existing:
                         log_progress(
                             "profile",
                             f"pytorch_{mode}",
@@ -1274,7 +1303,10 @@ def main() -> None:
                 continue
 
             out_dir = profiler_output_dir(session_dir, profiler, example)
-            if maybe_skip_output(out_dir, args.skip_existing):
+            skip_existing, reuse_warning = maybe_skip_output(out_dir, args.skip_existing)
+            if reuse_warning:
+                log_progress("profile", profiler, example.name, "reuse-warning", reuse_warning)
+            if skip_existing:
                 log_progress("profile", profiler, example.name, "skip", "existing-output")
                 all_results.append(
                     RunResult(
