@@ -32,8 +32,8 @@ namespace warp_specialized_cutlass_impl {
 
 using ElementA = cutlass::half_t;
 using ElementB = cutlass::half_t;
-using ElementC = float;
-using ElementD = float;
+using ElementC = cutlass::half_t;
+using ElementD = cutlass::half_t;
 
 using ElementAccumulator = float;
 using ArchTag = cutlass::arch::Sm100;
@@ -115,7 +115,9 @@ torch::Tensor run_warp_specialized_cutlass_matmul(torch::Tensor a, torch::Tensor
   TORCH_CHECK(m % 128 == 0 && n % 256 == 0 && k % 64 == 0,
               "Size must be divisible by tcgen05 tile");
 
-  auto options = a.options().dtype(torch::kFloat32);
+  // Write the final result in FP16 directly so this benchmark isolates the
+  // CUTLASS schedule difference instead of timing an extra cast kernel.
+  auto options = a.options().dtype(torch::kFloat16);
   auto c_buffer = torch::zeros({m, n}, options);
   auto d_buffer = torch::empty_like(c_buffer);
 
@@ -134,9 +136,9 @@ torch::Tensor run_warp_specialized_cutlass_matmul(torch::Tensor a, torch::Tensor
       {reinterpret_cast<ElementA const*>(a_contig.data_ptr<at::Half>()), stride_A,
        reinterpret_cast<ElementB const*>(b_contig.data_ptr<at::Half>()), stride_B},
       {{1.0f, 0.0f},
-       reinterpret_cast<ElementC const*>(c_buffer.data_ptr<float>()),
+       reinterpret_cast<ElementC const*>(c_buffer.data_ptr<at::Half>()),
        stride_C,
-       reinterpret_cast<ElementD*>(d_buffer.data_ptr<float>()),
+       reinterpret_cast<ElementD*>(d_buffer.data_ptr<at::Half>()),
        stride_D}};
 
   args.scheduler.max_swizzle_size = 0;
@@ -156,7 +158,7 @@ torch::Tensor run_warp_specialized_cutlass_matmul(torch::Tensor a, torch::Tensor
   check_status(gemm.run(stream), "gemm.run failed");
   AT_CUDA_CHECK(cudaGetLastError());
 
-  return d_buffer.to(torch::kFloat16);
+  return d_buffer;
 }
 
 }  // namespace warp_specialized_cutlass_impl

@@ -33,8 +33,8 @@ namespace warpgroup_specialized_impl {
 
 using ElementA = cutlass::half_t;
 using ElementB = cutlass::half_t;
-using ElementC = float;
-using ElementD = float;
+using ElementC = cutlass::half_t;
+using ElementD = cutlass::half_t;
 
 using ElementAccumulator = float;
 using ArchTag = cutlass::arch::Sm100;
@@ -116,7 +116,9 @@ torch::Tensor run_warpgroup_specialized_matmul(torch::Tensor a, torch::Tensor b)
   TORCH_CHECK(m % 256 == 0 && n % 128 == 0 && k % 64 == 0,
               "Size must be divisible by tcgen05 tile");
 
-  auto options = a.options().dtype(torch::kFloat32);
+  // Keep the benchmark focused on the 2SM CUTLASS schedule by writing the
+  // final output in FP16 directly instead of launching a trailing cast.
+  auto options = a.options().dtype(torch::kFloat16);
   auto c_buffer = torch::zeros({m, n}, options);
   auto d_buffer = torch::empty_like(c_buffer);
 
@@ -135,9 +137,9 @@ torch::Tensor run_warpgroup_specialized_matmul(torch::Tensor a, torch::Tensor b)
       {reinterpret_cast<ElementA const*>(a_contig.data_ptr<at::Half>()), stride_A,
        reinterpret_cast<ElementB const*>(b_contig.data_ptr<at::Half>()), stride_B},
       {{1.0f, 0.0f},
-       reinterpret_cast<ElementC const*>(c_buffer.data_ptr<float>()),
+       reinterpret_cast<ElementC const*>(c_buffer.data_ptr<at::Half>()),
        stride_C,
-       reinterpret_cast<ElementD*>(d_buffer.data_ptr<float>()),
+       reinterpret_cast<ElementD*>(d_buffer.data_ptr<at::Half>()),
        stride_D}};
 
   args.scheduler.max_swizzle_size = 0;
@@ -157,7 +159,7 @@ torch::Tensor run_warpgroup_specialized_matmul(torch::Tensor a, torch::Tensor b)
   check_status(gemm.run(stream), "gemm.run failed");
   AT_CUDA_CHECK(cudaGetLastError());
 
-  return d_buffer.to(torch::kFloat16);
+  return d_buffer;
 }
 
 }  // namespace warpgroup_specialized_impl
