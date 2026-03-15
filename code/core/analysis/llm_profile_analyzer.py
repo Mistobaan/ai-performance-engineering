@@ -33,6 +33,7 @@ import ast
 import json
 import os
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -206,6 +207,7 @@ class LLMAnalysisResult:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     latency_seconds: float = 0.0
+    warnings: List[str] = field(default_factory=list)
     
     # Raw response for debugging
     raw_response: str = ""
@@ -257,8 +259,22 @@ class LLMAnalysisResult:
             lines.append("")
             lines.append(self.architecture_specific_tips)
             lines.append("")
+
+        if self.warnings:
+            lines.append("## Analysis Warnings")
+            lines.append("")
+            for warning in self.warnings:
+                lines.append(f"- {warning}")
+            lines.append("")
         
         return "\n".join(lines)
+
+
+def _read_optional_source_code(path: Path, *, label: str) -> Tuple[Optional[str], Optional[str]]:
+    try:
+        return path.read_text(encoding="utf-8"), None
+    except Exception as exc:
+        return None, f"Failed to read {label} source code from {path}: {exc}"
 
 
 def collect_environment_context() -> EnvironmentContext:
@@ -1134,11 +1150,18 @@ def analyze_with_llm(
     # Load source code if available
     baseline_code = None
     optimized_code = None
+    source_warnings: List[str] = []
     
     if baseline_code_path and baseline_code_path.exists():
-        baseline_code = baseline_code_path.read_text()
+        baseline_code, warning = _read_optional_source_code(baseline_code_path, label="baseline")
+        if warning is not None:
+            source_warnings.append(warning)
+            logger.warning(warning)
     if optimized_code_path and optimized_code_path.exists():
-        optimized_code = optimized_code_path.read_text()
+        optimized_code, warning = _read_optional_source_code(optimized_code_path, label="optimized")
+        if warning is not None:
+            source_warnings.append(warning)
+            logger.warning(warning)
     
     # Run analysis
     try:
@@ -1148,6 +1171,7 @@ def analyze_with_llm(
             baseline_code=baseline_code,
             optimized_code=optimized_code,
         )
+        result.warnings.extend(source_warnings)
         
         # Save output if requested
         if output_path:
