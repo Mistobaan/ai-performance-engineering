@@ -269,6 +269,17 @@ def worker_init_fn(worker_id: int, node: int | None, cpus: List[int] | None) -> 
         print(f"Worker {worker_id} (PID={os.getpid()}) bound to NUMA node {node}")
 
 
+def _ensure_nvml_initialized() -> None:
+    global _NVML_INIT_DONE
+    if not _HAS_NVML or _NVML_INIT_DONE:
+        return
+    try:
+        nvml.nvmlInit()
+        _NVML_INIT_DONE = True
+    except Exception:
+        _NVML_INIT_DONE = False
+
+
 # ---------------------------------------------------------------------------
 # Minimal runnable demo (DDP-friendly)
 # ---------------------------------------------------------------------------
@@ -401,12 +412,3 @@ if __name__ == "__main__":
 
     mp.set_start_method("spawn", force=True)
     main()
-def _ensure_nvml_initialized() -> None:
-    global _NVML_INIT_DONE
-    if not _HAS_NVML or _NVML_INIT_DONE:
-        return
-    try:
-        nvml.nvmlInit()
-        _NVML_INIT_DONE = True
-    except Exception:
-        _NVML_INIT_DONE = False
