@@ -825,7 +825,8 @@ ENTRIES["ch01"] = chapter_entry(
             "Optimized Path",
             dedent(
                 """\
-                - mixed-precision and fused microbatch execution for the training loop
+                - FP16 and fused microbatch execution for the training loop
+                - separate precision-only and fusion-only variants so the training-loop story is decomposable
                 - batched or strided CUDA launches to amortize dispatch cost
                 - memory-reduction variants where the main win is footprint, not raw speed"""
             ),
@@ -846,6 +847,19 @@ ENTRIES["ch01"] = chapter_entry(
             ),
         ),
         MarkdownSection(
+            "Training-Loop Variants",
+            dedent(
+                """\
+                The Chapter 1 training loop is intentionally split into three related targets:
+
+                | Target | Isolated change | Intended lesson |
+                | --- | --- | --- |
+                | `performance` | FP16 math + fused microbatches | the combined goodput story |
+                | `performance_fp16` | FP16 math only | what tensor-core-friendly precision buys you without changing batching; uses a more compute-heavy local shape so precision is visible |
+                | `performance_fusion` | fused microbatches only | what launch amortization buys you without changing math precision |"""
+            ),
+        ),
+        MarkdownSection(
             "Profiler Evidence",
             dedent(
                 """\
@@ -859,7 +873,9 @@ ENTRIES["ch01"] = chapter_entry(
 
                 The expected profiler story is straightforward:
                 - `gemm`: fewer launches and lower dispatch overhead
-                - `performance`: less framework-side work and fewer expensive precision conversions
+                - `performance`: fewer launches plus faster tensor-core math
+                - `performance_fp16`: faster GEMMs from FP16 tensor-core math with the same microbatch structure, using a benchmark-local compute-heavy shape so the precision delta is not drowned out by Python overhead
+                - `performance_fusion`: fewer forward/backward launches at unchanged FP32 math
                 - `nvfp4_mlp`: reduced memory footprint rather than a large wall-clock win"""
             ),
         ),
@@ -878,11 +894,11 @@ ENTRIES["ch01"] = chapter_entry(
     ],
     goals=[
         "Profile a minimal PyTorch training loop with the shared harness and reason about throughput vs latency.",
-        "Apply basic optimizations (FP16 + fused microbatches) without changing the algorithmic workload.",
+        "Separate precision wins from batching wins instead of treating all training-loop speedups as one bundle.",
         "Compare hand-written GEMM kernels in batched vs. strided forms to understand arithmetic intensity.",
     ],
     contents=[
-        ("`baseline_performance.py`, `optimized_performance.py`", "Goodput-focused training loop pair comparing FP32 eager vs FP16 + fused microbatches (batch fusion)."),
+        ("`baseline_performance.py`, `optimized_performance.py`, `baseline_performance_fp16.py`, `optimized_performance_fp16.py`, `optimized_performance_fusion.py`", "Training-loop variants covering the baseline, the combined FP16+fusion path, the FP16-only pair with a benchmark-local compute-heavy shape, and the fusion-only path."),
         ("`baseline_gemm.cu`, `optimized_gemm_batched.cu`, `optimized_gemm_strided.cu`", "CUDA GEMM variants (single, batched, strided) used to illustrate launch amortization and memory coalescing."),
         ("`compare.py`, `workload_config.py`, `arch_config.py`, `expectations_{hardware_key}.json`", "Harness entrypoint, workload shapes, architecture overrides, and stored expectation thresholds."),
     ],
@@ -1302,8 +1318,8 @@ ENTRIES["ch05"] = chapter_entry(
         ("`baseline_storage_cpu.py`, `optimized_storage_cpu.py`", "Single-node dataloader comparison covering worker count, pinned memory, and caching strategies."),
         ("`baseline_vectorization.py`, `optimized_vectorization.py`", "Vectorized parsing and memory-map examples that remove Python loops from preprocessing."),
         ("`baseline_ai.py`, `optimized_ai.py`, `storage_io_optimization.py`", "LLM-style token pipelines showcasing overlapping compute with streaming reads and prefetch."),
-        ("`baseline_distributed.py`, `optimized_distributed.py`", "Single-GPU sum vs optional distributed all-reduce fallback."),
-        ("`baseline_distributed_multigpu.py`, `optimized_distributed_multigpu.py`", "Multi-GPU reduction baseline (CPU staging) vs GPU-side reduce_add."),
+        ("`baseline_distributed.py`, `optimized_distributed.py`", "Single-GPU host-staged reduction vs on-device reduction."),
+        ("`baseline_distributed_multigpu.py`, `optimized_distributed_multigpu.py`", "Actual multi-GPU reduction baseline (CPU staging) vs GPU-side reduce_add."),
         ("`gds_cufile_minimal.py`, `gpudirect_storage_example.py`", "GPUDirect Storage samples for verifying cuFile setup, buffer alignment, and throughput."),
         ("`compare.py`, `requirements.txt`, `expectations_{hardware_key}.json`", "Harness entrypoint plus expectation baselines for spotting regressions."),
     ],
@@ -1722,6 +1738,7 @@ ENTRIES["ch09"] = chapter_entry(
         ("`baseline_compute_bound.py`, `optimized_compute_bound.py`, `baseline_memory_bound.py`, `optimized_memory_bound.py`", "Reference kernels that isolate compute vs bandwidth ceilings and demonstrate tuning strategies."),
         ("`baseline_micro_tiling_matmul.cu`, `baseline_micro_tiling_matmul.py`, `optimized_micro_tiling_matmul.cu`, `optimized_micro_tiling_matmul.py`", "Micro-tiling matmuls with explicit register blocking and cp.async prefetch."),
         ("`baseline_cublaslt_gemm.cu`, `baseline_cublaslt_gemm.py`, `optimized_cublaslt_gemm.cu`, `optimized_cublaslt_gemm.py`, `tcgen05_pipelined.cu`", "cuBLASLt-driven matmuls and tcgen05 pipeline kernels showcasing tcgen05 lowering and occupancy tuning."),
+        ("`baseline_cublaslt_gemm_fp4.cu`, `baseline_cublaslt_gemm_fp4.py`, `optimized_cublaslt_gemm_fp4.cu`, `optimized_cublaslt_gemm_fp4.py`", "FP4 comparison path: naive block-scaled FP4 baseline vs native cuBLASLt NVFP4 when the driver/toolchain exposes the required heuristic."),
         ("`baseline_fused_l2norm.cu`, `baseline_fused_l2norm.py`, `optimized_fused_l2norm.cu`, `optimized_fused_l2norm.py`, `fusedL2Norm/`", "Fusion examples that merge L2 norm + scaling while staying numerically stable."),
         ("`baseline_triton.py`, `optimized_triton.py`", "Triton counterparts for quick prototyping and verifying compiler-generated PTX on Blackwell."),
         ("`baseline_tcgen05_tma_pipeline.py`, `optimized_tcgen05_tma_pipeline.py`, `two_stage_pipeline.cu`", "Producer/consumer pipelines emphasizing staged TMA loads and inline PTX hooks."),
@@ -1735,6 +1752,7 @@ ENTRIES["ch09"] = chapter_entry(
     notes=[
         "`inline_ptx_example.cu` demonstrates how to wrap tcgen05 intrinsics safely with architecture guards.",
         "`requirements.txt` includes Triton nightly pinning so the kernels track PyTorch 2.10-dev features.",
+        "`optimized_cublaslt_gemm_fp4` is intentionally capability-gated: if cuBLASLt cannot provide the native block-scaled NVFP4 heuristic, the benchmark reports a clean skip instead of silently falling back to a different FP4 mode.",
     ],
 )
 

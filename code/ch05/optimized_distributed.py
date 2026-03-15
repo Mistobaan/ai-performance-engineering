@@ -1,88 +1,52 @@
-"""optimized_distributed.py - Optimized distributed operations in storage I/O context."""
+"""optimized_distributed.py - Optimized single-GPU reduction without host staging."""
 
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 import torch
-import torch.distributed as dist
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 
 
 class OptimizedDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Distributed sum across ranks; falls back to single-GPU when world_size=1."""
+    """Keep the reduction on the device instead of bouncing through host memory."""
     
     def __init__(self):
         super().__init__()
         self.data: Optional[torch.Tensor] = None
-        self._verify_data: Optional[torch.Tensor] = None
-        self.is_distributed = False
-        self.rank = 0
-        self.world_size = 1
-        self.N = 10_000_000
+        self.num_elements = 10_000_000
         self._workload = WorkloadMetadata(
             requests_per_iteration=1.0,
-            tokens_per_iteration=float(self.N),
+            tokens_per_iteration=float(self.num_elements),
         )
     
     def setup(self) -> None:
-        """Setup: Initialize data and (optional) distributed process group."""
+        """Setup: Initialize data on the active CUDA device."""
         if not torch.cuda.is_available():
             raise RuntimeError("SKIPPED: requires CUDA")
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
-        
-        # Initialize distributed if running in multi-rank mode
-        if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
-            rank = int(os.environ["RANK"])
-            world_size = int(os.environ["WORLD_SIZE"])
-            if world_size > 1:
-                dist.init_process_group(
-                    backend="nccl",
-                    init_method="env://",
-                    rank=rank,
-                    world_size=world_size,
-                )
-                self.is_distributed = True
-                self.rank = rank
-                self.world_size = world_size
-
-        local_rank = int(os.environ.get("LOCAL_RANK", self.rank))
-        self.device = torch.device(f"cuda:{local_rank}")
-        torch.cuda.set_device(local_rank)
-        
-        self._verify_data = torch.randn(self.N, device=self.device)
-        chunk_size = self.N // max(self.world_size, 1)
-        start_idx = self.rank * chunk_size
-        end_idx = start_idx + chunk_size if self.rank < self.world_size - 1 else self.N
-        self.data = self._verify_data[start_idx:end_idx]
+        self.data = torch.randn(self.num_elements, device=self.device)
         self._synchronize()
     
     def benchmark_fn(self) -> None:
-        """Benchmark: distributed reduction when enabled."""
+        """Benchmark: reduce directly on the GPU."""
         assert self.data is not None
         with self._nvtx_range("optimized_distributed"):
-            local_result = self.data.sum()
-            if self.is_distributed:
-                dist.all_reduce(local_result, op=dist.ReduceOp.SUM)
-                result = local_result
-            else:
-                result = local_result
-            _ = result
+            result = self.data.sum()
         self.output = result.detach().clone()
 
     def capture_verification_payload(self) -> None:
-        if self._verify_data is None:
+        if self.data is None:
             raise RuntimeError("setup() must be called before capture_verification_payload()")
         self._set_verification_payload(
             inputs={
-                "data": self._verify_data,
+                "data": self.data,
             },
             output=self.output,
-            batch_size=self._verify_data.shape[0],
+            batch_size=self.data.shape[0],
             parameter_count=0,
             precision_flags={
                 "fp16": False,
@@ -95,10 +59,7 @@ class OptimizedDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
     
     def teardown(self) -> None:
         """Teardown: Clean up resources."""
-        if self.is_distributed:
-            dist.destroy_process_group()
         self.data = None
-        self._verify_data = None
         torch.cuda.empty_cache()
     
     def get_config(self) -> BenchmarkConfig:

@@ -111,6 +111,22 @@ class TestPythonBenchmarkDiscovery:
         assert len(pairs) == 1
         _, _, example_name = pairs[0]
         assert example_name == "speculative_decoding"
+
+    def test_discover_benchmarks_prefers_specific_baseline_over_variant_alias(self, tmp_path):
+        """A real baseline should suppress the alias pair from a broader baseline."""
+        chapter_dir = tmp_path / "ch01"
+        chapter_dir.mkdir()
+
+        (chapter_dir / "baseline_performance.py").write_text(_DUMMY_BENCH_SOURCE)
+        (chapter_dir / "baseline_performance_fp16.py").write_text(_DUMMY_BENCH_SOURCE)
+        (chapter_dir / "optimized_performance.py").write_text(_DUMMY_BENCH_SOURCE)
+        (chapter_dir / "optimized_performance_fp16.py").write_text(_DUMMY_BENCH_SOURCE)
+
+        pairs = discover_benchmarks(chapter_dir)
+        lookup = {example_name: (baseline_path.name, [p.name for p in optimized_paths]) for baseline_path, optimized_paths, example_name in pairs}
+
+        assert lookup["performance"] == ("baseline_performance.py", ["optimized_performance.py"])
+        assert lookup["performance_fp16"] == ("baseline_performance_fp16.py", ["optimized_performance_fp16.py"])
     
     def test_discover_benchmarks_real_chapter(self):
         """Test discovery on a real chapter directory if it exists."""

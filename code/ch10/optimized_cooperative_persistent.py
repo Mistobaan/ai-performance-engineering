@@ -36,7 +36,7 @@ class OptimizedCooperativePersistentBenchmark(CudaBinaryBenchmark):
         """Return domain-specific metrics using standardized helper."""
         from core.benchmark.metrics import compute_pipeline_metrics
         return compute_pipeline_metrics(
-            num_stages=getattr(self, 'num_stages', 4),
+            num_stages=getattr(self, 'num_stages', 2),
             stage_times_ms=getattr(self, '_stage_times_ms', [1.0]),
         )
 

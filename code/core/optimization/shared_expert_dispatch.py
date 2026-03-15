@@ -101,3 +101,28 @@ def dispatch_shared_expert_sort_scatter(
     packed_out = expert(packed)
     out.index_copy_(0, sort_idx, packed_out)
     return out
+
+
+def dispatch_shared_expert_packed_scatter(
+    packed_tokens: torch.Tensor,
+    expert: nn.Module,
+    *,
+    out: torch.Tensor,
+    sort_idx: torch.Tensor,
+) -> torch.Tensor:
+    """Dispatch when tokens are already packed in route order.
+
+    This variant avoids the per-iteration gather when the caller can prepare the
+    transfer buffer in setup or during a communication packing phase.
+    """
+    if packed_tokens.dim() != 2:
+        raise ValueError(f"packed_tokens must be 2D [T, H], got shape {tuple(packed_tokens.shape)}")
+    if out.shape != packed_tokens.shape:
+        raise ValueError(f"out must match packed_tokens shape {tuple(packed_tokens.shape)}, got {tuple(out.shape)}")
+    if sort_idx.dim() != 1 or sort_idx.shape[0] != packed_tokens.shape[0]:
+        raise ValueError(f"sort_idx must be 1D [T], got shape {tuple(sort_idx.shape)}")
+    if sort_idx.dtype != torch.int64:
+        sort_idx = sort_idx.to(torch.int64)
+    packed_out = expert(packed_tokens)
+    out.index_copy_(0, sort_idx, packed_out)
+    return out

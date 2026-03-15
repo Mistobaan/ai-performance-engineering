@@ -18,6 +18,7 @@ from typing import Optional
 
 import torch
 
+from ch10.persistent_matmul_tma_common import persistent_program_count, persistent_tile_count
 from core.harness.benchmark_harness import (
     BaseBenchmark,
     BenchmarkConfig,
@@ -189,10 +190,7 @@ def run_optimized(M=1024, N=1024, K=1024):
     c = torch.empty((M, N), device="cuda", dtype=torch.float16)
 
     num_sms = torch.cuda.get_device_properties(torch.cuda.current_device()).multi_processor_count
-    grid_m = (M + BLOCK_M - 1) // BLOCK_M
-    grid_n = (N + BLOCK_N - 1) // BLOCK_N
-    num_tiles = grid_m * grid_n
-    grid_sms = min(num_sms * 2, num_tiles)
+    grid_sms = persistent_program_count(M, N, BLOCK_M, BLOCK_N, num_sms)
     grid = (grid_sms,)
 
     persistent_matmul_tma[grid](
@@ -268,10 +266,7 @@ class PersistentMatmulTMABenchmark(VerificationPayloadMixin, BaseBenchmark):
         # installed in the active thread context every call.
         _ensure_triton_allocator()
         num_sms = torch.cuda.get_device_properties(self.device.index or 0).multi_processor_count
-        grid_m = (self.M + BLOCK_M - 1) // BLOCK_M
-        grid_n = (self.N + BLOCK_N - 1) // BLOCK_N
-        num_tiles = grid_m * grid_n
-        grid_sms = min(num_sms * 2, num_tiles)
+        grid_sms = persistent_program_count(self.M, self.N, BLOCK_M, BLOCK_N, num_sms)
         grid = (grid_sms,)
         persistent_matmul_tma[grid](
             self.a, self.b, self.c,
@@ -317,10 +312,15 @@ class PersistentMatmulTMABenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def get_custom_metrics(self) -> Optional[dict]:
         """Return TMA-specific metrics."""
+        num_sms = torch.cuda.get_device_properties(self.device.index or 0).multi_processor_count
+        scheduled_programs = persistent_program_count(self.M, self.N, BLOCK_M, BLOCK_N, num_sms)
         return {
             "matrix_size": f"{self.M}x{self.N}x{self.K}",
             "tma_enabled": True,
             "dtype": "float16",
+            "scheduled_programs": float(scheduled_programs),
+            "tile_count": float(persistent_tile_count(self.M, self.N, BLOCK_M, BLOCK_N)),
+            "programs_per_sm": float(scheduled_programs / num_sms),
         }
 
     def validate_result(self) -> Optional[str]:

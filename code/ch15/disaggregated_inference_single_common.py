@@ -39,6 +39,23 @@ class DisaggConfig:
         return self.context_window + self.decode_tokens
 
 
+def _flatten_prompt_batches(prompts: torch.Tensor) -> torch.Tensor:
+    """Collapse request and microbatch axes for batched prefill/decode."""
+    requests_per_rank, batch_size, context_window = prompts.shape
+    return prompts.reshape(requests_per_rank * batch_size, context_window)
+
+
+def _format_batched_decode_output(
+    final_tokens: torch.Tensor,
+    *,
+    requests_per_rank: int,
+    batch_size: int,
+) -> torch.Tensor:
+    """Match the legacy per-request output layout used by verification."""
+    per_request = final_tokens.reshape(requests_per_rank, batch_size, -1)
+    return torch.cat([per_request[idx].squeeze(0) for idx in range(requests_per_rank)], dim=0)
+
+
 def _build_moe_config(cfg: DisaggConfig) -> MoeInferenceConfig:
     return MoeInferenceConfig(
         vocab_size=cfg.vocab_size,
@@ -102,6 +119,7 @@ class _DisaggregatedInferenceSingleGPUBase(VerificationPayloadMixin, BaseBenchma
         self.decode_model: Optional[SimpleMoEGPT] = None
         self.prompts: Optional[torch.Tensor] = None
         self.kv_caches: List[torch.Tensor] = []
+        self.batched_kv_cache: Optional[torch.Tensor] = None
         self._output: Optional[torch.Tensor] = None
         self._param_count = 0
 
@@ -182,6 +200,7 @@ class _DisaggregatedInferenceSingleGPUBase(VerificationPayloadMixin, BaseBenchma
         self.decode_model = None
         self.prompts = None
         self.kv_caches = []
+        self.batched_kv_cache = None
         self._output = None
         torch.cuda.empty_cache()
 
@@ -216,35 +235,41 @@ class BaselineDisaggregatedInferenceSingleGPUBenchmark(_DisaggregatedInferenceSi
 
 
 class OptimizedDisaggregatedInferenceSingleGPUBenchmark(_DisaggregatedInferenceSingleGPUBase):
-    """Optimized single-GPU disaggregated inference with device-resident KV reuse."""
+    """Optimized single-GPU disaggregated inference with batched device-resident KV reuse."""
 
     def setup(self) -> None:
         super().setup()
-        self.kv_caches = [
-            allocate_kv_cache(
-                self.cfg.batch_size,
-                self.cfg.tokens_per_request,
-                self.cfg.hidden_size,
-                self.cfg.dtype,
-                self.device,
-            )
-            for _ in range(self.cfg.requests_per_rank)
-        ]
+        total_batch = self.cfg.requests_per_rank * self.cfg.batch_size
+        self.batched_kv_cache = allocate_kv_cache(
+            total_batch,
+            self.cfg.tokens_per_request,
+            self.cfg.hidden_size,
+            self.cfg.dtype,
+            self.device,
+        )
 
     def benchmark_fn(self) -> None:
         if self.prefill_model is None or self.prompts is None:
             raise RuntimeError("setup() must run before benchmark_fn()")
-        if not self.kv_caches:
-            raise RuntimeError("Optimized KV caches not initialized")
+        if self.batched_kv_cache is None:
+            raise RuntimeError("Optimized KV cache not initialized")
 
-        outputs: List[torch.Tensor] = []
+        flat_prompts = _flatten_prompt_batches(self.prompts)
         with torch.no_grad():
-            for idx in range(self.cfg.requests_per_rank):
-                prompt = self.prompts[idx]
-                hidden, logits = self.prefill_model.prefill(prompt)
-                seed_tokens = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)
-                kv_cache = self.kv_caches[idx]
-                kv_cache[:, : self.cfg.context_window] = hidden
-                outputs.append(self._run_decode_loop(kv_cache, seed_tokens))
+            hidden, logits = self.prefill_model.prefill(flat_prompts)
+            seed_tokens = torch.argmax(logits[:, -1, :], dim=-1, keepdim=True)
+            self.batched_kv_cache[:, : self.cfg.context_window] = hidden
+            tokens = seed_tokens
+            for step in range(self.cfg.decode_tokens):
+                _, decode_logits = self.decode_model.decode(
+                    tokens,
+                    kv_cache=self.batched_kv_cache,
+                    position=self.cfg.context_window + step,
+                )
+                tokens = torch.argmax(decode_logits[:, -1, :], dim=-1, keepdim=True)
 
-        self._set_output_from_tokens(outputs)
+        self._output = _format_batched_decode_output(
+            tokens,
+            requests_per_rank=self.cfg.requests_per_rank,
+            batch_size=self.cfg.batch_size,
+        )

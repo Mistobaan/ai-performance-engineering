@@ -24,7 +24,7 @@ import torch.nn as nn
 from ch15.verification_payload_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from core.optimization.moe_inference import ExpertMLP
-from core.optimization.shared_expert_dispatch import dispatch_shared_expert_sort_scatter
+from core.optimization.shared_expert_dispatch import dispatch_shared_expert_packed_scatter
 
 
 def _pseudo_uniform_expert_ids(token_ids: torch.Tensor, num_experts: int) -> torch.Tensor:
@@ -67,7 +67,7 @@ class OptimizedMoeOverlapSharedExpertBenchmark(VerificationPayloadMixin, BaseBen
         self.expert_ids: Optional[torch.Tensor] = None
         self._dispatch_order: Optional[torch.Tensor] = None
         self._remote_cpu_flat: Optional[torch.Tensor] = None
-        self._comm_flat: Optional[torch.Tensor] = None
+        self._packed_comm_flat: Optional[torch.Tensor] = None
         self._routed_out_flat: Optional[torch.Tensor] = None
         self._comm_stream: Optional[torch.cuda.Stream] = None
         self.output: Optional[torch.Tensor] = None
@@ -98,10 +98,11 @@ class OptimizedMoeOverlapSharedExpertBenchmark(VerificationPayloadMixin, BaseBen
         token_ids = torch.arange(self.batch * self.seq, device=self.device, dtype=torch.int64)
         self.expert_ids = _pseudo_uniform_expert_ids(token_ids, self.num_experts).view(self.batch, self.seq)
         self._dispatch_order = torch.argsort(self.expert_ids.reshape(-1))
-        self._comm_flat = torch.empty(self.batch * self.seq, self.hidden_size, device=self.device, dtype=self.dtype)
+        flat_inputs = self.inputs.view(-1, self.hidden_size)
+        self._packed_comm_flat = torch.empty(self.batch * self.seq, self.hidden_size, device=self.device, dtype=self.dtype)
         self._routed_out_flat = torch.empty(self.batch * self.seq, self.hidden_size, device=self.device, dtype=self.dtype)
         self._comm_stream = torch.cuda.Stream(device=self.device)
-        self._remote_cpu_flat = self.inputs.view(-1, self.hidden_size).detach().cpu().pin_memory()
+        self._remote_cpu_flat = flat_inputs.index_select(0, self._dispatch_order).detach().cpu().pin_memory()
 
         self._verify_probe = self.inputs[:1, :1, :256].detach().cpu()
         self._verify_meta = torch.zeros(self.num_experts, dtype=torch.int8)
@@ -125,15 +126,13 @@ class OptimizedMoeOverlapSharedExpertBenchmark(VerificationPayloadMixin, BaseBen
             or self.expert_ids is None
             or self._dispatch_order is None
             or self._remote_cpu_flat is None
-            or self._comm_flat is None
+            or self._packed_comm_flat is None
             or self._routed_out_flat is None
             or self._comm_stream is None
         ):
             raise RuntimeError("setup() must run before benchmark_fn()")
 
         flat = self.inputs.view(-1, self.hidden_size)
-        expert_ids_flat = self.expert_ids.reshape(-1)
-
         with self._nvtx_range("optimized_moe_overlap_shared_expert"):
             with torch.no_grad():
                 total_tokens = flat.shape[0]
@@ -144,12 +143,11 @@ class OptimizedMoeOverlapSharedExpertBenchmark(VerificationPayloadMixin, BaseBen
                     for _ in range(self.comm_round_trips):
                         for start in range(0, total_tokens, chunk_tokens):
                             end = min(start + chunk_tokens, total_tokens)
-                            self._comm_flat[start:end].copy_(self._remote_cpu_flat[start:end], non_blocking=True)
+                            self._packed_comm_flat[start:end].copy_(self._remote_cpu_flat[start:end], non_blocking=True)
                 shared_out = self.shared_expert(flat)
                 torch.cuda.current_stream(self.device).wait_stream(self._comm_stream)
-                dispatch_shared_expert_sort_scatter(
-                    self._comm_flat,
-                    expert_ids_flat,
+                dispatch_shared_expert_packed_scatter(
+                    self._packed_comm_flat,
                     self.routed_expert,
                     out=self._routed_out_flat,
                     sort_idx=self._dispatch_order,
@@ -188,7 +186,7 @@ class OptimizedMoeOverlapSharedExpertBenchmark(VerificationPayloadMixin, BaseBen
         self.expert_ids = None
         self._dispatch_order = None
         self._remote_cpu_flat = None
-        self._comm_flat = None
+        self._packed_comm_flat = None
         self._routed_out_flat = None
         self._comm_stream = None
         self.output = None

@@ -1,4 +1,4 @@
-"""baseline_distributed.py - Baseline with host-staged reduction in storage I/O context."""
+"""baseline_distributed.py - Baseline reduction with full host staging."""
 
 from __future__ import annotations
 
@@ -11,17 +11,17 @@ from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, Workl
 
 
 class BaselineDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Host-staged sum to contrast with on-device aggregation."""
+    """Transfer the full tensor to the CPU before reducing it."""
 
     allowed_benchmark_fn_antipatterns = ("host_transfer",)
     
     def __init__(self):
         super().__init__()
         self.data: Optional[torch.Tensor] = None
-        self.N = 10_000_000
+        self.num_elements = 10_000_000
         self._workload = WorkloadMetadata(
             requests_per_iteration=1.0,
-            tokens_per_iteration=float(self.N),
+            tokens_per_iteration=float(self.num_elements),
         )
     
     def setup(self) -> None:
@@ -29,7 +29,7 @@ class BaselineDistributedBenchmark(VerificationPayloadMixin, BaseBenchmark):
         if not torch.cuda.is_available():
             raise RuntimeError("SKIPPED: requires CUDA")
         torch.manual_seed(42)
-        self.data = torch.randn(self.N, device=self.device)
+        self.data = torch.randn(self.num_elements, device=self.device)
         self._synchronize()
     
     def benchmark_fn(self) -> None:

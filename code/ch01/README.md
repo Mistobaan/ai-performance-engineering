@@ -34,7 +34,7 @@ The Chapter 1 training loop is intentionally split into three related targets:
 | Target | Isolated change | Intended lesson |
 | --- | --- | --- |
 | `performance` | FP16 math + fused microbatches | the combined goodput story |
-| `performance_fp16` | FP16 math only | what tensor-core-friendly precision buys you without changing batching |
+| `performance_fp16` | FP16 math only | what tensor-core-friendly precision buys you without changing batching; uses a more compute-heavy local shape so precision is visible |
 | `performance_fusion` | fused microbatches only | what launch amortization buys you without changing math precision |
 
 ## Profiler Evidence
@@ -49,7 +49,7 @@ python -m cli.aisp bench run --targets ch01:nvfp4_mlp --profile deep_dive --sing
 The expected profiler story is straightforward:
 - `gemm`: fewer launches and lower dispatch overhead
 - `performance`: fewer launches plus faster tensor-core math
-- `performance_fp16`: faster GEMMs from FP16 tensor-core math with the same microbatch structure
+- `performance_fp16`: faster GEMMs from FP16 tensor-core math with the same microbatch structure, using a benchmark-local compute-heavy shape so the precision delta is not drowned out by Python overhead
 - `performance_fusion`: fewer forward/backward launches at unchanged FP32 math
 - `nvfp4_mlp`: reduced memory footprint rather than a large wall-clock win
 
@@ -69,7 +69,7 @@ python -m cli.aisp bench run --targets ch01:gemm --profile deep_dive --single-gp
 ## Directory Layout
 | Path | Description |
 | --- | --- |
-| `baseline_performance.py`, `optimized_performance.py`, `optimized_performance_fp16.py`, `optimized_performance_fusion.py` | Training-loop variants covering the baseline, the combined FP16+fusion path, the FP16-only path, and the fusion-only path. |
+| `baseline_performance.py`, `optimized_performance.py`, `baseline_performance_fp16.py`, `optimized_performance_fp16.py`, `optimized_performance_fusion.py` | Training-loop variants covering the baseline, the combined FP16+fusion path, the FP16-only pair with a benchmark-local compute-heavy shape, and the fusion-only path. |
 | `baseline_gemm.cu`, `optimized_gemm_batched.cu`, `optimized_gemm_strided.cu` | CUDA GEMM variants (single, batched, strided) used to illustrate launch amortization and memory coalescing. |
 | `compare.py`, `workload_config.py`, `arch_config.py`, `expectations_{hardware_key}.json` | Harness entrypoint, workload shapes, architecture overrides, and stored expectation thresholds. |
 
