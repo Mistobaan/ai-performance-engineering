@@ -9756,7 +9756,16 @@ def generate_markdown_report(
 
                     patches = bench.get("llm_patches") or []
                     source_file = _resolve_source_file(bench, chapter_dir)
-                    source_text = _safe_read_text(source_file) if source_file else None
+                    patch_diff_warnings: List[str] = []
+                    source_text = (
+                        _safe_read_text_with_warning(
+                            source_file,
+                            label=f"patch diff source file for {bench['example']}",
+                            warnings_list=patch_diff_warnings,
+                        )
+                        if source_file
+                        else None
+                    )
                     if source_file:
                         source_link = _format_rel_link(source_file, report_dir)
                         f.write(f"- **Patch diff base:** [{source_file.name}]({source_link})\n")
@@ -9790,7 +9799,11 @@ def generate_markdown_report(
                             patched_path = Path(patched_file)
                             if not patched_path.exists() or not source_text:
                                 continue
-                            patched_text = _safe_read_text(patched_path)
+                            patched_text = _safe_read_text_with_warning(
+                                patched_path,
+                                label=f"patched variant file for {patch.get('variant_name', patched_path.name)}",
+                                warnings_list=patch_diff_warnings,
+                            )
                             if not patched_text:
                                 continue
                             diff = _generate_diff(
@@ -9816,6 +9829,11 @@ def generate_markdown_report(
                                 variant = patch.get("variant_name", "unknown")
                                 reason = patch.get("error") or patch.get("failure_reason") or "Unknown error"
                                 f.write(f"- `{variant}`: {reason}\n")
+                            f.write("\n")
+                        if patch_diff_warnings:
+                            f.write("**Patch diff warnings:**\n\n")
+                            for warning in patch_diff_warnings:
+                                f.write(f"- {warning}\n")
                             f.write("\n")
                 
                 f.write("\n")
