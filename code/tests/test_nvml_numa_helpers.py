@@ -196,14 +196,18 @@ def test_planner_topology_detector_reports_unknown_gpu_numa_status_when_no_mappi
 
 
 def test_planner_mock_topology_marks_gpu_numa_as_synthetic() -> None:
-    topology = planner_advisor.create_mock_topology_b200_multigpu(num_gpus=4)
+    preset = planner_advisor.create_mock_topology_b200_multigpu(num_gpus=4)
+    topology = preset.materialize()
 
+    assert isinstance(preset, planner_topology_detector.SyntheticTopologyPreset)
     assert topology.gpu_numa_status == "synthetic"
+    assert topology.topology_source == "synthetic_preset"
+    assert topology.topology_preset_name == "mock_b200_multigpu"
 
 
 def test_cluster_detector_preserves_unknown_numa_for_detected_node() -> None:
     detector = planner_cluster_config.ClusterDetector()
-    topology = planner_advisor.create_mock_topology_b200_multigpu(num_gpus=4)
+    topology = planner_advisor.create_mock_topology_b200_multigpu(num_gpus=4).materialize()
     topology.numa_nodes = 0
     topology.gpu_numa_mapping = {}
     topology.gpu_numa_status = "unknown"
@@ -212,6 +216,17 @@ def test_cluster_detector_preserves_unknown_numa_for_detected_node() -> None:
 
     assert len(nodes) == 1
     assert nodes[0].numa_nodes is None
+
+
+def test_parallelism_advisor_materializes_synthetic_preset_before_use() -> None:
+    advisor = planner_advisor.ParallelismAdvisor(auto_detect_topology=False)
+    preset = planner_advisor.create_mock_topology_h100_multigpu(num_gpus=4)
+
+    advisor.set_topology(preset)
+
+    assert advisor.topology is not None
+    assert advisor.topology.topology_source == "synthetic_preset"
+    assert advisor.topology.topology_preset_name == "mock_h100_multigpu"
 
 
 def test_setup_grace_affinity_does_not_guess_numa_node_when_mapping_is_unknown(

@@ -594,36 +594,10 @@ class StrategyOptimizer:
 
 if __name__ == "__main__":
     # Demo with mock data
-    from .topology_detector import TopologyInfo, GPUInfo, InterconnectInfo
+    from .advisor import create_mock_topology_b200_multigpu
     from .model_analyzer import ModelAnalyzer
-    
-    # Create a sample topology (B200 multi-GPU)
-    gpus = [
-        GPUInfo(i, "NVIDIA B200", "10.0", 192, 148, "blackwell", True)
-        for i in range(4)
-    ]
-    
-    topology = TopologyInfo(
-        num_gpus=4,
-        gpus=gpus,
-        total_memory_gb=192 * 4,
-        interconnects=[],
-        p2p_matrix=[[True] * 4 for _ in range(4)],
-        bandwidth_matrix=[[900.0] * 4 for _ in range(4)],
-        has_nvlink=True,
-        has_nvswitch=False,
-        nvlink_version="5.0",
-        max_nvlink_bandwidth_gbps=900,
-        numa_nodes=1,
-        gpu_numa_mapping={i: 0 for i in range(4)},
-        numa_distance_matrix=[[10]],
-        gpu_numa_status="synthetic",
-        cpu_type="aarch64",
-        is_grace_cpu=True,
-        has_nvlink_c2c=True,
-        num_nodes=1,
-        gpus_per_node=4,
-    )
+
+    topology = create_mock_topology_b200_multigpu(num_gpus=4).materialize()
     
     analyzer = ModelAnalyzer()
     model = analyzer.analyze("llama-3.1-70b")

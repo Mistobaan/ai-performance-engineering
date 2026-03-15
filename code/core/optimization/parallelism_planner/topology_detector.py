@@ -16,6 +16,7 @@ import json
 import os
 import re
 import subprocess
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -82,6 +83,10 @@ class TopologyInfo:
 
     # Locality detection status
     gpu_numa_status: str = "unknown"  # unknown, partial, complete, synthetic
+
+    # Provenance
+    topology_source: str = "detected"  # detected, synthetic_preset
+    topology_preset_name: Optional[str] = None
     
     # Network (for multi-node)
     network_interfaces: List[Dict[str, Any]] = field(default_factory=list)
@@ -210,6 +215,8 @@ class TopologyInfo:
             "numa_nodes": self.numa_nodes,
             "gpu_numa_mapping": self.gpu_numa_mapping,
             "gpu_numa_status": self.gpu_numa_status,
+            "topology_source": self.topology_source,
+            "topology_preset_name": self.topology_preset_name,
             "cpu_type": self.cpu_type,
             "is_grace_cpu": self.is_grace_cpu,
             "has_nvlink_c2c": self.has_nvlink_c2c,
@@ -219,6 +226,22 @@ class TopologyInfo:
             "infiniband_available": self.infiniband_available,
             "rdma_capable": self.rdma_capable,
         }
+
+
+@dataclass(frozen=True)
+class SyntheticTopologyPreset:
+    """Explicit synthetic topology preset that must be materialized before use."""
+
+    preset_name: str
+    topology: TopologyInfo
+    description: str = ""
+
+    def materialize(self) -> TopologyInfo:
+        topo = deepcopy(self.topology)
+        topo.gpu_numa_status = "synthetic"
+        topo.topology_source = "synthetic_preset"
+        topo.topology_preset_name = self.preset_name
+        return topo
 
 
 class TopologyDetector:
@@ -644,9 +667,13 @@ class TopologyDetector:
             f"  Type: {topo.cpu_type}",
             f"  Grace CPU: {'Yes' if topo.is_grace_cpu else 'No'}",
             f"  NVLink-C2C: {'Yes' if topo.has_nvlink_c2c else 'No'}",
+            f"  Topology Source: {topo.topology_source}",
             f"  NUMA Nodes: {topo.numa_nodes if topo.gpu_numa_status != 'unknown' else 'unknown'}",
             f"  GPU NUMA Status: {topo.gpu_numa_status}",
         ])
+
+        if topo.topology_preset_name:
+            lines.append(f"  Preset: {topo.topology_preset_name}")
         
         if topo.gpu_numa_mapping:
             lines.append(f"  GPU-NUMA Mapping: {topo.gpu_numa_mapping}")

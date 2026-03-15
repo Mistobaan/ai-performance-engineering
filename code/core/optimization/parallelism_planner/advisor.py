@@ -29,7 +29,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
-from .topology_detector import TopologyDetector, TopologyInfo
+from .topology_detector import TopologyDetector, TopologyInfo, SyntheticTopologyPreset
 from .model_analyzer import ModelAnalyzer, ModelArchitecture
 from .strategy_optimizer import (
     StrategyOptimizer,
@@ -126,9 +126,15 @@ class ParallelismAdvisor:
                 pass  # CUDA not available
         return self._topology
     
-    def set_topology(self, topology: TopologyInfo) -> None:
+    @staticmethod
+    def _materialize_topology(topology: Union[TopologyInfo, SyntheticTopologyPreset]) -> TopologyInfo:
+        if isinstance(topology, SyntheticTopologyPreset):
+            return topology.materialize()
+        return topology
+
+    def set_topology(self, topology: Union[TopologyInfo, SyntheticTopologyPreset]) -> None:
         """Set a custom topology (e.g., for simulation)."""
-        self._topology = topology
+        self._topology = self._materialize_topology(topology)
     
     def recommend(
         self,
@@ -137,7 +143,7 @@ class ParallelismAdvisor:
         seq_length: int = 2048,
         goal: Union[str, OptimizationGoal] = "throughput",
         is_training: bool = False,
-        custom_topology: Optional[TopologyInfo] = None,
+        custom_topology: Optional[Union[TopologyInfo, SyntheticTopologyPreset]] = None,
         max_strategies: int = 5,
     ) -> AdvisorResult:
         """Get parallelism recommendations for a model.
@@ -163,7 +169,7 @@ class ParallelismAdvisor:
             model_name = model.name
         
         # Resolve topology
-        topology = custom_topology or self.topology
+        topology = self._materialize_topology(custom_topology) if custom_topology is not None else self.topology
         if topology is None:
             raise RuntimeError(
                 "No hardware topology available. Either CUDA is not available "
@@ -326,8 +332,8 @@ class ParallelismAdvisor:
         )
 
 
-def create_mock_topology_b200_multigpu(num_gpus: int = 4) -> TopologyInfo:
-    """Create a mock B200 multi-GPU topology for testing."""
+def create_mock_topology_b200_multigpu(num_gpus: int = 4) -> SyntheticTopologyPreset:
+    """Create an explicit synthetic B200 multi-GPU preset for testing."""
     from .topology_detector import GPUInfo
 
     if num_gpus < 2:
@@ -338,31 +344,34 @@ def create_mock_topology_b200_multigpu(num_gpus: int = 4) -> TopologyInfo:
         for i in range(num_gpus)
     ]
     
-    return TopologyInfo(
-        num_gpus=num_gpus,
-        gpus=gpus,
-        total_memory_gb=192 * num_gpus,
-        interconnects=[],
-        p2p_matrix=[[True] * num_gpus for _ in range(num_gpus)],
-        bandwidth_matrix=[[900.0] * num_gpus for _ in range(num_gpus)],
-        has_nvlink=True,
-        has_nvswitch=num_gpus >= 8,
-        nvlink_version="5.0",
-        max_nvlink_bandwidth_gbps=900,
-        numa_nodes=1,
-        gpu_numa_mapping={i: 0 for i in range(num_gpus)},
-        numa_distance_matrix=[[10]],
-        gpu_numa_status="synthetic",
-        cpu_type="aarch64",
-        is_grace_cpu=True,
-        has_nvlink_c2c=True,
-        num_nodes=1,
-        gpus_per_node=num_gpus,
+    return SyntheticTopologyPreset(
+        preset_name="mock_b200_multigpu",
+        description="Synthetic B200 multi-GPU preset for planner testing.",
+        topology=TopologyInfo(
+            num_gpus=num_gpus,
+            gpus=gpus,
+            total_memory_gb=192 * num_gpus,
+            interconnects=[],
+            p2p_matrix=[[True] * num_gpus for _ in range(num_gpus)],
+            bandwidth_matrix=[[900.0] * num_gpus for _ in range(num_gpus)],
+            has_nvlink=True,
+            has_nvswitch=num_gpus >= 8,
+            nvlink_version="5.0",
+            max_nvlink_bandwidth_gbps=900,
+            numa_nodes=1,
+            gpu_numa_mapping={i: 0 for i in range(num_gpus)},
+            numa_distance_matrix=[[10]],
+            cpu_type="aarch64",
+            is_grace_cpu=True,
+            has_nvlink_c2c=True,
+            num_nodes=1,
+            gpus_per_node=num_gpus,
+        ),
     )
 
 
-def create_mock_topology_h100_multigpu(num_gpus: int = 4) -> TopologyInfo:
-    """Create a mock H100 multi-GPU topology for testing."""
+def create_mock_topology_h100_multigpu(num_gpus: int = 4) -> SyntheticTopologyPreset:
+    """Create an explicit synthetic H100 multi-GPU preset for testing."""
     from .topology_detector import GPUInfo
 
     if num_gpus < 2:
@@ -383,26 +392,29 @@ def create_mock_topology_h100_multigpu(num_gpus: int = 4) -> TopologyInfo:
         gpu_numa_mapping = {i: i // gpus_per_numa for i in range(num_gpus)}
         numa_distance_matrix = [[10, 20], [20, 10]]
 
-    return TopologyInfo(
-        num_gpus=num_gpus,
-        gpus=gpus,
-        total_memory_gb=80 * num_gpus,
-        interconnects=[],
-        p2p_matrix=[[True] * num_gpus for _ in range(num_gpus)],
-        bandwidth_matrix=[[600.0] * num_gpus for _ in range(num_gpus)],
-        has_nvlink=True,
-        has_nvswitch=has_nvswitch,
-        nvlink_version="4.0",
-        max_nvlink_bandwidth_gbps=600,
-        numa_nodes=numa_nodes,
-        gpu_numa_mapping=gpu_numa_mapping,
-        numa_distance_matrix=numa_distance_matrix,
-        gpu_numa_status="synthetic",
-        cpu_type="x86_64",
-        is_grace_cpu=False,
-        has_nvlink_c2c=False,
-        num_nodes=1,
-        gpus_per_node=num_gpus,
+    return SyntheticTopologyPreset(
+        preset_name="mock_h100_multigpu",
+        description="Synthetic H100 multi-GPU preset for planner testing.",
+        topology=TopologyInfo(
+            num_gpus=num_gpus,
+            gpus=gpus,
+            total_memory_gb=80 * num_gpus,
+            interconnects=[],
+            p2p_matrix=[[True] * num_gpus for _ in range(num_gpus)],
+            bandwidth_matrix=[[600.0] * num_gpus for _ in range(num_gpus)],
+            has_nvlink=True,
+            has_nvswitch=has_nvswitch,
+            nvlink_version="4.0",
+            max_nvlink_bandwidth_gbps=600,
+            numa_nodes=numa_nodes,
+            gpu_numa_mapping=gpu_numa_mapping,
+            numa_distance_matrix=numa_distance_matrix,
+            cpu_type="x86_64",
+            is_grace_cpu=False,
+            has_nvlink_c2c=False,
+            num_nodes=1,
+            gpus_per_node=num_gpus,
+        ),
     )
 
 

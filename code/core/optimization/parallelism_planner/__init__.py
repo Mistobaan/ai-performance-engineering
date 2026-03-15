@@ -30,7 +30,7 @@ Usage:
     commands = gen.generate_all(launch_config, "train.py")
 """
 
-from .topology_detector import TopologyDetector, TopologyInfo
+from .topology_detector import TopologyDetector, TopologyInfo, SyntheticTopologyPreset
 from .model_analyzer import ModelAnalyzer, ModelArchitecture
 from .strategy_optimizer import StrategyOptimizer, ParallelismStrategy, StrategyRecommendation
 from .advisor import ParallelismAdvisor
@@ -236,7 +236,8 @@ __all__ = [
     # Core
     "ParallelismAdvisor",
     "TopologyDetector",
-    "TopologyInfo", 
+    "TopologyInfo",
+    "SyntheticTopologyPreset",
     "ModelAnalyzer",
     "ModelArchitecture",
     "StrategyOptimizer",
