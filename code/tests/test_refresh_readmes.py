@@ -281,3 +281,43 @@ def test_current_representative_deltas_prefer_tier1_history_when_available(tmp_p
     assert "`0.200 ms`" in body
     assert "`0.100 ms`" in body
     assert "artifacts/history/tier1/20260308_070000_manual/summary.json" in body
+
+
+def test_current_representative_deltas_surface_tier1_history_warnings_when_falling_back(tmp_path: Path) -> None:
+    index_path = tmp_path / "artifacts" / "history" / "tier1" / "index.json"
+    index_path.parent.mkdir(parents=True)
+    index_path.write_text("{not-json", encoding="utf-8")
+
+    body = _render_current_representative_deltas_body(tmp_path)
+
+    assert "fall back to stored representative rows" in body
+    assert "Warnings:" in body
+    assert str(index_path) in body
+
+
+def test_current_representative_deltas_surface_summary_shape_warnings_when_falling_back(tmp_path: Path) -> None:
+    history_root = tmp_path / "artifacts" / "history" / "tier1" / "20260308_070000_manual"
+    history_root.mkdir(parents=True)
+    summary_path = history_root / "summary.json"
+    summary_path.write_text(json.dumps({"targets": {}}), encoding="utf-8")
+    index_path = tmp_path / "artifacts" / "history" / "tier1" / "index.json"
+    index_path.write_text(
+        json.dumps(
+            {
+                "suite_name": "tier1",
+                "runs": [
+                    {
+                        "run_id": "20260308_070000_manual",
+                        "summary_path": str(summary_path),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    body = _render_current_representative_deltas_body(tmp_path)
+
+    assert "fall back to stored representative rows" in body
+    assert "Expected targets list in tier-1 summary artifact" in body
+    assert str(summary_path) in body

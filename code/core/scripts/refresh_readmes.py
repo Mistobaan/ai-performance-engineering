@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 from textwrap import dedent
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -110,44 +110,71 @@ def _fallback_tier1_representative_rows() -> Sequence[Tuple[str, float, float, s
     )
 
 
-def _latest_tier1_summary(repo_root: Optional[Path] = None) -> Optional[Tuple[Dict[str, object], Path]]:
+def _load_json_object(path: Path, *, label: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return None, f"Failed to read {label} {path}: {exc}"
+    if not isinstance(payload, dict):
+        return None, f"Expected JSON object in {label} {path}, got {type(payload).__name__}"
+    return payload, None
+
+
+def _latest_tier1_summary(repo_root: Optional[Path] = None) -> Tuple[Optional[Dict[str, object]], Optional[Path], List[str]]:
     root = Path(repo_root or REPO_ROOT)
     index_path = root / "artifacts" / "history" / "tier1" / "index.json"
+    warnings: List[str] = []
     if not index_path.exists():
-        return None
-    try:
-        index = json.loads(index_path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
+        return None, None, warnings
+    index, index_warning = _load_json_object(index_path, label="tier-1 history index")
+    if index_warning:
+        warnings.append(index_warning)
+        return None, None, warnings
+    assert index is not None
     runs = index.get("runs", [])
-    if not isinstance(runs, list) or not runs:
-        return None
+    if not isinstance(runs, list):
+        warnings.append(f"Expected 'runs' list in tier-1 history index {index_path}, got {type(runs).__name__}")
+        return None, None, warnings
+    if not runs:
+        return None, None, warnings
     latest = runs[-1]
     if not isinstance(latest, dict):
-        return None
+        warnings.append(f"Expected run object in tier-1 history index {index_path}, got {type(latest).__name__}")
+        return None, None, warnings
     summary_path_raw = latest.get("summary_path")
     if not isinstance(summary_path_raw, str) or not summary_path_raw:
-        return None
+        warnings.append(f"Missing summary_path in latest tier-1 history entry from {index_path}")
+        return None, None, warnings
     summary_path = Path(summary_path_raw)
     if not summary_path.is_absolute():
         summary_path = (root / summary_path).resolve()
     if not summary_path.exists():
-        return None
-    try:
-        return json.loads(summary_path.read_text(encoding="utf-8")), summary_path
-    except Exception:
-        return None
+        warnings.append(f"Tier-1 summary artifact is missing: {summary_path}")
+        return None, None, warnings
+    summary, summary_warning = _load_json_object(summary_path, label="tier-1 summary artifact")
+    if summary_warning:
+        warnings.append(summary_warning)
+        return None, summary_path, warnings
+    return summary, summary_path, warnings
 
 
 def _render_current_representative_deltas_body(repo_root: Optional[Path] = None) -> str:
-    def _fallback_body() -> str:
+    def _fallback_body(warnings: Optional[Sequence[str]] = None) -> str:
         rows = _fallback_tier1_representative_rows()
         lines = [
             "These are measured results from current validated benchmark artifacts in `artifacts/runs/`, not aspirational target numbers.",
             "",
+        ]
+        if warnings:
+            lines.extend(["README generation had to fall back to stored representative rows because the latest tier-1 history artifacts were unavailable or malformed.", ""])
+            lines.extend(["Warnings:", ""])
+            for warning in warnings:
+                lines.append(f"- {warning}")
+            lines.append("")
+        lines.extend([
             "| Target | Baseline | Optimized | Measured delta | Artifact |",
             "| --- | ---: | ---: | ---: | --- |",
-        ]
+        ])
         for target, baseline_ms, speedup, artifact in rows:
             optimized_ms = baseline_ms / speedup
             lines.append(
@@ -156,14 +183,16 @@ def _render_current_representative_deltas_body(repo_root: Optional[Path] = None)
         return "\n".join(lines)
 
     root = Path(repo_root or REPO_ROOT)
-    latest = _latest_tier1_summary(root)
-    if latest is None:
-        return _fallback_body()
+    summary, summary_path, warnings = _latest_tier1_summary(root)
+    if summary is None or summary_path is None:
+        return _fallback_body(warnings)
 
-    summary, summary_path = latest
     targets = summary.get("targets", [])
     if not isinstance(targets, list):
-        return _fallback_body()
+        warnings.append(
+            f"Expected targets list in tier-1 summary artifact {summary_path}, got {type(targets).__name__}"
+        )
+        return _fallback_body(warnings)
     summary_metrics = summary.get("summary", {}) if isinstance(summary.get("summary"), dict) else {}
     representative_speedup = float(summary_metrics.get("representative_speedup", summary_metrics.get("geomean_speedup", 0.0)) or 0.0)
     median_speedup = float(summary_metrics.get("median_speedup", 0.0) or 0.0)
