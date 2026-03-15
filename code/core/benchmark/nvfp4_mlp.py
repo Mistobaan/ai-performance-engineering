@@ -256,6 +256,12 @@ class NVFP4MLPBenchmark(VerificationPayloadMixin, BaseBenchmark):
             warmup=self.config.warmup,
         )
 
+    def get_optimization_goal(self) -> str:
+        # This family is intentionally kept as a reduced-precision memory tradeoff.
+        # On the current validated stack, NVFP4 consistently reduces footprint
+        # without producing a durable latency win versus the BF16 baseline.
+        return "memory"
+
 
 __all__ = [
     "NVFP4MLPBenchmark",

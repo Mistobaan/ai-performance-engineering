@@ -44,7 +44,7 @@ class OptimizedAllReduceRMSNormBenchmark(VerificationPayloadMixin, BaseBenchmark
             return fused_allreduce_rmsnorm(shards, self.cfg.eps)
 
         try:
-            self._fused_fn = torch.compile(_fused, mode="max-autotune")
+            self._fused_fn = torch.compile(_fused, mode="reduce-overhead")
         except Exception:
             self._fused_fn = _fused
 
@@ -82,7 +82,7 @@ class OptimizedAllReduceRMSNormBenchmark(VerificationPayloadMixin, BaseBenchmark
         return self._workload
 
     def get_config(self) -> BenchmarkConfig:
-        return BenchmarkConfig(iterations=6, warmup=6)
+        return BenchmarkConfig(iterations=20, warmup=10)
 
 
 def get_benchmark() -> BaseBenchmark:

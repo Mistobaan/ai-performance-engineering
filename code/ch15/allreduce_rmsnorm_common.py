@@ -10,8 +10,8 @@ import torch
 
 @dataclass(frozen=True)
 class AllReduceRMSNormConfig:
-    tp_size: int = 4
-    batch_size: int = 8
+    tp_size: int = 8
+    batch_size: int = 16
     hidden_size: int = 4096
     eps: float = 1e-5
     dtype: torch.dtype = torch.bfloat16

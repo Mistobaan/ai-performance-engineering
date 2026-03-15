@@ -2,24 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 import torch
 
-from core.harness.benchmark_harness import (  # noqa: E402
-    BaseBenchmark,
-    BenchmarkConfig,
-    BenchmarkHarness,
-    BenchmarkMode,
-    WorkloadMetadata,
-)
+from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.profiling.nvtx_helper import get_nvtx_enabled, nvtx_range  # noqa: E402
 
 
 class VectorizationBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Baseline: naive elementwise ops without vectorization."""
+    """Baseline: FP32 memory-bandwidth-bound vector add."""
 
     signature_equivalence_group = "ch19_vectorization_memory_precision"
     signature_equivalence_ignore_fields = ("precision_flags",)
@@ -27,14 +20,15 @@ class VectorizationBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def __init__(self):
         super().__init__()
         self.output = None
-        self.tensor: Optional[torch.Tensor] = None
-        self._work_a: Optional[torch.Tensor] = None
-        self._work_b: Optional[torch.Tensor] = None
-        self._verify_probe: Optional[torch.Tensor] = None
+        self.tensor_a: Optional[torch.Tensor] = None
+        self.tensor_b: Optional[torch.Tensor] = None
+        self._work: Optional[torch.Tensor] = None
+        self._verify_probe_a: Optional[torch.Tensor] = None
+        self._verify_probe_b: Optional[torch.Tensor] = None
 
         # Use a large tensor that exceeds L2 so the kernel is HBM bandwidth bound.
         # Keep the iteration count low to avoid kernel-launch overhead dominating.
-        self.repeats = 8
+        self.repeats = 12
         self.N = 67_108_864
         self._workload = WorkloadMetadata(
             requests_per_iteration=float(self.repeats),
@@ -49,34 +43,29 @@ class VectorizationBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def setup(self) -> None:
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
-        self.tensor = torch.randn(self.N, device=self.device, dtype=torch.float32)
-        self._work_a = torch.empty(self.N, device=self.device, dtype=torch.float32)
-        self._work_b = torch.empty(self.N, device=self.device, dtype=torch.float32)
-        self._verify_probe = self.tensor[:1024].detach().cpu()
+        self.tensor_a = torch.randn(self.N, device=self.device, dtype=torch.float32)
+        self.tensor_b = torch.randn(self.N, device=self.device, dtype=torch.float32)
+        self._work = torch.empty(self.N, device=self.device, dtype=torch.float32)
+        self._verify_probe_a = self.tensor_a[:1024].detach().cpu()
+        self._verify_probe_b = self.tensor_b[:1024].detach().cpu()
         torch.cuda.synchronize(self.device)
 
     def benchmark_fn(self) -> None:
-        if self.tensor is None or self._work_a is None or self._work_b is None:
+        if self.tensor_a is None or self.tensor_b is None or self._work is None:
             raise RuntimeError("setup() must be called before benchmark_fn()")
         config = self.get_config()
         enable_nvtx = get_nvtx_enabled(config) if config else False
         with nvtx_range("baseline_vectorization", enable=enable_nvtx):
-            alpha = 1.0001
-            beta = 0.0001
-            a = self._work_a
-            b = self._work_b
-            a.copy_(self.tensor)
             for _ in range(self.repeats):
-                torch.add(beta, a, alpha=alpha, out=b)
-                a, b = b, a
-            self.output = a.detach()
+                torch.add(self.tensor_a, self.tensor_b, out=self._work)
+            self.output = self._work.detach()
 
     def capture_verification_payload(self) -> None:
-        if self.output is None or self._verify_probe is None:
+        if self.output is None or self._verify_probe_a is None or self._verify_probe_b is None:
             raise RuntimeError("benchmark_fn() must run before capture_verification_payload()")
         output_slice = self.output[:4096].detach().cpu().float().clone()
         self._set_verification_payload(
-            inputs={"probe": self._verify_probe},
+            inputs={"probe_a": self._verify_probe_a, "probe_b": self._verify_probe_b},
             output=output_slice,
             batch_size=self.N,
             parameter_count=0,
@@ -84,10 +73,11 @@ class VectorizationBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
 
     def teardown(self) -> None:
-        self.tensor = None
-        self._work_a = None
-        self._work_b = None
-        self._verify_probe = None
+        self.tensor_a = None
+        self.tensor_b = None
+        self._work = None
+        self._verify_probe_a = None
+        self._verify_probe_b = None
         torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:
@@ -106,7 +96,7 @@ class VectorizationBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
 
     def validate_result(self) -> Optional[str]:
-        if self.tensor is None:
+        if self.tensor_a is None or self.tensor_b is None:
             return "Tensor not initialized"
         return None
 

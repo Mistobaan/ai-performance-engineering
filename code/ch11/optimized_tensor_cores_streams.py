@@ -17,11 +17,7 @@ from ch11.stream_overlap_base import resolve_device
 
 
 class OptimizedTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Optimized tensor-core workload: concurrent GEMM operations across multiple streams.
-    
-    Uses FP16/BF16 GEMM operations to demonstrate tensor core utilization,
-    with stream overlap to process multiple chunks concurrently.
-    """
+    """Optimized tensor-core workload with staged H2D/GEMM/D2H overlap."""
 
     declare_all_streams = False
 
@@ -29,19 +25,18 @@ class OptimizedTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchma
         super().__init__()
         self.device = resolve_device()
         self.label = "tensor_cores_streams"
-        self.num_segments = 16
-        self.matrix_dim = 1024
+        self.num_segments = 24
+        self.matrix_dim = 768
         self.num_elements = self.num_segments * self.matrix_dim * self.matrix_dim
-        self.num_streams = 4
+        self.num_streams = 6
         self.streams: List[torch.cuda.Stream] | None = None
         self.dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         self.host_A: torch.Tensor | None = None
         self.host_B: torch.Tensor | None = None
         self.host_output: torch.Tensor | None = None
-        self.device_A: torch.Tensor | None = None
-        self.device_B: torch.Tensor | None = None
-        self.device_C: torch.Tensor | None = None
-        self.device_output_rows: torch.Tensor | None = None
+        self.device_A_slots: List[torch.Tensor] | None = None
+        self.device_B_slots: List[torch.Tensor] | None = None
+        self.device_C_slots: List[torch.Tensor] | None = None
         element_size = float(torch.empty((), dtype=self.dtype).element_size())
         bytes_transferred = float(self.num_elements * element_size * 3)
         self.register_workload_metadata(bytes_per_iteration=bytes_transferred)
@@ -50,18 +45,17 @@ class OptimizedTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchma
         torch.manual_seed(42)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(42)
-        
+
         if self.num_streams < 1:
             raise ValueError("num_streams must be >= 1")
-        
-        self.streams = [torch.cuda.Stream() for _ in range(self.num_streams)]
 
+        self.streams = [torch.cuda.Stream() for _ in range(self.num_streams)]
         self.host_A = torch.randn(
             self.num_segments,
             self.matrix_dim,
             self.matrix_dim,
             device="cpu",
-            dtype=torch.float32,
+            dtype=self.dtype,
             pin_memory=True,
         )
         self.host_B = torch.randn(
@@ -69,29 +63,21 @@ class OptimizedTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchma
             self.matrix_dim,
             self.matrix_dim,
             device="cpu",
-            dtype=torch.float32,
+            dtype=self.dtype,
             pin_memory=True,
         )
         self.host_output = torch.empty(
             (self.num_segments, self.matrix_dim),
             device="cpu",
-            dtype=torch.float32,
+            dtype=self.dtype,
             pin_memory=True,
         )
-
-        self.device_A = self.host_A.to(device=self.device, dtype=self.dtype, non_blocking=True)
-        self.device_B = self.host_B.to(device=self.device, dtype=self.dtype, non_blocking=True)
-        self.device_C = torch.empty(
-            (self.num_segments, self.matrix_dim, self.matrix_dim),
-            device=self.device,
-            dtype=self.dtype,
-        )
-        self.device_output_rows = torch.empty(
-            (self.num_segments, self.matrix_dim),
-            device=self.device,
-            dtype=self.dtype,
-        )
-
+        self.device_A_slots = [
+            torch.empty((self.matrix_dim, self.matrix_dim), device=self.device, dtype=self.dtype)
+            for _ in range(self.num_streams)
+        ]
+        self.device_B_slots = [torch.empty_like(slot) for slot in self.device_A_slots]
+        self.device_C_slots = [torch.empty_like(slot) for slot in self.device_A_slots]
         torch.cuda.synchronize()
 
     def benchmark_fn(self) -> None:
@@ -100,24 +86,30 @@ class OptimizedTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchma
 
         with nvtx_range(self.label, enable=enable_nvtx):
             assert self.streams is not None
-            assert self.device_A is not None
-            assert self.device_B is not None
-            assert self.device_C is not None
-            assert self.device_output_rows is not None
+            assert self.host_A is not None
+            assert self.host_B is not None
+            assert self.host_output is not None
+            assert self.device_A_slots is not None
+            assert self.device_B_slots is not None
+            assert self.device_C_slots is not None
 
             with torch.no_grad():
                 for idx in range(self.num_segments):
-                    stream = self.streams[idx % self.num_streams]
+                    slot = idx % self.num_streams
+                    stream = self.streams[slot]
+                    device_a = self.device_A_slots[slot]
+                    device_b = self.device_B_slots[slot]
+                    device_c = self.device_C_slots[slot]
                     with torch.cuda.stream(stream):
-                        torch.matmul(self.device_A[idx], self.device_B[idx], out=self.device_C[idx])
-                        self.device_output_rows[idx].copy_(self.device_C[idx, 0], non_blocking=True)
+                        device_a.copy_(self.host_A[idx], non_blocking=True)
+                        device_b.copy_(self.host_B[idx], non_blocking=True)
+                        torch.matmul(device_a, device_b, out=device_c)
+                        self.host_output[idx].copy_(device_c[0], non_blocking=True)
 
                 current = torch.cuda.current_stream(self.device)
                 for stream in self.streams:
                     current.wait_stream(stream)
-
-        assert self.host_output is not None
-        self.host_output.copy_(self.device_output_rows, non_blocking=False)
+                torch.cuda.synchronize(self.device)
 
         if self.host_A is None or self.host_B is None or self.host_output is None:
             raise RuntimeError("benchmark_fn() must run after setup() initializes buffers")
@@ -144,10 +136,9 @@ class OptimizedTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchma
         self.host_A = None
         self.host_B = None
         self.host_output = None
-        self.device_A = None
-        self.device_B = None
-        self.device_C = None
-        self.device_output_rows = None
+        self.device_A_slots = None
+        self.device_B_slots = None
+        self.device_C_slots = None
         torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:
@@ -168,7 +159,6 @@ class OptimizedTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchma
         return None
 
     def get_custom_metrics(self) -> Optional[dict]:
-        """Return stream overlap metrics for the optimized (concurrent) path."""
         element_size = float(torch.empty((), dtype=self.dtype).element_size())
         bytes_transferred = float(self.num_elements * element_size * 3)
         return {
@@ -187,17 +177,20 @@ class OptimizedTensorCoresStreamsBenchmark(VerificationPayloadMixin, BaseBenchma
         return list(self.streams)
 
     def get_input_signature(self) -> dict:
-        """Return workload signature for input verification."""
         return super().get_input_signature()
 
     def get_verify_output(self) -> torch.Tensor:
-        """Return output tensor for verification comparison."""
         return super().get_verify_output()
 
     def get_output_tolerance(self) -> tuple:
-        """Return tolerance for numerical comparison."""
         return super().get_output_tolerance()
 
 
 def get_benchmark() -> OptimizedTensorCoresStreamsBenchmark:
     return OptimizedTensorCoresStreamsBenchmark()
+
+
+if __name__ == "__main__":
+    from core.harness.benchmark_harness import benchmark_main
+
+    benchmark_main(get_benchmark)

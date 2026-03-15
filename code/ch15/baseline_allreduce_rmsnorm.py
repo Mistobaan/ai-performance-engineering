@@ -71,7 +71,7 @@ class BaselineAllReduceRMSNormBenchmark(VerificationPayloadMixin, BaseBenchmark)
         return self._workload
 
     def get_config(self) -> BenchmarkConfig:
-        return BenchmarkConfig(iterations=6, warmup=6)
+        return BenchmarkConfig(iterations=20, warmup=10)
 
 
 def get_benchmark() -> BaseBenchmark:

@@ -18,7 +18,7 @@ from ch04.verification_payload_mixin import VerificationPayloadMixin
 class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Optimized device copy benchmark with preallocated buffers."""
 
-    def __init__(self, size_mb: float = 1.0):
+    def __init__(self, size_mb: float = 0.0625):
         super().__init__()
         self.size_mb = size_mb
         self.numel = int((size_mb * 1024 * 1024) / 4)  # float32
@@ -29,6 +29,7 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         self._pending_timing_pair: Optional[tuple[torch.cuda.Event, torch.cuda.Event]] = None
         self.register_workload_metadata(requests_per_iteration=1.0)
         self._verify_input: Optional[torch.Tensor] = None
+        self._verify_numel = 0
 
     def setup(self) -> None:
         if not torch.cuda.is_available():
@@ -37,7 +38,10 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
         torch.cuda.manual_seed_all(42)
         self.local_tensor = torch.randn(self.numel, device=self.device, dtype=torch.float32)
         self.peer_buffer = torch.empty_like(self.local_tensor)
-        self._verify_input = self.local_tensor[: 256 * 256].view(256, 256).detach()
+        self._verify_numel = min(self.local_tensor.numel(), 256 * 256)
+        side = int(self._verify_numel ** 0.5)
+        self._verify_numel = side * side
+        self._verify_input = self.local_tensor[: self._verify_numel].view(side, side).detach()
         torch.cuda.synchronize(self.device)
 
     def benchmark_fn(self) -> Optional[Dict[str, float]]:
@@ -68,11 +72,12 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
             if self._verify_input is None:
                 torch.manual_seed(42)
                 torch.cuda.manual_seed_all(42)
-                self._verify_input = torch.randn(256, 256, device=self.device, dtype=torch.float32)
+                self._verify_input = torch.randn(128, 128, device=self.device, dtype=torch.float32)
+                self._verify_numel = self._verify_input.numel()
             output = self._verify_input.detach().clone()
             probe = self._verify_input
         else:
-            probe = self.peer_buffer[: 256 * 256].view(256, 256).detach()
+            probe = self.peer_buffer[: self._verify_numel].view_as(self._verify_input).detach()
             output = probe.clone()
 
         self._set_verification_payload(
@@ -97,7 +102,7 @@ class OptimizedSymmetricMemoryPerfBenchmark(VerificationPayloadMixin, BaseBenchm
             torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:
-        return BenchmarkConfig(iterations=20, warmup=5)
+        return BenchmarkConfig(iterations=50, warmup=10)
 
     def get_custom_metrics(self) -> Optional[Dict[str, float]]:
         self.finalize_iteration_metrics()

@@ -30,12 +30,11 @@ class BaselineAIBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.blocks: Optional[nn.ModuleList] = None
         self.inputs: Optional[torch.Tensor] = None
         self.output: Optional[torch.Tensor] = None
-        # Make each block launch-bound so the per-block CPU sync is visible.
-        # A larger number of smaller blocks better models CPU-orchestrated
-        # micro-ops (e.g., tokenization / batching / enqueue) in IO-heavy pipelines.
-        self.batch = 128
+        # Keep the work per block small enough that host orchestration dominates,
+        # but cap the block count so profiling stays tractable.
+        self.batch = 64
         self.hidden = 32
-        self.num_blocks = 1024
+        self.num_blocks = 256
         # Inference benchmark - jitter check not applicable
         tokens = self.batch * self.hidden * self.num_blocks
         self._workload = WorkloadMetadata(
@@ -58,6 +57,7 @@ class BaselineAIBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 out = self.inputs
                 for block in self.blocks:
                     out = block(out)
+                    self._synchronize()
         self.output = out.detach()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output")
@@ -78,7 +78,9 @@ class BaselineAIBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
 
     def teardown(self) -> None:
+        self.blocks = None
         self.inputs = None
+        self.output = None
         torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:

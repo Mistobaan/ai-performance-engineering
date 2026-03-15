@@ -14,9 +14,9 @@
     },
     "file_count": 2,
     "sha256": {
-      "structured/mcp_cluster_smoke_test_ai-book-dev_meta.json": "6c9b587c4646cc9c5115775a138f4063242da41e990a3e8838cdf97b99af5ec4",
-      "structured/mcp_cluster_smoke_test_multinode_readiness.json": "e47bdc94cb11421e6157ae47679ca50bfb358b944c2109874017b6cadf00c728"
+      "structured/mcp_cluster_smoke_test_ai-book-dev_meta.json": "05f20c9ada1c858b2c797a8dc4ed06099aa28ab18697c9d9483c00eaeaae1c74",
+      "structured/mcp_cluster_smoke_test_multinode_readiness.json": "b33127ada9f0ca2d914e40b1a23bd193b0705f03d186cd5a8325c28fd41aad9a"
     }
   },
-  "timestamp_utc": "2026-03-13T21:00:45.914470+00:00"
+  "timestamp_utc": "2026-03-15T02:26:54.547290+00:00"
 }

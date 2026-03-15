@@ -11,30 +11,17 @@ Optimization vs baseline:
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 import torch
 
-from core.harness.benchmark_harness import (
-    BaseBenchmark,
-    BenchmarkConfig,
-    BenchmarkHarness,
-    BenchmarkMode,
-    WorkloadMetadata,
-)
+from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.profiling.nvtx_helper import get_nvtx_enabled, nvtx_range
 
 
 class OptimizedVectorizationMemoryBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Optimized: Same operation as baseline but with FP16 precision.
-    
-    FP16 uses half the memory of FP32:
-    - 2x memory bandwidth improvement
-    - Same arithmetic operations
-    - Perfect for memory-bound workloads
-    """
+    """Optimized: same vector add workload, but with FP16 inputs and output."""
 
     signature_equivalence_group = "ch19_vectorization_memory_precision"
     signature_equivalence_ignore_fields = ("precision_flags",)
@@ -42,18 +29,18 @@ class OptimizedVectorizationMemoryBenchmark(VerificationPayloadMixin, BaseBenchm
     def __init__(self):
         super().__init__()
         self.output = None
-        self.tensor: Optional[torch.Tensor] = None
+        self.tensor_a: Optional[torch.Tensor] = None
+        self.tensor_b: Optional[torch.Tensor] = None
         self._compute_dtype = torch.float16
-        self._tensor_fp16: Optional[torch.Tensor] = None
-        self._tensor_fp16_version: Optional[int] = None
-        self._work_a: Optional[torch.Tensor] = None
-        self._work_b: Optional[torch.Tensor] = None
-        self._verify_probe: Optional[torch.Tensor] = None
+        self._tensor_a_fp16: Optional[torch.Tensor] = None
+        self._tensor_b_fp16: Optional[torch.Tensor] = None
+        self._tensor_a_fp16_version: Optional[int] = None
+        self._tensor_b_fp16_version: Optional[int] = None
+        self._work: Optional[torch.Tensor] = None
+        self._verify_probe_a: Optional[torch.Tensor] = None
+        self._verify_probe_b: Optional[torch.Tensor] = None
 
-        # MATCH BASELINE: same N and repeats for fair comparison.
-        # Use a large tensor that exceeds L2 so bandwidth dominates, and keep
-        # repeat count low so kernel-launch overhead doesn't drown out dtype wins.
-        self.repeats = 8
+        self.repeats = 12
         self.N = 67_108_864
         self._workload = WorkloadMetadata(
             requests_per_iteration=float(self.repeats),
@@ -68,51 +55,53 @@ class OptimizedVectorizationMemoryBenchmark(VerificationPayloadMixin, BaseBenchm
     def setup(self) -> None:
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
-        # Keep verification inputs FP32 for signature matching; compute path casts to FP16.
-        # Jitter check perturbs this tensor, so benchmark_fn must source compute inputs from it.
-        self.tensor = torch.randn(self.N, device=self.device, dtype=torch.float32)
-        self._tensor_fp16 = self.tensor.to(self._compute_dtype)
-        self._tensor_fp16_version = self.tensor._version
-        self._work_a = torch.empty(self.N, device=self.device, dtype=self._compute_dtype)
-        self._work_b = torch.empty(self.N, device=self.device, dtype=self._compute_dtype)
-        self._verify_probe = self.tensor[:1024].detach().cpu()
+        self.tensor_a = torch.randn(self.N, device=self.device, dtype=torch.float32)
+        self.tensor_b = torch.randn(self.N, device=self.device, dtype=torch.float32)
+        self._tensor_a_fp16 = self.tensor_a.to(self._compute_dtype)
+        self._tensor_b_fp16 = self.tensor_b.to(self._compute_dtype)
+        self._tensor_a_fp16_version = self.tensor_a._version
+        self._tensor_b_fp16_version = self.tensor_b._version
+        self._work = torch.empty(self.N, device=self.device, dtype=self._compute_dtype)
+        self._verify_probe_a = self.tensor_a[:1024].detach().cpu()
+        self._verify_probe_b = self.tensor_b[:1024].detach().cpu()
         torch.cuda.synchronize(self.device)
 
-    def _cached_fp16(self) -> torch.Tensor:
-        if self.tensor is None:
+    def _cached_a_fp16(self) -> torch.Tensor:
+        if self.tensor_a is None:
             raise RuntimeError("Tensor not initialized")
-        current_version = self.tensor._version
-        if self._tensor_fp16 is None or self._tensor_fp16_version != current_version:
-            self._tensor_fp16 = self.tensor.to(self._compute_dtype)
-            self._tensor_fp16_version = current_version
-        return self._tensor_fp16
+        current_version = self.tensor_a._version
+        if self._tensor_a_fp16 is None or self._tensor_a_fp16_version != current_version:
+            self._tensor_a_fp16 = self.tensor_a.to(self._compute_dtype)
+            self._tensor_a_fp16_version = current_version
+        return self._tensor_a_fp16
+
+    def _cached_b_fp16(self) -> torch.Tensor:
+        if self.tensor_b is None:
+            raise RuntimeError("Tensor not initialized")
+        current_version = self.tensor_b._version
+        if self._tensor_b_fp16 is None or self._tensor_b_fp16_version != current_version:
+            self._tensor_b_fp16 = self.tensor_b.to(self._compute_dtype)
+            self._tensor_b_fp16_version = current_version
+        return self._tensor_b_fp16
 
     def benchmark_fn(self) -> None:
-        if self._work_a is None or self._work_b is None:
+        if self._work is None:
             raise RuntimeError("setup() must be called before benchmark_fn()")
         config = self.get_config()
         enable_nvtx = get_nvtx_enabled(config) if config else False
         with nvtx_range("optimized_vectorization", enable=enable_nvtx):
-            alpha = 1.0001
-            beta = 0.0001
-            a = self._work_a
-            b = self._work_b
-            a.copy_(self._cached_fp16())
-            # SAME OPERATIONS as baseline: repeated (t * alpha) + beta
-            # Use torch.add(alpha=...) to fuse multiply+add into one pointwise kernel.
             for _ in range(self.repeats):
-                torch.add(beta, a, alpha=alpha, out=b)
-                a, b = b, a
-            self.output = a.detach().float()
-        if self.tensor is None or self.output is None:
+                torch.add(self._cached_a_fp16(), self._cached_b_fp16(), out=self._work)
+            self.output = self._work.detach()
+        if self.tensor_a is None or self.tensor_b is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output")
 
     def capture_verification_payload(self) -> None:
-        if self.output is None or self._verify_probe is None:
+        if self.output is None or self._verify_probe_a is None or self._verify_probe_b is None:
             raise RuntimeError("benchmark_fn() must run before capture_verification_payload()")
         output_slice = self.output[:4096].detach().cpu().float().clone()
         self._set_verification_payload(
-            inputs={"probe": self._verify_probe},
+            inputs={"probe_a": self._verify_probe_a, "probe_b": self._verify_probe_b},
             output=output_slice,
             batch_size=self.N,
             parameter_count=0,
@@ -121,12 +110,15 @@ class OptimizedVectorizationMemoryBenchmark(VerificationPayloadMixin, BaseBenchm
         )
 
     def teardown(self) -> None:
-        self.tensor = None
-        self._tensor_fp16 = None
-        self._tensor_fp16_version = None
-        self._work_a = None
-        self._work_b = None
-        self._verify_probe = None
+        self.tensor_a = None
+        self.tensor_b = None
+        self._tensor_a_fp16 = None
+        self._tensor_b_fp16 = None
+        self._tensor_a_fp16_version = None
+        self._tensor_b_fp16_version = None
+        self._work = None
+        self._verify_probe_a = None
+        self._verify_probe_b = None
         torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:
@@ -145,7 +137,7 @@ class OptimizedVectorizationMemoryBenchmark(VerificationPayloadMixin, BaseBenchm
         )
 
     def validate_result(self) -> Optional[str]:
-        if self.tensor is None:
+        if self.tensor_a is None or self.tensor_b is None:
             return "Tensor not initialized"
         return None
 

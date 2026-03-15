@@ -1,6 +1,6 @@
 {
   "run_id": "mcp_cluster_smoke_test",
-  "generated_at_utc": "2026-03-13T21:00:46.197767+00:00",
+  "generated_at_utc": "2026-03-15T02:26:54.819632+00:00",
   "status": "not_applicable",
   "ready": false,
   "strict_multinode_readiness": true,

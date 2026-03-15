@@ -11,10 +11,12 @@ from ch17.prefill_decode_disagg_single_common import (
 )
 
 TPOT_LONG_CONFIG = PrefillDecodeConfig(
-    context_window=2048,
+    hidden_size=1024,
+    num_layers=1,
+    batch_size=4,
+    requests_per_rank=8,
+    context_window=4096,
     decode_tokens=1024,
-    requests_per_rank=16,
-    num_layers=2,
 )
 
 

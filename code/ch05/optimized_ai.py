@@ -28,13 +28,14 @@ class OptimizedAIBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def __init__(self):
         super().__init__()
-        self.blocks: Optional[nn.ModuleList] = None
+        self.model: Optional[nn.Sequential] = None
         self.static_input: Optional[torch.Tensor] = None
         self.output: Optional[torch.Tensor] = None
-        # Must match baseline workload; tuned to make CPU sync overhead visible.
-        self.batch = 128
+        # Must match baseline workload; tuned to keep the optimized path launch-bound
+        # without making profiler runs pathological.
+        self.batch = 64
         self.hidden = 32
-        self.num_blocks = 1024
+        self.num_blocks = 256
         # Inference benchmark - jitter check not applicable
         tokens = self.batch * self.hidden * self.num_blocks
         self._workload = WorkloadMetadata(
@@ -45,24 +46,17 @@ class OptimizedAIBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def setup(self) -> None:
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
-        # Initialize model weights after seeding for deterministic comparison
-        self.blocks = nn.ModuleList(TinyBlock(self.hidden).to(self.device).eval() for _ in range(self.num_blocks))
-        # Use same dtype as baseline (float32)
+        blocks = [TinyBlock(self.hidden) for _ in range(self.num_blocks)]
+        self.model = nn.Sequential(*blocks).to(self.device).eval()
         self.static_input = torch.randn(self.batch, self.hidden, device=self.device, dtype=torch.float32)
-        # Warmup
         with torch.inference_mode():
-            out = self.static_input
-            for block in self.blocks:
-                out = block(out)
+            _ = self.model(self.static_input)
 
     def benchmark_fn(self) -> None:
-        assert self.blocks is not None and self.static_input is not None
+        assert self.model is not None and self.static_input is not None
         with self._nvtx_range("optimized_ai"):
-            # The optimization: no CPU sync between blocks
             with torch.inference_mode():
-                out = self.static_input
-                for block in self.blocks:
-                    out = block(out)
+                out = self.model(self.static_input)
         self.output = out.detach()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output")
@@ -72,7 +66,7 @@ class OptimizedAIBenchmark(VerificationPayloadMixin, BaseBenchmark):
             inputs={"inputs": self.static_input},
             output=self.output,
             batch_size=self.batch,
-            parameter_count=sum(p.numel() for p in self.blocks.parameters()),
+            parameter_count=sum(p.numel() for p in self.model.parameters()),
             precision_flags={
                 "fp16": False,
                 "bf16": False,
@@ -83,7 +77,9 @@ class OptimizedAIBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
 
     def teardown(self) -> None:
+        self.model = None
         self.static_input = None
+        self.output = None
         torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:
@@ -103,7 +99,7 @@ class OptimizedAIBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
 
     def validate_result(self) -> Optional[str]:
-        if self.blocks is None or self.static_input is None:
+        if self.model is None or self.static_input is None:
             return "Model/input not initialized"
         return None
 
