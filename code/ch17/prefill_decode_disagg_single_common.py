@@ -130,30 +130,28 @@ class BaselinePrefillDecodeSingleGPUBenchmark(_PrefillDecodeSingleGPUBase):
 
 
 class OptimizedPrefillDecodeSingleGPUBenchmark(_PrefillDecodeSingleGPUBase):
-    """Single-GPU disaggregated prefill/decode optimized with device-local KV reuse."""
-
-    def setup(self) -> None:
-        super().setup()
-        self.kv_caches = [
-            torch.empty(
-                (self.cfg.batch_size, self.cfg.context_window, self.cfg.hidden_size),
-                device=self.device,
-                dtype=self.cfg.dtype,
-            )
-            for _ in range(self.cfg.requests_per_rank)
-        ]
+    """Single-GPU disaggregated prefill/decode optimized with batched device-local decode."""
 
     def benchmark_fn(self) -> None:
         if self.prefill_model is None or self.decode_model is None or self.prompts is None:
             raise RuntimeError("setup() must run before benchmark_fn()")
-        if not self.kv_caches:
-            raise RuntimeError("Optimized KV caches not initialized")
 
-        outputs: List[torch.Tensor] = []
+        flat_batch = self.cfg.requests_per_rank * self.cfg.batch_size
         with torch.no_grad():
-            for idx in range(self.cfg.requests_per_rank):
-                kv_cache, seed = self.prefill_model.prefill(self.prompts[idx])
-                self.kv_caches[idx].copy_(kv_cache)
-                outputs.append(self.decode_model.decode(seed, self.kv_caches[idx], self.cfg.decode_tokens))
+            flat_prompts = self.prompts.reshape(
+                flat_batch,
+                self.cfg.context_window,
+                self.cfg.hidden_size,
+            )
+            kv_cache, seed = self.prefill_model.prefill(flat_prompts)
+            decoded = self.decode_model.decode(seed, kv_cache, self.cfg.decode_tokens)
 
-        self._set_output(outputs)
+        self._set_output(
+            list(
+                decoded.view(
+                    self.cfg.requests_per_rank,
+                    self.cfg.batch_size,
+                    self.cfg.hidden_size,
+                ).unbind(0)
+            )
+        )
