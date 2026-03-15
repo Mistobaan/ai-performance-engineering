@@ -1,4 +1,4 @@
-"""optimized_performance.py - Optimized performance benchmark with larger batch size."""
+"""optimized_performance.py - FP16 + fused-microbatch performance benchmark."""
 
 from __future__ import annotations
 
@@ -14,11 +14,12 @@ from typing import Optional
 
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
 from core.benchmark.verification_mixin import VerificationPayloadMixin
+from ch01.performance_common import build_training_mlp, seed_chapter1
 from ch01.workload_config import WORKLOAD
 
 
 class OptimizedPerformanceBatchBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Benchmark implementation with larger batch size optimization."""
+    """Combined optimization: FP16 execution plus fused microbatch execution."""
 
     signature_equivalence_group = "ch01_performance_precision"
     signature_equivalence_ignore_fields = ("precision_flags",)
@@ -41,28 +42,15 @@ class OptimizedPerformanceBatchBenchmark(VerificationPayloadMixin, BaseBenchmark
     
     def setup(self) -> None:
         """Setup: initialize model, fixed inputs, and verification output."""
-        # Seed FIRST for deterministic verification
-        torch.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
+        seed_chapter1()
         
-        self.model = torch.nn.Sequential(
-            torch.nn.Linear(self.hidden_dim, self.hidden_dim),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_dim, self.hidden_dim),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_dim, 10),
-        )
-        
+        self.model = build_training_mlp(self.hidden_dim)
         if self.device.type == "cuda":
-            # Optimization: Use FP16 for faster computation (tensor cores)
             self.model = self.model.half()
             dtype = torch.float16
-            self.model = self.model.to(self.device)
-            # Skip torch.compile for this small model - overhead exceeds benefit
-            # The speedup comes from FP16 + batch fusion instead
         else:
-            self.model = self.model.to(self.device)
             dtype = torch.float32
+        self.model = self.model.to(self.device)
         
         # Match baseline: use eval() mode (baseline has this even though it does backward pass)
         self.model.eval()
@@ -78,9 +66,7 @@ class OptimizedPerformanceBatchBenchmark(VerificationPayloadMixin, BaseBenchmark
         self.microbatches = microbatches
         self.targets = targets
         
-        # Create FIXED verification input - output will be captured at END of benchmark_fn()
-        # Use FP32 verification inputs so baseline/optimized signatures match.
-        # The FP16 optimization remains in the timed training loop.
+        # Keep verification inputs in FP32 so only the timed execution path changes.
         self._verify_input = self.microbatches[0].float().clone()
         self._verify_output = None  # Will be set at end of benchmark_fn()
         
@@ -107,8 +93,6 @@ class OptimizedPerformanceBatchBenchmark(VerificationPayloadMixin, BaseBenchmark
     def benchmark_fn(self) -> None:
         """Function to benchmark."""
         with self._nvtx_range("optimized_performance_batch"):
-            # Optimization: Larger batch size improves GPU utilization
-            # Process more samples per forward pass, reducing overhead per sample
             for data, target in zip(self._fused_batches, self._fused_targets):
                 self.optimizer.zero_grad(set_to_none=True)
                 logits = self.model(data)
@@ -119,11 +103,9 @@ class OptimizedPerformanceBatchBenchmark(VerificationPayloadMixin, BaseBenchmark
     def capture_verification_payload(self) -> None:
         if self.model is None or self._verify_input is None:
             raise RuntimeError("setup() and benchmark_fn() must run before capture_verification_payload()")
-        # Convert to FP32 for consistent comparison with baseline
         with torch.no_grad():
-            verify_input = self._verify_input
-            # Cast verification input to model dtype outside the timed region.
             model_params = list(self.model.parameters())
+            verify_input = self._verify_input
             if model_params:
                 verify_input = verify_input.to(dtype=model_params[0].dtype, device=self.device)
             self._verify_output = self.model(verify_input).float().clone()
@@ -134,7 +116,7 @@ class OptimizedPerformanceBatchBenchmark(VerificationPayloadMixin, BaseBenchmark
             parameter_count=int(self.parameter_count),
             precision_flags={
                 "fp16": bool(model_params) and model_params[0].dtype == torch.float16,
-                "bf16": bool(model_params) and model_params[0].dtype == torch.bfloat16,
+                "bf16": False,
                 "fp8": False,
                 "tf32": torch.cuda.is_available() and bool(torch.backends.cuda.matmul.allow_tf32),
             },

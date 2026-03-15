@@ -12,12 +12,16 @@ try:
 except ImportError:
     pass
 
-from core.utils.compile_utils import compile_model  # Local helper applies TF32 + torch.compile defaults.
-
 from typing import Optional
 
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
 from core.benchmark.verification_mixin import VerificationPayloadMixin
+from ch01.performance_common import (
+    build_training_mlp,
+    capture_tf32_state,
+    seed_chapter1,
+    set_tf32_state,
+)
 from ch01.workload_config import WORKLOAD
 
 
@@ -31,22 +35,6 @@ def resolve_device() -> torch.device:
     except Exception as exc:
         print(f"WARNING: CUDA unavailable or unsupported ({exc}); falling back to CPU.")
         return torch.device("cpu")
-
-
-def _should_use_compile(device: torch.device) -> bool:
-    """Decide whether to torch.compile the model.
-    
-    This chapter's performance examples focus on batch fusion and precision.
-    For this small MLP, torch.compile often adds overhead that can dominate the
-    steady-state step time, and it would introduce an extra "compiler vs eager"
-    axis into the baseline/optimized comparison.
-
-    Keep it in eager mode by default; re-enable only when the chapter intends
-    to teach torch.compile-specific behavior.
-    """
-    if device.type != "cuda":
-        return False
-    return False
 
 
 class BaselinePerformanceBenchmark(VerificationPayloadMixin, BaseBenchmark):
@@ -72,32 +60,17 @@ class BaselinePerformanceBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self._verify_input = None
         self._verify_output = None
         self.parameter_count = 0
+        self._tf32_state: tuple[bool, bool | None] | None = None
         samples = float(self.batch_size * self.num_microbatches)
         self.register_workload_metadata(samples_per_iteration=samples)
     
     def setup(self) -> None:
         """Setup: initialize model, fixed inputs, and verification output."""
-        # Seed FIRST for deterministic verification
-        torch.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
+        seed_chapter1()
+        self._tf32_state = capture_tf32_state()
+        set_tf32_state(False)
         
-        self.model = torch.nn.Sequential(
-            torch.nn.Linear(self.hidden_dim, self.hidden_dim),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_dim, self.hidden_dim),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_dim, 10),
-        )
-        
-        if _should_use_compile(self.device):
-            self.model = compile_model(
-                self.model.to(self.device),
-                mode="reduce-overhead",
-                fullgraph=False,
-                dynamic=False,
-            )
-        else:
-            self.model = self.model.to(self.device)
+        self.model = build_training_mlp(self.hidden_dim).to(self.device)
         
         self.model.eval()
         self.parameter_count = sum(p.numel() for p in self.model.parameters())
@@ -175,6 +148,11 @@ class BaselinePerformanceBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def teardown(self) -> None:
         """Cleanup."""
         del self.model, self.microbatches, self.targets, self.optimizer
+        if self._tf32_state is not None:
+            matmul_state, cudnn_state = self._tf32_state
+            torch.backends.cuda.matmul.allow_tf32 = matmul_state
+            if cudnn_state is not None and torch.backends.cudnn.is_available():
+                torch.backends.cudnn.allow_tf32 = cudnn_state
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     

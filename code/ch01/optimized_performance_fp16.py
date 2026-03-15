@@ -13,6 +13,7 @@ except ImportError:
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
+from ch01.performance_common import build_training_mlp, seed_chapter1
 from ch01.workload_config import WORKLOAD
 
 
@@ -41,17 +42,9 @@ class OptimizedPerformanceFP16Benchmark(VerificationPayloadMixin, BaseBenchmark)
         self.register_workload_metadata(samples_per_iteration=samples)
 
     def setup(self) -> None:
-        torch.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
+        seed_chapter1()
 
-        self.model = torch.nn.Sequential(
-            torch.nn.Linear(self.hidden_dim, self.hidden_dim),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_dim, self.hidden_dim),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_dim, 10),
-        )
-
+        self.model = build_training_mlp(self.hidden_dim)
         if self.device.type == "cuda":
             self.model = self.model.half()
             dtype = torch.float16
@@ -86,6 +79,7 @@ class OptimizedPerformanceFP16Benchmark(VerificationPayloadMixin, BaseBenchmark)
     def benchmark_fn(self) -> None:
         assert self.model is not None and self.microbatches is not None and self.targets is not None
         with self._nvtx_range("optimized_performance_fp16"):
+            # Keep the baseline's microbatch grouping intact; the only timed change is precision.
             total = len(self.microbatches)
             for start in range(0, total, self.fusion):
                 group_data = self.microbatches[start : start + self.fusion]
@@ -102,8 +96,8 @@ class OptimizedPerformanceFP16Benchmark(VerificationPayloadMixin, BaseBenchmark)
         if self.model is None or self._verify_input is None:
             raise RuntimeError("setup() and benchmark_fn() must run before capture_verification_payload()")
         with torch.no_grad():
-            verify_input = self._verify_input
             model_params = list(self.model.parameters())
+            verify_input = self._verify_input
             if model_params:
                 verify_input = verify_input.to(dtype=model_params[0].dtype, device=self.device)
             self._verify_output = self.model(verify_input).float().clone()
@@ -114,7 +108,7 @@ class OptimizedPerformanceFP16Benchmark(VerificationPayloadMixin, BaseBenchmark)
             parameter_count=int(self.parameter_count),
             precision_flags={
                 "fp16": bool(model_params) and model_params[0].dtype == torch.float16,
-                "bf16": bool(model_params) and model_params[0].dtype == torch.bfloat16,
+                "bf16": False,
                 "fp8": False,
                 "tf32": torch.cuda.is_available() and bool(torch.backends.cuda.matmul.allow_tf32),
             },

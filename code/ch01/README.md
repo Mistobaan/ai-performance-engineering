@@ -13,6 +13,7 @@ Chapter 1 sets the measurement contract for the rest of the repo. The useful que
 
 ## Optimized Path
 - mixed-precision and fused microbatch execution for the training loop
+- separate precision-only and fusion-only variants so the training-loop story is decomposable
 - batched or strided CUDA launches to amortize dispatch cost
 - memory-reduction variants where the main win is footprint, not raw speed
 
@@ -27,6 +28,15 @@ Representative validated results from `artifacts/runs/20260303_163946__bench__pr
 
 This chapter intentionally includes both pure speedup examples and one memory-oriented tradeoff so later chapters do not overfit on "speedup only" thinking.
 
+## Training-Loop Variants
+The Chapter 1 training loop is intentionally split into three related targets:
+
+| Target | Isolated change | Intended lesson |
+| --- | --- | --- |
+| `performance` | FP16 math + fused microbatches | the combined goodput story |
+| `performance_fp16` | FP16 math only | what tensor-core-friendly precision buys you without changing batching |
+| `performance_fusion` | fused microbatches only | what launch amortization buys you without changing math precision |
+
 ## Profiler Evidence
 Use deep-dive harness runs when you want proof of where the win comes from instead of only a runtime delta:
 
@@ -38,7 +48,9 @@ python -m cli.aisp bench run --targets ch01:nvfp4_mlp --profile deep_dive --sing
 
 The expected profiler story is straightforward:
 - `gemm`: fewer launches and lower dispatch overhead
-- `performance`: less framework-side work and fewer expensive precision conversions
+- `performance`: fewer launches plus faster tensor-core math
+- `performance_fp16`: faster GEMMs from FP16 tensor-core math with the same microbatch structure
+- `performance_fusion`: fewer forward/backward launches at unchanged FP32 math
 - `nvfp4_mlp`: reduced memory footprint rather than a large wall-clock win
 
 ## Repro Commands
@@ -51,13 +63,13 @@ python -m cli.aisp bench run --targets ch01:gemm --profile deep_dive --single-gp
 
 ## Learning Goals
 - Profile a minimal PyTorch training loop with the shared harness and reason about throughput vs latency.
-- Apply basic optimizations (FP16 + fused microbatches) without changing the algorithmic workload.
+- Separate precision wins from batching wins instead of treating all training-loop speedups as one bundle.
 - Compare hand-written GEMM kernels in batched vs. strided forms to understand arithmetic intensity.
 
 ## Directory Layout
 | Path | Description |
 | --- | --- |
-| `baseline_performance.py`, `optimized_performance.py` | Goodput-focused training loop pair comparing FP32 eager vs FP16 + fused microbatches (batch fusion). |
+| `baseline_performance.py`, `optimized_performance.py`, `optimized_performance_fp16.py`, `optimized_performance_fusion.py` | Training-loop variants covering the baseline, the combined FP16+fusion path, the FP16-only path, and the fusion-only path. |
 | `baseline_gemm.cu`, `optimized_gemm_batched.cu`, `optimized_gemm_strided.cu` | CUDA GEMM variants (single, batched, strided) used to illustrate launch amortization and memory coalescing. |
 | `compare.py`, `workload_config.py`, `arch_config.py`, `expectations_{hardware_key}.json` | Harness entrypoint, workload shapes, architecture overrides, and stored expectation thresholds. |
 

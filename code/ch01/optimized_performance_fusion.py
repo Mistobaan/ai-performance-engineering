@@ -13,6 +13,12 @@ except ImportError:
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig
+from ch01.performance_common import (
+    build_training_mlp,
+    capture_tf32_state,
+    seed_chapter1,
+    set_tf32_state,
+)
 from ch01.workload_config import WORKLOAD
 
 
@@ -39,21 +45,17 @@ class OptimizedPerformanceFusionBenchmark(VerificationPayloadMixin, BaseBenchmar
         self.parameter_count = 0
         self._fused_batches = None
         self._fused_targets = None
+        self._tf32_state: tuple[bool, bool | None] | None = None
 
         samples = float(self.batch_size * self.num_microbatches)
         self.register_workload_metadata(samples_per_iteration=samples)
 
     def setup(self) -> None:
-        torch.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
+        seed_chapter1()
+        self._tf32_state = capture_tf32_state()
+        set_tf32_state(False)
 
-        self.model = torch.nn.Sequential(
-            torch.nn.Linear(self.hidden_dim, self.hidden_dim),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_dim, self.hidden_dim),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_dim, 10),
-        ).to(self.device).eval()
+        self.model = build_training_mlp(self.hidden_dim).to(self.device).eval()
         self.parameter_count = sum(p.numel() for p in self.model.parameters())
 
         self.microbatches = [
@@ -120,6 +122,11 @@ class OptimizedPerformanceFusionBenchmark(VerificationPayloadMixin, BaseBenchmar
         del self.model, self.microbatches, self.targets, self.optimizer
         self._fused_batches = None
         self._fused_targets = None
+        if self._tf32_state is not None:
+            matmul_state, cudnn_state = self._tf32_state
+            torch.backends.cuda.matmul.allow_tf32 = matmul_state
+            if cudnn_state is not None and torch.backends.cudnn.is_available():
+                torch.backends.cudnn.allow_tf32 = cudnn_state
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
