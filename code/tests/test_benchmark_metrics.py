@@ -363,6 +363,20 @@ class TestEnvironmentMetrics:
         assert metrics["env.total_memory_gb"] == 640.0
 
 
+class TestSystemConfigMetrics:
+    """Test compute_system_config_metrics."""
+
+    def test_unknown_numa_topology_uses_zero_without_fake_per_node_split(self):
+        """Unknown NUMA topology should stay explicit in metrics."""
+        metrics = compute_system_config_metrics(
+            numa_nodes=0,
+            cpu_cores=64,
+        )
+
+        assert metrics["system.numa_nodes"] == 0.0
+        assert metrics["system.cores_per_numa"] == 0.0
+
+
 class TestDistributedMetrics:
     """Test compute_distributed_metrics."""
     

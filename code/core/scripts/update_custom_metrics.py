@@ -171,7 +171,7 @@ HELPER_SIGNATURES = {
         "import": "from core.benchmark.metrics import compute_system_config_metrics",
         "params": ["numa_nodes", "cpu_cores"],
         "defaults": {
-            "numa_nodes": "getattr(self, 'numa_nodes', 1)",
+            "numa_nodes": "getattr(self, 'numa_nodes', 0)",
             "cpu_cores": "getattr(self, 'cpu_cores', 64)",
         },
     },

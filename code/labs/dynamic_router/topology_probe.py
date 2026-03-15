@@ -62,8 +62,12 @@ class TopologyProbeBenchmark(VerificationPayloadMixin, BaseBenchmark):
         if self.snapshot is None:
             return None
         gpu_numa = {f"gpu{idx}_numa": float(node) if node is not None else -1.0 for idx, node in self.snapshot.gpu_numa.items()}
+        gpus_with_known_numa = sum(1 for node in self.snapshot.gpu_numa.values() if node is not None)
         gpu_numa["num_gpus_detected"] = float(len(self.snapshot.gpu_numa))
-        gpu_numa["numa_nodes_known"] = float(len(self.snapshot.distance))
+        gpu_numa["gpus_with_known_numa"] = float(gpus_with_known_numa)
+        gpu_numa["host_numa_nodes_detected"] = float(len(self.snapshot.distance))
+        for status in ("unknown", "partial", "complete"):
+            gpu_numa[f"gpu_numa_status_{status}"] = 1.0 if self.snapshot.gpu_numa_status == status else 0.0
         return gpu_numa
 
     def teardown(self) -> None:

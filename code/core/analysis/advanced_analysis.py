@@ -140,7 +140,11 @@ def cmd_cpu_mem(args):
                 if line.strip():
                     print(f"  {line}")
         else:
-            print("  NUMA: Not available or single-node system")
+            detail = (result.stderr or result.stdout).strip().splitlines()
+            if detail:
+                print(f"  NUMA: unavailable ({detail[0]})")
+            else:
+                print("  NUMA: unavailable (numactl returned no hardware topology)")
     except FileNotFoundError:
         print("  NUMA: numactl not installed")
     except Exception as e:

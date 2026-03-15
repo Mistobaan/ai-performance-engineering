@@ -102,13 +102,26 @@ class TopologySnapshot:
     gpu_numa: Dict[int, Optional[int]]
     distance: Dict[int, List[int]]
     timestamp: float
+    gpu_numa_status: str = "unknown"
 
     def to_json(self) -> Dict[str, object]:
         return {
             "gpu_numa": self.gpu_numa,
             "distance": self.distance,
             "timestamp": self.timestamp,
+            "gpu_numa_status": self.gpu_numa_status,
         }
+
+
+def _classify_gpu_numa_status(gpu_map: Dict[int, Optional[int]]) -> str:
+    if not gpu_map:
+        return "unknown"
+    known = sum(1 for numa_node in gpu_map.values() if numa_node is not None)
+    if known == 0:
+        return "unknown"
+    if known == len(gpu_map):
+        return "complete"
+    return "partial"
 
 
 def detect_topology(max_gpus: Optional[int] = None) -> TopologySnapshot:
@@ -131,7 +144,12 @@ def detect_topology(max_gpus: Optional[int] = None) -> TopologySnapshot:
             for idx in range(max_gpus):
                 gpu_map[idx] = None
             distance = _distance_matrix()
-            return TopologySnapshot(gpu_numa=gpu_map, distance=distance, timestamp=time.time())
+            return TopologySnapshot(
+                gpu_numa=gpu_map,
+                distance=distance,
+                timestamp=time.time(),
+                gpu_numa_status=_classify_gpu_numa_status(gpu_map),
+            )
         visible = os.getenv("CUDA_VISIBLE_DEVICES", "").split(",")
         for idx, dev in enumerate(visible):
             dev = dev.strip()
@@ -139,7 +157,12 @@ def detect_topology(max_gpus: Optional[int] = None) -> TopologySnapshot:
                 gpu_map[idx] = None
 
     distance = _distance_matrix()
-    return TopologySnapshot(gpu_numa=gpu_map, distance=distance, timestamp=time.time())
+    return TopologySnapshot(
+        gpu_numa=gpu_map,
+        distance=distance,
+        timestamp=time.time(),
+        gpu_numa_status=_classify_gpu_numa_status(gpu_map),
+    )
 
 
 def default_topology_path() -> Path:

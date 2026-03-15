@@ -19,6 +19,24 @@ RUNTIME_TOPOLOGY_FILES = [
     Path("labs/dynamic_router/topology.py"),
 ]
 
+SYSTEM_CONFIG_METRIC_FILES = [
+    Path("ch03/baseline_numa_unaware.py"),
+    Path("ch03/baseline_kubernetes.py"),
+    Path("ch03/baseline_gemm.py"),
+    Path("ch03/baseline_docker.py"),
+    Path("ch03/optimized_numa_unaware.py"),
+    Path("ch03/optimized_docker.py"),
+    Path("ch03/optimized_gemm.py"),
+    Path("ch03/optimized_kubernetes.py"),
+    Path("ch03/optimized_rack_prep.py"),
+    Path("core/scripts/update_custom_metrics.py"),
+]
+
+TOPOLOGY_REPORT_FILES = [
+    Path("core/analysis/advanced_analysis.py"),
+    Path("labs/dynamic_router/topology_probe.py"),
+]
+
 BANNED_LITERALS = {
     "nvmlDeviceGetNUMANodeId": "Wrong NVML API symbol casing.",
     "topo -m -i": "nvidia-smi topo -m does not support -i.",
@@ -30,6 +48,15 @@ BANNED_HEURISTIC_SNIPPETS = {
     "i // gpus_per_numa": "Do not synthesize GPU->NUMA mappings from GPU counts.",
     "numa_nodes\"] = 1  # numactl not installed": "Do not turn unavailable CPU NUMA topology into a fake single-node result.",
     "numa_node: int = 0": "Do not default runtime GPU locality to NUMA node 0.",
+}
+
+BANNED_SYSTEM_CONFIG_SNIPPETS = {
+    "getattr(self, 'numa_nodes', 1)": "Do not default benchmark NUMA metadata to a fake single-node topology.",
+}
+
+BANNED_TOPOLOGY_REPORT_SNIPPETS = {
+    "NUMA: Not available or single-node system": "Keep unknown NUMA availability distinct from single-node topology.",
+    "numa_nodes_known": "Report explicit NUMA status instead of an inferred known-node count.",
 }
 
 
@@ -48,6 +75,20 @@ def test_runtime_topology_files_do_not_guess_gpu_numa_locality() -> None:
     for relpath in RUNTIME_TOPOLOGY_FILES:
         text = _read(relpath)
         for snippet, reason in BANNED_HEURISTIC_SNIPPETS.items():
+            assert snippet not in text, f"{relpath}: {reason}"
+
+
+def test_system_config_metric_files_do_not_default_unknown_numa_to_one() -> None:
+    for relpath in SYSTEM_CONFIG_METRIC_FILES:
+        text = _read(relpath)
+        for snippet, reason in BANNED_SYSTEM_CONFIG_SNIPPETS.items():
+            assert snippet not in text, f"{relpath}: {reason}"
+
+
+def test_topology_reporting_files_keep_unknown_state_explicit() -> None:
+    for relpath in TOPOLOGY_REPORT_FILES:
+        text = _read(relpath)
+        for snippet, reason in BANNED_TOPOLOGY_REPORT_SNIPPETS.items():
             assert snippet not in text, f"{relpath}: {reason}"
 
 

@@ -11,6 +11,7 @@ import core.optimization.parallelism_planner.topology_detector as planner_topolo
 import core.optimization.parallelism_planner.advisor as planner_advisor
 import core.optimization.parallelism_planner.cluster_config as planner_cluster_config
 import labs.dynamic_router.topology as dynamic_router_topology
+import labs.dynamic_router.topology_probe as dynamic_router_topology_probe
 import labs.dynamic_router.driver as dynamic_router_driver
 
 
@@ -129,6 +130,29 @@ def test_dynamic_router_detect_topology_preserves_gpu_slots_without_nvml(
     snapshot = dynamic_router_topology.detect_topology(max_gpus=2)
 
     assert snapshot.gpu_numa == {0: None, 1: None}
+    assert snapshot.gpu_numa_status == "unknown"
+
+
+def test_dynamic_router_topology_probe_reports_explicit_gpu_numa_status_metrics() -> None:
+    bench = dynamic_router_topology_probe.TopologyProbeBenchmark.__new__(
+        dynamic_router_topology_probe.TopologyProbeBenchmark
+    )
+    bench.snapshot = dynamic_router_topology.TopologySnapshot(
+        gpu_numa={0: None, 1: 2},
+        distance={0: [10, 20], 1: [20, 10]},
+        timestamp=0.0,
+        gpu_numa_status="partial",
+    )
+
+    metrics = bench.get_custom_metrics()
+
+    assert metrics is not None
+    assert metrics["num_gpus_detected"] == 2.0
+    assert metrics["gpus_with_known_numa"] == 1.0
+    assert metrics["host_numa_nodes_detected"] == 2.0
+    assert metrics["gpu_numa_status_partial"] == 1.0
+    assert metrics["gpu_numa_status_unknown"] == 0.0
+    assert "numa_nodes_known" not in metrics
 
 
 def test_planner_topology_detector_ignores_negative_sysfs_numa_node(

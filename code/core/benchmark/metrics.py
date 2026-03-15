@@ -579,7 +579,7 @@ def compute_system_config_metrics(
     """Compute metrics for system configuration benchmarks (ch03).
     
     Args:
-        numa_nodes: Number of NUMA nodes
+        numa_nodes: Number of NUMA nodes (0 when topology is unavailable)
         cpu_cores: Total CPU cores
         memory_channels: Memory channels per socket
         pcie_lanes: PCIe lanes available
@@ -997,5 +997,4 @@ def validate_metrics(metrics: Optional[Dict[str, float]]) -> Dict[str, Any]:
         "issues": issues,
         "stats": stats,
     }
-
 
