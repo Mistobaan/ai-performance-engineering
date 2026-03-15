@@ -8,7 +8,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def parse_args() -> argparse.Namespace:
@@ -20,10 +20,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _read_json(path: Path, *, label: str) -> Tuple[Optional[Any], Optional[str]]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), None
+    except Exception as exc:
+        return None, f"Failed to read {label} {path}: {exc}"
+
+
 def load_config(path: Path) -> List[Dict]:
-    data = json.loads(path.read_text())
+    data, warning = _read_json(path, label="continuous benchmark config")
+    if warning:
+        raise SystemExit(warning)
     if not isinstance(data, list):
-        raise SystemExit("Benchmark config must be a list of job definitions")
+        raise SystemExit(
+            f"Continuous benchmark config {path} must be a list of job definitions, got {type(data).__name__}"
+        )
     return data
 
 
@@ -61,12 +72,14 @@ def run_command(job: Dict) -> Dict:
     }
 
     if output_path:
-        try:
-            payload["benchmark_output"] = json.loads(Path(output_path).read_text())
-        except FileNotFoundError:
-            payload["benchmark_output_error"] = f"Output file not found: {output_path}"
-        except json.JSONDecodeError as exc:
-            payload["benchmark_output_error"] = f"Failed to parse JSON ({exc})"
+        output_json_path = Path(output_path)
+        payload["benchmark_output_artifact"] = str(output_json_path)
+        artifact_payload, artifact_warning = _read_json(output_json_path, label="benchmark output JSON")
+        if artifact_warning:
+            payload.setdefault("warnings", []).append(artifact_warning)
+            payload["benchmark_output_warning"] = artifact_warning
+        else:
+            payload["benchmark_output"] = artifact_payload
 
     return payload
 
