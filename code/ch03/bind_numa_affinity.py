@@ -198,7 +198,7 @@ def _gpu_node_from_nvml(device_index: int) -> int | None:
 
         # Prefer explicit NUMA node if driver exposes it
         try:
-            numa_id = nvml.nvmlDeviceGetNUMANodeId(handle)
+            numa_id = nvml.nvmlDeviceGetNumaNodeId(handle)
             if isinstance(numa_id, int) and numa_id >= 0:
                 return numa_id
         except AttributeError:
