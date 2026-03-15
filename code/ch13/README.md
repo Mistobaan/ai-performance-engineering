@@ -27,6 +27,8 @@ Representative validated results from `artifacts/runs/20260303_163946__bench__pr
 
 This chapter is one of the easiest places to fool yourself with framework overhead. That is why the benchmark contract and side-by-side baseline/optimized structure matter here more than almost anywhere else.
 
+Recent addition: `training_speed` is now the dedicated speed-first training-loop target. The latest validated single-GPU run in `artifacts/runs/20260315_ch13_training_speed_v1/` measured `13.629 ms -> 5.999 ms` (`2.27x`) by replaying the fixed-shape step through a CUDA graph instead of re-launching the eager path each iteration.
+
 ## Profiler Evidence
 Use deep-dive runs when you want to see whether the gain came from framework overhead reduction, memory behavior, or the lower-precision path itself:
 
@@ -58,7 +60,7 @@ python -m cli.aisp bench run --targets ch13:precisionfp8_te --profile deep_dive 
 ## Directory Layout
 | Path | Description |
 | --- | --- |
-| `baseline_training_standard.py`, `optimized_training_standard.py`, `train.py`, `train_deepseek_v3.py`, `train_deepseek_coder.py` | Reference training loops showcasing eager vs compiled paths and DeepSeek-inspired configs. |
+| `baseline_training_standard.py`, `optimized_training_standard.py`, `baseline_training_speed.py`, `optimized_training_speed.py`, `training_speed_common.py`, `train.py`, `train_deepseek_v3.py`, `train_deepseek_coder.py` | Training loops split into memory-first checkpointing and speed-first graph replay paths, plus larger DeepSeek-inspired configs. |
 | `baseline_dataloader_default.py`, `optimized_dataloader_default.py`, `baseline_memory_profiling.py`, `optimized_memory_profiling.py`, `memory_profiling.py` | DataLoader/memory studies that explain how to read allocator stats and fix leaks. |
 | `baseline_attention_standard.py`, `optimized_attention_standard.py`, `baseline_long_context_attention.py`, `optimized_long_context_attention.py`, `baseline_arithmetic_intensity.py`, `optimized_arithmetic_intensity.py`, `baseline_matmul_pytorch.py`, `optimized_matmul_pytorch.py` | Attention and matmul microbenchmarks tuned purely within PyTorch, including long-context Flash SDP. |
 | `baseline_context_parallel_multigpu.py`, `optimized_context_parallel_multigpu.py`, `context_parallel_benchmark_common.py` | Context-parallel attention benchmarks comparing all-gather vs ring-style streaming across ranks. |
@@ -80,7 +82,8 @@ python -m cli.aisp bench run --targets ch13 --profile minimal
 - Expectation baselines live next to each chapter in `expectations_{hardware_key}.json`; refresh with `--update-expectations` after validating new hardware. In portable mode, add `--allow-portable-expectations-update` to write expectation files explicitly.
 
 ## Validation Checklist
-- `python -m ch13.compare --examples training_standard` shows optimized training runs producing higher goodput with identical metrics.
+- `python -m ch13.compare --examples training_standard` should show lower peak memory from checkpointing; it is not a speed benchmark.
+- `python -m ch13.compare --examples training_speed` is the speed-focused training loop target for eager vs graph-replayed execution.
 - `python -m ch13.optimized_precisionfp8_te --validate` confirms Transformer Engine calibration plus NVFP8 execution with max error tolerances enforced.
 - `python -m ch13.memory_profiling --dump` and the optimized variant demonstrate allocator fragmentation dropping after applying the recommended knobs.
 

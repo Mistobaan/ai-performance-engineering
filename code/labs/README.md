@@ -58,6 +58,7 @@ python -m cli.aisp bench list-targets --chapter labs/moe_cuda
 | `labs/cudnn_sdpa_bench/` | cuDNN SDPA benchmarking | ch10, ch18 |
 | `labs/custom_vs_cublas/` | Custom kernel vs cuBLAS parity | ch06, ch09 |
 | `labs/cutlass_profiler_kernel_selector/` | CUTLASS profiler-based kernel selection | ch06, ch09 |
+| `labs/tcgen05_cluster_shapes/` | Exploratory tcgen05 1-SM vs 2-SM vs 4-SM cluster-shape sweep | ch10 |
 | `labs/decode_optimization/` | Decoder hot-path optimization | ch18, ch19 |
 | `labs/dynamic_router/` | Dynamic prefill/decode routing | ch17, ch19 |
 | `labs/flashattention4/` | FlashAttention-4 pipeline co-design | ch10, ch18 |
