@@ -9,16 +9,14 @@ what optimizations torch.compile applies to transformer blocks.
 """
 import os
 
-
-import torch
-import torch.nn as nn
 import shutil
 from pathlib import Path
 
-# Suppress warnings
-import warnings
-warnings.filterwarnings('ignore', category=FutureWarning)
-warnings.filterwarnings('ignore', category=UserWarning)
+from core.utils.warning_filters import suppress_benchmark_import_warnings
+
+with suppress_benchmark_import_warnings(context="ch14.inspect_compiled_code torch import"):
+    import torch
+    import torch.nn as nn
 
 
 class SimpleLLMBlock(nn.Module):
@@ -102,12 +100,13 @@ def inspect_compiled_code():
     print("  (This will generate Triton kernels and save them to disk)")
     print()
     
-    compiled_model = torch.compile(
-        model,
-        mode='max-autotune',
-        fullgraph=True,
-        backend='inductor'
-    )
+    with suppress_benchmark_import_warnings(context="ch14.inspect_compiled_code torch.compile"):
+        compiled_model = torch.compile(
+            model,
+            mode='max-autotune',
+            fullgraph=True,
+            backend='inductor'
+        )
     
     # Run once to trigger compilation
     print("Running compiled model (triggers code generation)...")

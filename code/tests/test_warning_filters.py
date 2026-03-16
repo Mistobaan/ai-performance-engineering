@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 import warnings
 
@@ -10,6 +12,16 @@ from core.utils.warning_filters import (
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _run_fresh_python(code: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def test_warning_filter_context_does_not_leak_global_filters() -> None:
@@ -27,10 +39,40 @@ def test_no_import_time_global_warning_filters_in_runtime_modules() -> None:
         REPO_ROOT / "core" / "utils" / "chapter_compare_template.py",
         REPO_ROOT / "core" / "benchmark" / "bench_commands.py",
         REPO_ROOT / "core" / "benchmark" / "benchmark_peak.py",
+        REPO_ROOT / "ch01" / "arch_config.py",
+        REPO_ROOT / "ch14" / "inspect_compiled_code.py",
+        REPO_ROOT / "ch16" / "gpt_quick_test.py",
+        REPO_ROOT / "labs" / "trtllm_phi_3_5_moe" / "trtllm_common.py",
     ]
     for path in paths:
         text = path.read_text(encoding="utf-8")
         assert "warnings.filterwarnings(" not in text, f"global warning filter leaked back into {path}"
+
+
+def test_no_import_time_stdio_hijack_in_selected_public_entrypoints() -> None:
+    paths = [
+        REPO_ROOT / "ch01" / "arch_config.py",
+        REPO_ROOT / "ch14" / "inspect_compiled_code.py",
+        REPO_ROOT / "ch16" / "gpt_quick_test.py",
+    ]
+    forbidden_patterns = ("sys.stderr =", "sys.stdout =", "os.dup2(")
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        for pattern in forbidden_patterns:
+            assert pattern not in text, f"stdio hijack pattern {pattern!r} leaked back into {path}"
+
+
+def test_selected_public_entrypoints_import_cleanly_in_fresh_python() -> None:
+    result = _run_fresh_python(
+        "import ch01.arch_config\n"
+        "import ch14.inspect_compiled_code\n"
+        "import ch16.gpt_quick_test\n"
+        "import labs.trtllm_phi_3_5_moe.trtllm_common\n"
+        "print('ok')\n"
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
 
 
 def test_warning_filter_summarizes_matched_warnings_with_context() -> None:

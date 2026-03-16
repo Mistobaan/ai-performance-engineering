@@ -44,7 +44,7 @@ jobs:
       
       - name: Run unit tests
         run: |
-          pytest tests/test_benchmark_metrics.py tests/test_profiler_config.py tests/test_update_custom_metrics.py tests/test_benchmark_fn_sync_detection.py tests/test_benchmark_linter.py tests/test_refresh_readmes.py tests/test_tier1_suite.py tests/test_nvml_numa_helpers.py tests/test_ch02_topology_helpers.py tests/test_topology_guardrails.py tests/test_run_manifest_provenance.py tests/test_run_progress.py tests/test_isolated_runner.py tests/test_environment_validation_enforcement.py -v --tb=short
+          pytest tests/test_benchmark_metrics.py tests/test_profiler_config.py tests/test_update_custom_metrics.py tests/test_benchmark_fn_sync_detection.py tests/test_benchmark_linter.py tests/test_refresh_readmes.py tests/test_tier1_suite.py tests/test_nvml_numa_helpers.py tests/test_ch02_topology_helpers.py tests/test_topology_guardrails.py tests/test_run_manifest_provenance.py tests/test_run_progress.py tests/test_isolated_runner.py tests/test_environment_validation_enforcement.py tests/test_warning_filters.py tests/test_torch_profiler_automation.py tests/test_detect_regressions_cli.py tests/test_audit_silent_fallbacks.py tests/test_profiling.py -v --tb=short
         continue-on-error: false
 
       - name: Validate topology shell helpers
@@ -131,8 +131,7 @@ jobs:
       
       - name: Audit silent fallbacks
         run: |
-          python core/scripts/audit_silent_fallbacks.py
-        continue-on-error: true
+          python core/scripts/audit_silent_fallbacks.py --fail-on-findings --categories global_warning_filter stderr_reassignment stdout_reassignment stdio_dup2_hijack syntax_error read_error
 
   lint:
     runs-on: ubuntu-latest

@@ -172,7 +172,22 @@ class RegressionDetector:
 
 def load_benchmark_run(path: Path) -> Dict:
     """Load a benchmark run from JSON file."""
-    return json.loads(path.read_text())
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"Failed to read benchmark run JSON from {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"Failed to read benchmark run JSON from {path}: expected JSON object, "
+            f"got {type(payload).__name__}"
+        )
+    benchmarks = payload.get("benchmarks", [])
+    if benchmarks is not None and not isinstance(benchmarks, list):
+        raise ValueError(
+            f"Failed to read benchmark run JSON from {path}: expected 'benchmarks' list, "
+            f"got {type(benchmarks).__name__}"
+        )
+    return payload
 
 
 def find_latest_runs(artifact_dir: Path, n: int = 2) -> List[Path]:
@@ -340,7 +355,7 @@ def main():
     else:
         runs = find_latest_runs(args.artifact_dir, n=2)
         if len(runs) < 2:
-            print("Error: Need at least 2 benchmark runs to compare")
+            print("Error: Need at least 2 benchmark runs to compare", file=sys.stderr)
             return 1
         current_path = runs[0]
         baseline_path = runs[1]
@@ -351,8 +366,12 @@ def main():
     print()
     
     # Load runs
-    current_run = load_benchmark_run(current_path)
-    baseline_run = load_benchmark_run(baseline_path)
+    try:
+        current_run = load_benchmark_run(current_path)
+        baseline_run = load_benchmark_run(baseline_path)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     
     # Analyze
     detector = RegressionDetector()
@@ -369,8 +388,12 @@ def main():
     
     # Save JSON if requested
     if args.output_json:
-        args.output_json.parent.mkdir(parents=True, exist_ok=True)
-        args.output_json.write_text(json.dumps(analysis, indent=2))
+        try:
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            args.output_json.write_text(json.dumps(analysis, indent=2), encoding="utf-8")
+        except Exception as exc:
+            print(f"Failed to write regression analysis JSON to {args.output_json}: {exc}", file=sys.stderr)
+            return 1
         print(f"JSON analysis saved to: {args.output_json}")
     
     # Exit with error if regressions detected

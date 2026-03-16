@@ -4,17 +4,15 @@
 Quick GPT-style model test - NO HEAVY COMPILATION
 Shows realistic torch.compile speedup on B200
 """
-import torch
-import torch.nn as nn
 import time
-import warnings
 from tqdm import tqdm
 
 from core.utils.compile_utils import enable_tf32
+from core.utils.warning_filters import suppress_benchmark_import_warnings
 
-# Suppress deprecated warnings
-warnings.filterwarnings('ignore', category=FutureWarning)
-warnings.filterwarnings('ignore', category=UserWarning)
+with suppress_benchmark_import_warnings(context="ch16.gpt_quick_test torch import"):
+    import torch
+    import torch.nn as nn
 
 class SimpleGPTBlock(nn.Module):
     def __init__(self, d_model=4096, n_heads=32):
@@ -60,7 +58,8 @@ def benchmark_quick(model, x, name, num_iters=20):
 
 def main():
     # NEW PyTorch 2.10 API (fixes warnings!)
-    enable_tf32()
+    with suppress_benchmark_import_warnings(context="ch16.gpt_quick_test enable_tf32"):
+        enable_tf32()
     
     print("=" * 80)
     print("QUICK GPT TEST ON B200")
@@ -101,7 +100,8 @@ def main():
         
         # Compiled (reduce-overhead mode - faster compilation)
         print("\n[Compiling... this may take 30-60 seconds]")
-        model_compiled = torch.compile(model, mode='reduce-overhead')
+        with suppress_benchmark_import_warnings(context="ch16.gpt_quick_test torch.compile"):
+            model_compiled = torch.compile(model, mode='reduce-overhead')
         print("[Compilation done, now benchmarking...]")
         compiled_time = benchmark_quick(model_compiled, x, "Compiled Mode")
         

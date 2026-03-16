@@ -61,6 +61,28 @@ class FlameGraphGenerator:
         self.max_depth = max_depth
         self.group_small_kernels = group_small_kernels
         self.small_kernel_threshold_pct = small_kernel_threshold_pct
+
+    def _empty_result(
+        self,
+        *,
+        root_name: str,
+        trace_path: Optional[Path] = None,
+        warnings_list: Optional[List[str]] = None,
+        error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "name": root_name,
+            "value": 0,
+            "children": [],
+        }
+        if trace_path is not None:
+            result["trace_path"] = str(Path(trace_path))
+            result["artifact_path"] = str(Path(trace_path))
+        if warnings_list:
+            result["warnings"] = warnings_list
+        if error:
+            result["error"] = error
+        return result
     
     def from_profiler(
         self,
@@ -78,7 +100,7 @@ class FlameGraphGenerator:
             Flame graph data dict compatible with d3-flame-graph
         """
         root = FlameNode(name=root_name, value=0)
-        
+
         try:
             # Get events with stack information
             events = prof.key_averages(group_by_stack_n=self.max_depth)
@@ -119,12 +141,14 @@ class FlameGraphGenerator:
             # Calculate root value
             root.value = sum(c.value for c in root.children)
             
-        except Exception as e:
-            root.children.append(FlameNode(
-                name=f"Error: {e}",
-                value=1
-            ))
-        
+        except Exception as exc:
+            message = f"Failed to generate flame graph from profiler data: {exc}"
+            return self._empty_result(
+                root_name=root_name,
+                warnings_list=[message],
+                error=message,
+            )
+
         return root.to_dict()
     
     def from_chrome_trace(
@@ -143,38 +167,98 @@ class FlameGraphGenerator:
             Flame graph data dict
         """
         trace_path = Path(trace_path)
-        
-        with open(trace_path) as f:
-            trace = json.load(f)
-        
+        warnings_list: List[str] = []
+        try:
+            trace = json.loads(trace_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            message = f"Failed to read chrome trace JSON from {trace_path}: {exc}"
+            return self._empty_result(
+                root_name=root_name,
+                trace_path=trace_path,
+                warnings_list=[message],
+                error=message,
+            )
+
+        if isinstance(trace, list):
+            events = trace
+        elif isinstance(trace, dict):
+            if "traceEvents" not in trace:
+                message = (
+                    f"Failed to read chrome trace JSON from {trace_path}: expected traceEvents list, "
+                    "got object without traceEvents"
+                )
+                return self._empty_result(
+                    root_name=root_name,
+                    trace_path=trace_path,
+                    warnings_list=[message],
+                    error=message,
+                )
+            events = trace.get("traceEvents")
+        else:
+            message = (
+                f"Failed to read chrome trace JSON from {trace_path}: expected JSON list or object, "
+                f"got {type(trace).__name__}"
+            )
+            return self._empty_result(
+                root_name=root_name,
+                trace_path=trace_path,
+                warnings_list=[message],
+                error=message,
+            )
+
+        if not isinstance(events, list):
+            message = (
+                f"Failed to read chrome trace JSON from {trace_path}: expected traceEvents list, "
+                f"got {type(events).__name__}"
+            )
+            return self._empty_result(
+                root_name=root_name,
+                trace_path=trace_path,
+                warnings_list=[message],
+                error=message,
+            )
+
         root = FlameNode(name=root_name, value=0)
-        
-        # Chrome trace format
-        events = trace if isinstance(trace, list) else trace.get('traceEvents', [])
-        
+        malformed_events = 0
+
         # Process complete events (ph: 'X')
         for event in events:
+            if not isinstance(event, dict):
+                malformed_events += 1
+                continue
             if event.get('ph') != 'X':
                 continue
-            
+
             name = event.get('name', 'unknown')
-            dur = event.get('dur', 0)  # Duration in microseconds
+            dur = event.get('dur', 0)
             cat = event.get('cat', '')
-            
+            if not isinstance(dur, (int, float)):
+                malformed_events += 1
+                continue
             if dur < self.min_duration_us:
                 continue
-            
+
             # Use category as parent if available
             if cat and cat != name:
-                parent = root.add_child(FlameNode(name=cat, value=0))
-                parent.add_child(FlameNode(name=name, value=dur))
+                parent = root.add_child(FlameNode(name=str(cat), value=0))
+                parent.add_child(FlameNode(name=str(name), value=float(dur)))
             else:
-                root.add_child(FlameNode(name=name, value=dur))
-        
+                root.add_child(FlameNode(name=str(name), value=float(dur)))
+
+        if malformed_events:
+            warnings_list.append(
+                f"Ignored {malformed_events} malformed chrome trace event(s) in {trace_path}"
+            )
+
         # Recalculate values
         self._recalculate_values(root)
-        
-        return root.to_dict()
+
+        result = root.to_dict()
+        result["trace_path"] = str(trace_path)
+        result["artifact_path"] = str(trace_path)
+        if warnings_list:
+            result["warnings"] = warnings_list
+        return result
     
     def from_kernel_list(
         self,
@@ -418,6 +502,5 @@ class FlameGraphGenerator:
     </script>
 </body>
 </html>'''
-
 
 

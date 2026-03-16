@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
@@ -12,9 +13,10 @@ import importlib.util
 import os
 import platform
 import sys
-import warnings
 
 import torch
+
+from core.utils.warning_filters import suppress_user_warnings, warn_optional_component_unavailable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL_PATH = REPO_ROOT / "phi-3.5-moe" / "original"
@@ -25,26 +27,26 @@ ENGINE_PATH_ENV = "AISP_PHI35_MOE_ENGINE_PATH"
 PROMPT_TEXT = "Explain GPU kernel fusion in one sentence."
 _ACCELERATE_IMPORT_PATCHED = False
 VERIFICATION_TOKEN_PREFIX = 8
+_OPTIONAL_MODELOPT_PLUGIN_WARNING_PATTERNS: tuple[str, ...] = (
+    r"Failed to import vllm plugin due to: .*You may ignore this warning if you do not need this plugin\.",
+    r"Failed to import transformer[_ ]engine plugin due to: .*You may ignore this warning if you do not need this plugin\.",
+)
 
 
-def _suppress_optional_modelopt_plugin_warnings() -> None:
-    """Suppress known non-fatal modelopt optional plugin ABI warnings.
+@contextmanager
+def _suppress_optional_modelopt_plugin_warnings():
+    """Summarize known non-fatal modelopt optional plugin ABI warnings.
 
     modelopt eagerly imports its optional vLLM plugin and emits a warning when
     the host vLLM extension ABI does not match the active torch build. This lab
-    also does not need the optional Transformer Engine plugin path. Suppress
+    also does not need the optional Transformer Engine plugin path. Capture
     those specific warning patterns while preserving all other warnings.
     """
-    warnings.filterwarnings(
-        "ignore",
-        message=r"Failed to import vllm plugin due to: .*You may ignore this warning if you do not need this plugin\.",
-        category=UserWarning,
-    )
-    warnings.filterwarnings(
-        "ignore",
-        message=r"Failed to import transformer[_ ]engine plugin due to: .*You may ignore this warning if you do not need this plugin\.",
-        category=UserWarning,
-    )
+    with suppress_user_warnings(
+        _OPTIONAL_MODELOPT_PLUGIN_WARNING_PATTERNS,
+        context="labs.trtllm_phi_3_5_moe modelopt plugin import",
+    ):
+        yield
 
 
 def disable_accelerate_transformer_engine() -> None:
@@ -180,7 +182,6 @@ def parse_trtllm_args() -> argparse.Namespace:
 
 def load_trtllm_runtime():
     """Load TensorRT-LLM runtime without importing the full package __init__."""
-    _suppress_optional_modelopt_plugin_warnings()
     os.environ.setdefault("OMPI_MCA_coll_ucc_enable", "0")
     os.environ.setdefault("TORCH_DISABLE_ADDR2LINE", "1")
     if platform.system() == "Linux":
@@ -190,35 +191,41 @@ def load_trtllm_runtime():
             v_major, v_minor, *_ = sys.version_info
             cdll.LoadLibrary(f"libpython{v_major}.{v_minor}.so.1.0")
             cdll.LoadLibrary(f"libpython{v_major}.{v_minor}.so")
-        except Exception:
-            pass
+        except Exception as exc:
+            warn_optional_component_unavailable(
+                "libpython runtime preload",
+                exc,
+                impact="TensorRT-LLM will continue without the explicit preload helper.",
+                context="labs.trtllm_phi_3_5_moe.load_trtllm_runtime",
+            )
 
-    spec = importlib.util.find_spec("tensorrt_llm")
-    if spec is None or not spec.submodule_search_locations:
-        raise RuntimeError("TensorRT-LLM is not installed")
-    root = Path(spec.submodule_search_locations[0])
+    with _suppress_optional_modelopt_plugin_warnings():
+        spec = importlib.util.find_spec("tensorrt_llm")
+        if spec is None or not spec.submodule_search_locations:
+            raise RuntimeError("TensorRT-LLM is not installed")
+        root = Path(spec.submodule_search_locations[0])
 
-    pkg_name = "tensorrt_llm"
-    if pkg_name not in sys.modules:
-        pkg = importlib.util.module_from_spec(importlib.machinery.ModuleSpec(pkg_name, None))
-        pkg.__path__ = [str(root)]
-        sys.modules[pkg_name] = pkg
+        pkg_name = "tensorrt_llm"
+        if pkg_name not in sys.modules:
+            pkg = importlib.util.module_from_spec(importlib.machinery.ModuleSpec(pkg_name, None))
+            pkg.__path__ = [str(root)]
+            sys.modules[pkg_name] = pkg
 
-    common_path = root / "_common.py"
-    spec_common = importlib.util.spec_from_file_location("tensorrt_llm._common", common_path)
-    if spec_common is None or spec_common.loader is None:
-        raise RuntimeError("TensorRT-LLM _common module not found")
-    common_mod = importlib.util.module_from_spec(spec_common)
-    spec_common.loader.exec_module(common_mod)  # type: ignore[union-attr]
-    common_mod._init()
+        common_path = root / "_common.py"
+        spec_common = importlib.util.spec_from_file_location("tensorrt_llm._common", common_path)
+        if spec_common is None or spec_common.loader is None:
+            raise RuntimeError("TensorRT-LLM _common module not found")
+        common_mod = importlib.util.module_from_spec(spec_common)
+        spec_common.loader.exec_module(common_mod)  # type: ignore[union-attr]
+        common_mod._init()
 
-    runtime_path = root / "runtime" / "__init__.py"
-    spec_runtime = importlib.util.spec_from_file_location("tensorrt_llm.runtime", runtime_path)
-    if spec_runtime is None or spec_runtime.loader is None:
-        raise RuntimeError("TensorRT-LLM runtime module not found")
-    runtime_mod = importlib.util.module_from_spec(spec_runtime)
-    spec_runtime.loader.exec_module(runtime_mod)  # type: ignore[union-attr]
-    return runtime_mod
+        runtime_path = root / "runtime" / "__init__.py"
+        spec_runtime = importlib.util.spec_from_file_location("tensorrt_llm.runtime", runtime_path)
+        if spec_runtime is None or spec_runtime.loader is None:
+            raise RuntimeError("TensorRT-LLM runtime module not found")
+        runtime_mod = importlib.util.module_from_spec(spec_runtime)
+        spec_runtime.loader.exec_module(runtime_mod)  # type: ignore[union-attr]
+        return runtime_mod
 
 
 def build_prompt_tokens(tokenizer, *, prompt_len: int, batch_size: int) -> Tuple[torch.Tensor, torch.Tensor]:

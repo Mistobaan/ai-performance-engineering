@@ -44,6 +44,26 @@ class TorchProfilerAutomation:
             _append_flag("TORCH_NVCC_FLAGS", "-lineinfo")
         return env
 
+    @staticmethod
+    def _load_json_artifact(
+        path: Path,
+        *,
+        label: str,
+        expected_type: type[Any],
+    ) -> tuple[Optional[Any], Optional[str]]:
+        if not path.exists():
+            return None, f"Missing {label} artifact at {path}"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return None, f"Failed to read {label} JSON from {path}: {exc}"
+        if not isinstance(payload, expected_type):
+            return None, (
+                f"Failed to read {label} JSON from {path}: expected "
+                f"{expected_type.__name__}, got {type(payload).__name__}"
+            )
+        return payload, None
+
     def profile(
         self,
         script: Path,
@@ -120,24 +140,45 @@ class TorchProfilerAutomation:
             trace_path = alt_trace if alt_trace.exists() else trace_path
         metadata_path = capture_dir / "metadata.json"
         summary_path = capture_dir / "torch_profile_summary.json"
-
-        def _load(path: Path) -> Optional[Any]:
-            try:
-                if path.exists():
-                    return json.loads(path.read_text())
-            except Exception:
-                return None
-            return None
+        warnings_list: List[str] = []
+        summary, summary_warning = self._load_json_artifact(
+            summary_path,
+            label="torch profiler summary",
+            expected_type=dict,
+        )
+        if summary_warning is not None:
+            warnings_list.append(summary_warning)
+            logger.warning("%s", summary_warning)
+        metadata, metadata_warning = self._load_json_artifact(
+            metadata_path,
+            label="torch profiler metadata",
+            expected_type=dict,
+        )
+        if metadata_warning is not None:
+            warnings_list.append(metadata_warning)
+            logger.warning("%s", metadata_warning)
+        trace_warning: Optional[str] = None
+        if not trace_path.exists():
+            trace_warning = f"Missing torch profiler trace artifact at {trace_path}"
+            warnings_list.append(trace_warning)
+            logger.warning("%s", trace_warning)
 
         result = {
             "success": True,
             "capture_dir": str(capture_dir),
             "trace_path": str(trace_path) if trace_path.exists() else None,
-            "metadata": _load(metadata_path),
-            "summary": _load(summary_path),
+            "summary": summary,
+            "summary_path": str(summary_path),
+            "summary_error": summary_warning,
+            "metadata": metadata,
+            "metadata_path": str(metadata_path),
+            "metadata_error": metadata_warning,
             "mode": mode,
             "nvtx_label": nvtx_label,
             "force_lineinfo": bool(force_lineinfo),
             "timeout_seconds": timeout_seconds,
+            "trace_warning": trace_warning,
+            "warnings": warnings_list,
         }
+        self.last_run["warnings"] = warnings_list
         return result

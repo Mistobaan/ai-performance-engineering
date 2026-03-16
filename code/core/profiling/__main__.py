@@ -84,6 +84,10 @@ Examples:
         
         generator = FlameGraphGenerator()
         data = generator.from_chrome_trace(Path(args.trace))
+        for warning in data.get("warnings", []):
+            print(f"WARNING: {warning}", file=sys.stderr)
+        if data.get("error"):
+            return 1
         
         output_format = "json" if args.json else "html"
         generator.export(data, Path(args.output), format=output_format)
@@ -124,6 +128,5 @@ Examples:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
 

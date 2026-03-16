@@ -489,6 +489,8 @@ def torch_profiler(args) -> int:
         f"NVTX label: {result.get('nvtx_label')}",
         f"Force lineinfo: {result.get('force_lineinfo')}",
     ]
+    for warning in result.get("warnings", []):
+        panel_lines.append(f"[yellow]Warning:[/yellow] {warning}")
     console.print(Panel.fit("\n".join(panel_lines), title="torch.profiler capture", border_style="green"))
     return 0
 

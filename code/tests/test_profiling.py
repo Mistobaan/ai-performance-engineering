@@ -232,7 +232,55 @@ class TestFlameGraphGenerator:
         
         assert data["name"] == "GPU Execution"
         assert data["value"] > 0
-    
+        assert data["trace_path"] == str(trace_path)
+
+    def test_from_chrome_trace_surfaces_malformed_json_warning(self, tmp_path):
+        """Malformed trace JSON should be reported as a structured warning."""
+        from core.profiling.flame_graph import FlameGraphGenerator
+
+        trace_path = tmp_path / "trace.json"
+        trace_path.write_text("{bad-json", encoding="utf-8")
+
+        generator = FlameGraphGenerator(min_duration_us=0)
+        data = generator.from_chrome_trace(trace_path)
+
+        assert data["value"] == 0
+        assert data["children"] == []
+        assert data["error"]
+        assert data["warnings"]
+        assert str(trace_path) in data["warnings"][0]
+        assert data["artifact_path"] == str(trace_path)
+
+    def test_from_chrome_trace_surfaces_shape_warning(self, tmp_path):
+        """Wrong top-level trace shape should be reported cleanly."""
+        from core.profiling.flame_graph import FlameGraphGenerator
+
+        trace_path = tmp_path / "trace.json"
+        trace_path.write_text(json.dumps({"traceEvents": {}}), encoding="utf-8")
+
+        generator = FlameGraphGenerator(min_duration_us=0)
+        data = generator.from_chrome_trace(trace_path)
+
+        assert data["error"]
+        assert "expected traceEvents list" in data["error"]
+        assert data["warnings"]
+
+    def test_from_profiler_surfaces_warning_instead_of_error_node(self):
+        """Profiler conversion failures should not emit fake flame nodes."""
+        from core.profiling.flame_graph import FlameGraphGenerator
+
+        class _BrokenProfiler:
+            def key_averages(self, **kwargs):
+                raise RuntimeError("profiler exploded")
+
+        generator = FlameGraphGenerator()
+        data = generator.from_profiler(_BrokenProfiler())
+
+        assert data["children"] == []
+        assert data["error"]
+        assert data["warnings"]
+        assert "profiler exploded" in data["warnings"][0]
+
     def test_export_json(self, tmp_path):
         """Test JSON export."""
         from core.profiling.flame_graph import FlameGraphGenerator

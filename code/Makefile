@@ -718,8 +718,8 @@ coverage-json:
 audit:
 	python core/scripts/audit_silent_fallbacks.py
 
-audit-fix:
-	python core/scripts/audit_silent_fallbacks.py --fix
+audit-strict:
+	python core/scripts/audit_silent_fallbacks.py --fail-on-findings --categories global_warning_filter stderr_reassignment stdout_reassignment stdio_dup2_hijack syntax_error read_error
 
 # Benchmark warmup validation - CRITICAL for accurate measurements
 # Low warmup causes JIT/compile overhead to be included in timing results.

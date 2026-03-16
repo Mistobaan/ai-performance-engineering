@@ -1,268 +1,292 @@
 #!/usr/bin/env python3
-"""Audit script to find silent fallback patterns that should emit warnings.
+"""Audit public/shared Python code for silent fallback and global suppression patterns."""
 
-This script identifies `except Exception: pass` patterns that silently hide
-configuration failures. These should be replaced with explicit warnings.
-
-Usage:
-    python core/scripts/audit_silent_fallbacks.py           # Audit only
-    python core/scripts/audit_silent_fallbacks.py --fix    # Apply fixes
-    python core/scripts/audit_silent_fallbacks.py --dry-run # Show what would be fixed
-"""
 from __future__ import annotations
 
-import re
+import argparse
+import ast
+import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Iterable, List, Optional, Sequence
 
 
-# Categories of silent fallbacks
-CATEGORIES = {
-    "precision": [
-        r"torch\.set_float32_matmul_precision",
-        r"\.half\(\)",
-        r"\.bfloat16\(\)",
-        r"dtype.*=.*torch\.float16",
-    ],
-    "sdpa_backend": [
-        r"enable_flash_sdp",
-        r"enable_math_sdp", 
-        r"enable_mem_efficient_sdp",
-        r"enable_cudnn_sdp",
-    ],
-    "compile": [
-        r"torch\.compile",
-        r"compile_fn\(",
-        r"compile_model\(",
-    ],
-    "tma_config": [
-        r"enable_tma",
-        r"tma_support",
-    ],
-}
-
-# Fix templates by category
-FIX_TEMPLATES = {
-    "precision": '''import warnings
-try:
-{try_body}
-except Exception as e:
-    warnings.warn(f"Precision configuration failed: {{e}}", RuntimeWarning)''',
-    
-    "sdpa_backend": '''import warnings
-try:
-{try_body}
-except Exception as e:
-    warnings.warn(f"SDPA backend configuration failed: {{e}}", RuntimeWarning)''',
-    
-    "compile": '''import warnings
-try:
-{try_body}
-except Exception as e:
-    warnings.warn(f"torch.compile failed, using eager mode: {{e}}", RuntimeWarning)''',
-    
-    "tma_config": '''import warnings
-try:
-{try_body}
-except Exception as e:
-    warnings.warn(f"TMA configuration failed: {{e}}", RuntimeWarning)''',
-    
-    "unknown": '''import warnings
-try:
-{try_body}
-except Exception as e:
-    warnings.warn(f"Configuration failed: {{e}}", RuntimeWarning)''',
+DEFAULT_SCAN_PATTERNS = ("ch*", "labs", "core")
+EXCLUDED_DIR_NAMES = {
+    "__pycache__",
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "artifacts",
+    "build",
+    "dist",
+    "venv",
 }
 
 
-def find_silent_fallbacks(filepath: Path) -> List[Tuple[int, str, str, int, int]]:
-    """Find silent `except Exception: pass` patterns in a file.
-    
-    Returns list of (line_number, category, context, try_start, except_end) tuples.
-    """
+@dataclass(frozen=True)
+class Finding:
+    path: Path
+    line: int
+    column: int
+    category: str
+    message: str
+
+    def to_dict(self, repo_root: Path) -> dict[str, object]:
+        return {
+            "path": str(self.path.relative_to(repo_root)),
+            "line": self.line,
+            "column": self.column,
+            "category": self.category,
+            "message": self.message,
+        }
+
+
+def _matches_attr(node: ast.AST, module: str, attr: str) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == attr
+        and isinstance(node.value, ast.Name)
+        and node.value.id == module
+    )
+
+
+def _is_catch_warnings_call(node: ast.AST) -> bool:
+    return isinstance(node, ast.Call) and _matches_attr(node.func, "warnings", "catch_warnings")
+
+
+def _is_filterwarnings_call(node: ast.AST) -> bool:
+    return isinstance(node, ast.Call) and _matches_attr(node.func, "warnings", "filterwarnings")
+
+
+def _is_os_dup2_call(node: ast.AST) -> bool:
+    return isinstance(node, ast.Call) and _matches_attr(node.func, "os", "dup2")
+
+
+def _is_sys_stream(node: ast.AST, stream_name: str) -> bool:
+    return _matches_attr(node, "sys", stream_name)
+
+
+def _is_exception_name(node: ast.AST) -> bool:
+    return isinstance(node, ast.Name) and node.id == "Exception"
+
+
+def _is_exception_tuple(node: ast.AST) -> bool:
+    return isinstance(node, ast.Tuple) and any(_is_exception_name(item) for item in node.elts)
+
+
+class SilentFallbackAudit(ast.NodeVisitor):
+    def __init__(self, path: Path):
+        self.path = path
+        self.findings: List[Finding] = []
+        self._ancestors: List[ast.AST] = []
+
+    def generic_visit(self, node: ast.AST) -> None:
+        self._ancestors.append(node)
+        super().generic_visit(node)
+        self._ancestors.pop()
+
+    def _record(self, node: ast.AST, *, category: str, message: str) -> None:
+        self.findings.append(
+            Finding(
+                path=self.path,
+                line=getattr(node, "lineno", 1),
+                column=getattr(node, "col_offset", 0) + 1,
+                category=category,
+                message=message,
+            )
+        )
+
+    def _inside_catch_warnings(self) -> bool:
+        for ancestor in reversed(self._ancestors):
+            if isinstance(ancestor, (ast.With, ast.AsyncWith)):
+                for item in ancestor.items:
+                    if _is_catch_warnings_call(item.context_expr):
+                        return True
+        return False
+
+    def _inside_none_stdio_guard(self, stream_name: str) -> bool:
+        for ancestor in reversed(self._ancestors):
+            if not isinstance(ancestor, ast.If):
+                continue
+            test = ancestor.test
+            if not isinstance(test, ast.Compare) or len(test.ops) != 1 or len(test.comparators) != 1:
+                continue
+            left = test.left
+            right = test.comparators[0]
+            if isinstance(test.ops[0], ast.Is):
+                if _is_sys_stream(left, stream_name) and isinstance(right, ast.Constant) and right.value is None:
+                    return True
+                if _is_sys_stream(right, stream_name) and isinstance(left, ast.Constant) and left.value is None:
+                    return True
+        return False
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if _is_filterwarnings_call(node) and not self._inside_catch_warnings():
+            self._record(
+                node,
+                category="global_warning_filter",
+                message="warnings.filterwarnings(...) mutates process-global warning state outside warnings.catch_warnings()",
+            )
+        if _is_os_dup2_call(node):
+            self._record(
+                node,
+                category="stdio_dup2_hijack",
+                message="os.dup2(...) hijacks process stdio and should not be used for warning suppression",
+            )
+        self.generic_visit(node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        for target in node.targets:
+            if _is_sys_stream(target, "stderr") and not self._inside_none_stdio_guard("stderr"):
+                self._record(
+                    node,
+                    category="stderr_reassignment",
+                    message="sys.stderr is reassigned outside a sys.stderr is None recovery guard",
+                )
+                break
+            if _is_sys_stream(target, "stdout") and not self._inside_none_stdio_guard("stdout"):
+                self._record(
+                    node,
+                    category="stdout_reassignment",
+                    message="sys.stdout is reassigned outside a sys.stdout is None recovery guard",
+                )
+                break
+        self.generic_visit(node)
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        exception_matches = (
+            node.type is None
+            or _is_exception_name(node.type)
+            or _is_exception_tuple(node.type)
+        )
+        if exception_matches and len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
+            self._record(
+                node,
+                category="silent_except_pass",
+                message="except Exception: pass silently hides failures; emit a warning or fail fast instead",
+            )
+        self.generic_visit(node)
+
+
+def _iter_python_files(repo_root: Path, scan_patterns: Sequence[str]) -> Iterable[Path]:
+    seen: set[Path] = set()
+    for pattern in scan_patterns:
+        for root in sorted(repo_root.glob(pattern)):
+            if root.is_file() and root.suffix == ".py":
+                resolved = root.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    yield resolved
+                continue
+            if not root.is_dir():
+                continue
+            for path in sorted(root.rglob("*.py")):
+                if any(part in EXCLUDED_DIR_NAMES for part in path.parts):
+                    continue
+                resolved = path.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    yield resolved
+
+
+def audit_file(path: Path) -> List[Finding]:
     try:
-        content = filepath.read_text()
-    except Exception:
-        return []
-    
-    issues = []
-    lines = content.split('\n')
-    
-    for i, line in enumerate(lines):
-        # Look for `except Exception:` followed by `pass`
-        if 'except Exception:' in line or 'except Exception as' in line:
-            # Check next non-empty line for `pass`
-            for j in range(i + 1, min(i + 3, len(lines))):
-                next_line = lines[j].strip()
-                if next_line == 'pass':
-                    # Find the corresponding try block
-                    try_start = None
-                    indent = len(line) - len(line.lstrip())
-                    for k in range(i - 1, -1, -1):
-                        check_line = lines[k]
-                        if check_line.strip().startswith('try:'):
-                            check_indent = len(check_line) - len(check_line.lstrip())
-                            if check_indent == indent:
-                                try_start = k
-                                break
-                    
-                    if try_start is None:
-                        continue
-                    
-                    # Get context (the try block body)
-                    context = '\n'.join(lines[try_start:i + 1])
-                    
-                    # Categorize the fallback
-                    category = "unknown"
-                    for cat, patterns in CATEGORIES.items():
-                        for pattern in patterns:
-                            if re.search(pattern, context, re.IGNORECASE):
-                                category = cat
-                                break
-                        if category != "unknown":
-                            break
-                    
-                    issues.append((i + 1, category, context.strip(), try_start, j))
-                    break
-                elif next_line and not next_line.startswith('#'):
-                    break
-    
-    return issues
+        source = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return [
+            Finding(
+                path=path,
+                line=1,
+                column=1,
+                category="read_error",
+                message=f"Failed to read {path}: {exc}",
+            )
+        ]
+
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError as exc:
+        return [
+            Finding(
+                path=path,
+                line=exc.lineno or 1,
+                column=(exc.offset or 1),
+                category="syntax_error",
+                message=f"Failed to parse {path}: {exc.msg}",
+            )
+        ]
+
+    visitor = SilentFallbackAudit(path)
+    visitor.visit(tree)
+    return visitor.findings
 
 
-def fix_file(filepath: Path, issues: List[Tuple[int, str, str, int, int]], dry_run: bool = False) -> int:
-    """Fix silent fallbacks in a file.
-    
-    Returns number of fixes applied.
-    """
-    if not issues:
-        return 0
-    
-    content = filepath.read_text()
-    lines = content.split('\n')
-    
-    # Sort issues by line number descending to avoid offset issues
-    sorted_issues = sorted(issues, key=lambda x: x[3], reverse=True)
-    
-    fixes_applied = 0
-    
-    for line_no, category, context, try_start, except_end in sorted_issues:
-        # Get the try block body (between try: and except)
-        try_body_lines = []
-        base_indent = len(lines[try_start]) - len(lines[try_start].lstrip())
-        body_indent = base_indent + 4
-        
-        for k in range(try_start + 1, line_no - 1):  # line_no is 1-indexed, except line
-            if lines[k].strip():  # Non-empty line
-                try_body_lines.append(lines[k])
-        
-        if not try_body_lines:
-            continue
-        
-        # Extract just the body content with proper indentation
-        try_body = '\n'.join(try_body_lines)
-        
-        # Generate the fix
-        template = FIX_TEMPLATES.get(category, FIX_TEMPLATES["unknown"])
-        fix = template.format(try_body=try_body)
-        
-        # Apply proper indentation
-        fix_lines = []
-        for fix_line in fix.split('\n'):
-            if fix_line.strip():
-                fix_lines.append(' ' * base_indent + fix_line.lstrip())
-            else:
-                fix_lines.append('')
-        
-        if dry_run:
-            print(f"\n  Would fix lines {try_start + 1}-{except_end + 1}:")
-            print(f"  Before:")
-            for k in range(try_start, except_end + 1):
-                print(f"    {lines[k]}")
-            print(f"  After:")
-            for fl in fix_lines:
-                print(f"    {fl}")
-        else:
-            # Replace the lines
-            lines[try_start:except_end + 1] = fix_lines
-        
-        fixes_applied += 1
-    
-    if not dry_run and fixes_applied > 0:
-        filepath.write_text('\n'.join(lines))
-    
-    return fixes_applied
+def collect_findings(repo_root: Path, scan_patterns: Sequence[str]) -> List[Finding]:
+    findings: List[Finding] = []
+    for path in _iter_python_files(repo_root, scan_patterns):
+        findings.extend(audit_file(path))
+    return sorted(findings, key=lambda item: (str(item.path), item.line, item.column, item.category))
 
 
-def main() -> None:
-    fix_mode = '--fix' in sys.argv
-    dry_run = '--dry-run' in sys.argv
-    
-    repo_root = Path(__file__).parent.parent
-    
-    # Directories to search
-    search_dirs = ['ch*/', 'labs/', 'core/common/']
-    
-    total_issues = 0
-    files_with_issues = 0
-    fixes_applied = 0
-    category_counts: dict[str, int] = {}
-    
-    for pattern in search_dirs:
-        for filepath in repo_root.glob(f'{pattern}**/*.py'):
-            if filepath.is_file():
-                issues = find_silent_fallbacks(filepath)
-                if issues:
-                    files_with_issues += 1
-                    print(f"\n{filepath.relative_to(repo_root)}:")
-                    
-                    for line_no, category, context, try_start, except_end in issues:
-                        total_issues += 1
-                        category_counts[category] = category_counts.get(category, 0) + 1
-                        print(f"  Line {line_no} [{category}]:")
-                        # Show just first 2 lines of context
-                        context_lines = context.split('\n')[-2:]
-                        for ctx_line in context_lines:
-                            print(f"    {ctx_line}")
-                    
-                    if fix_mode or dry_run:
-                        fixed = fix_file(filepath, issues, dry_run=dry_run)
-                        fixes_applied += fixed
-    
-    print(f"\n{'=' * 60}")
-    print(f"Summary: {total_issues} silent fallbacks in {files_with_issues} files")
-    print(f"\nBy category:")
-    for cat, count in sorted(category_counts.items(), key=lambda x: -x[1]):
-        print(f"  {cat}: {count}")
-    
-    if fix_mode:
-        print(f"\n✅ Applied {fixes_applied} fixes")
-    elif dry_run:
-        print(f"\n📋 Would apply {fixes_applied} fixes (dry-run mode)")
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Audit Python code for silent fallbacks and process-global warning suppression",
+    )
+    parser.add_argument(
+        "--paths",
+        nargs="*",
+        help="Optional repo-root-relative scan patterns or paths (default: ch*, labs, core)",
+    )
+    parser.add_argument(
+        "--fail-on-findings",
+        action="store_true",
+        help="Exit non-zero when any finding is detected.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit findings as JSON.",
+    )
+    parser.add_argument(
+        "--categories",
+        nargs="*",
+        help="Optional finding categories to include (default: all).",
+    )
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    scan_patterns = tuple(args.paths) if args.paths else DEFAULT_SCAN_PATTERNS
+    findings = collect_findings(repo_root, scan_patterns)
+    if args.categories:
+        allowed = set(args.categories)
+        findings = [finding for finding in findings if finding.category in allowed]
+
+    if args.json:
+        payload = {
+            "scan_patterns": list(scan_patterns),
+            "categories": list(args.categories) if args.categories else None,
+            "finding_count": len(findings),
+            "findings": [finding.to_dict(repo_root) for finding in findings],
+        }
+        print(json.dumps(payload, indent=2))
     else:
-        print(f"\nRecommendation: REMOVE try/except blocks - use fail-fast:")
-        print("""
-    # DON'T do this (AI slop):
-    try:
-        do_thing()
-    except Exception:
-        pass
-    
-    # DO this instead (emit warning):
-    import warnings
-    try:
-        do_thing()
-    except Exception as e:
-        warnings.warn(f"do_thing failed: {e}", RuntimeWarning)
-    
-    # OR better - just let it fail:
-    do_thing()  # Let it fail if something is wrong
-        """)
-        print("\nRun with --fix to apply automatic fixes, or --dry-run to preview.")
-        print("  python core/scripts/audit_silent_fallbacks.py --dry-run")
-        print("  python core/scripts/audit_silent_fallbacks.py --fix")
+        print(f"Scanned patterns: {', '.join(scan_patterns)}")
+        print(f"Findings: {len(findings)}")
+        for finding in findings:
+            rel_path = finding.path.relative_to(repo_root)
+            print(
+                f"{rel_path}:{finding.line}:{finding.column}: "
+                f"[{finding.category}] {finding.message}"
+            )
+
+    if args.fail_on_findings and findings:
+        return 1
+    return 0
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    raise SystemExit(main())
