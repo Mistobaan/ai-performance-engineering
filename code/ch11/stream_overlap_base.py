@@ -269,7 +269,7 @@ class ConcurrentStreamOptimized(VerificationPayloadMixin, BaseBenchmark):
         # Streams overlap chunked work; fewer iterations keep runtime reasonable.
         nvtx_tag = canonicalize_nvtx_name(self.label)
         return BenchmarkConfig(
-            iterations=16,
+            iterations=20,
             warmup=5,
             ncu_replay_mode="application",
             ncu_metric_set="minimal",

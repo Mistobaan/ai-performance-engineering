@@ -29,7 +29,6 @@ class OptimizedTorchAOQuantizationBenchmark(VerificationPayloadMixin, BaseBenchm
     def __init__(self):
         super().__init__()
         self.model = None
-        self.compiled_model = None
         self.data = None
         self.batch_size = 8192
         self.in_features = 4096
@@ -66,7 +65,6 @@ class OptimizedTorchAOQuantizationBenchmark(VerificationPayloadMixin, BaseBenchm
         self.parameter_count = sum(p.numel() for p in self.model.parameters())
 
         quantize_(self.model, Int8DynamicActivationInt8WeightConfig())
-        self.compiled_model = torch.compile(self.model, mode="max-autotune")
 
         self.data = torch.randn(
             self.batch_size,
@@ -78,14 +76,14 @@ class OptimizedTorchAOQuantizationBenchmark(VerificationPayloadMixin, BaseBenchm
 
         for _ in range(3):
             with torch.no_grad():
-                _ = self.compiled_model(self.data)
+                _ = self.model(self.data)
 
     def benchmark_fn(self) -> None:
-        if self.compiled_model is None or self.data is None:
+        if self.model is None or self.data is None:
             raise RuntimeError("Model/data not initialized")
         with self._nvtx_range("optimized_torchao_quantization"):
             with torch.no_grad():
-                self.output = self.compiled_model(self.data)
+                self.output = self.model(self.data)
         if self._verify_input is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 
@@ -107,7 +105,6 @@ class OptimizedTorchAOQuantizationBenchmark(VerificationPayloadMixin, BaseBenchm
 
     def teardown(self) -> None:
         self.model = None
-        self.compiled_model = None
         self.data = None
         self._verify_input = None
         super().teardown()
@@ -122,7 +119,7 @@ class OptimizedTorchAOQuantizationBenchmark(VerificationPayloadMixin, BaseBenchm
         return self._workload
 
     def validate_result(self) -> Optional[str]:
-        if self.compiled_model is None:
+        if self.model is None:
             return "Model not initialized"
         return None
 

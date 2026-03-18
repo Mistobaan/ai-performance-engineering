@@ -1,4 +1,4 @@
-"""Optimized stream workload with adaptive scheduling."""
+"""Optimized legacy `adaptive_streams` target using fixed round-robin multi-stream overlap."""
 
 from __future__ import annotations
 

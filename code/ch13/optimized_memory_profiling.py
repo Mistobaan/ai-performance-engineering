@@ -31,26 +31,20 @@ class OptimizedModel(nn.Module):
 
 
 class OptimizedMemoryProfilingBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Optimized memory profiling - uses gradient checkpointing + CUDA graphs."""
+    """Optimized memory profiling - uses gradient checkpointing only."""
 
-    signature_equivalence_group = "ch13_memory_profiling_precision"
-    signature_equivalence_ignore_fields = ("precision_flags",)
+    signature_equivalence_group = "ch13_memory_profiling_checkpointing"
+    signature_equivalence_ignore_fields: tuple[str, ...] = ()
     
     def __init__(self):
         super().__init__()
         self.model: Optional[OptimizedModel] = None
         self.inputs: Optional[torch.Tensor] = None
         self.targets: Optional[torch.Tensor] = None
-        self.inputs_fp32: Optional[torch.Tensor] = None
-        self.targets_fp32: Optional[torch.Tensor] = None
         self.criterion: Optional[nn.Module] = None
         self.peak_memory_mb = 0.0
         self.batch_size = 32
         self.hidden_dim = 2048
-        self.graph: Optional[torch.cuda.CUDAGraph] = None
-        self.capture_stream: Optional[torch.cuda.Stream] = None
-        self.static_input: Optional[torch.Tensor] = None
-        self.static_target: Optional[torch.Tensor] = None
         tokens = self.batch_size * self.hidden_dim
         self._workload = WorkloadMetadata(
             requests_per_iteration=1.0,
@@ -64,70 +58,40 @@ class OptimizedMemoryProfilingBenchmark(VerificationPayloadMixin, BaseBenchmark)
     
     def setup(self) -> None:
         torch.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
         torch.cuda.reset_peak_memory_stats()
-        
-        self.model = OptimizedModel(hidden_dim=self.hidden_dim).to(self.device, dtype=torch.bfloat16)
+
+        self.model = OptimizedModel(hidden_dim=self.hidden_dim).to(self.device)
         self.model.train()
-        self.inputs_fp32 = torch.randn(self.batch_size, self.hidden_dim, device=self.device, dtype=torch.float32)
-        self.targets_fp32 = torch.randn(self.batch_size, self.hidden_dim, device=self.device, dtype=torch.float32)
-        self.inputs = self.inputs_fp32.to(dtype=torch.bfloat16)
-        self.targets = self.targets_fp32.to(dtype=torch.bfloat16)
+        self.inputs = torch.randn(self.batch_size, self.hidden_dim, device=self.device, dtype=torch.float32)
+        self.targets = torch.randn(self.batch_size, self.hidden_dim, device=self.device, dtype=torch.float32)
         self.criterion = nn.MSELoss()
-        
+
         _ = self.model(self.inputs)
         self._synchronize()
         torch.cuda.reset_peak_memory_stats()
-
-        self.static_input = self.inputs.clone()
-        self.static_target = self.targets.clone()
-        self.graph = torch.cuda.CUDAGraph()
-        self.capture_stream = torch.cuda.Stream()
-        with torch.cuda.stream(self.capture_stream):
-            for _ in range(2):
-                self._train_step(self.static_input, self.static_target)
-            torch.cuda.synchronize()
-            with torch.cuda.graph(self.graph, stream=self.capture_stream):
-                self._train_step(self.static_input, self.static_target)
-        self.capture_stream.synchronize()
-    
-    def _train_step(self, inputs: torch.Tensor, targets: torch.Tensor) -> None:
-        assert self.model is not None and self.criterion is not None
-        self.model.zero_grad(set_to_none=True)
-        outputs = self.model(inputs)
-        loss = self.criterion(outputs, targets)
-        loss.backward()
     
     def benchmark_fn(self) -> None:
-        if (
-            self.graph is None
-            or self.static_input is None
-            or self.static_target is None
-            or self.model is None
-        ):
-            raise RuntimeError("CUDA graph not initialized")
+        if self.model is None or self.inputs is None or self.targets is None or self.criterion is None:
+            raise RuntimeError("Benchmark not configured")
 
         with self._nvtx_range("optimized_memory_profiling"):
-            self.static_input.copy_(self.inputs)
-            self.static_target.copy_(self.targets)
-            self.model.zero_grad(set_to_none=True)
-            self.graph.replay()
+            outputs = self.model(self.inputs)
+            loss = self.criterion(outputs, self.targets)
+            loss.backward()
             self.peak_memory_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
-            # Store output for verification
-            with torch.no_grad():
-                self.output = self.model(self.inputs).detach().clone()
+            self.output = outputs.detach().clone()
         if self.inputs is None or self.targets is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 
     def capture_verification_payload(self) -> None:
-        if self.inputs_fp32 is None or self.targets_fp32 is None:
-            raise RuntimeError("FP32 verification tensors not initialized")
         self._set_verification_payload(
-            inputs={"input": self.inputs_fp32, "targets": self.targets_fp32},
+            inputs={"input": self.inputs, "targets": self.targets},
             output=self.output.detach().float().clone(),
             batch_size=self.inputs.shape[0],
             precision_flags={
                 "fp16": False,
-                "bf16": True,
+                "bf16": False,
                 "fp8": False,
                 "tf32": torch.backends.cuda.matmul.allow_tf32 if torch.cuda.is_available() else False,
             },
@@ -139,10 +103,6 @@ class OptimizedMemoryProfilingBenchmark(VerificationPayloadMixin, BaseBenchmark)
         self.inputs = None
         self.targets = None
         self.criterion = None
-        self.graph = None
-        self.static_input = None
-        self.static_target = None
-        self.capture_stream = None
         super().teardown()
     
     def get_config(self) -> BenchmarkConfig:
@@ -159,13 +119,12 @@ class OptimizedMemoryProfilingBenchmark(VerificationPayloadMixin, BaseBenchmark)
         return self._workload
     
     def get_custom_metrics(self) -> Optional[dict]:
-        """Return domain-specific metrics using standardized helper."""
-        from core.benchmark.metrics import compute_precision_metrics
-        return compute_precision_metrics(
-            fp32_time_ms=None,
-            reduced_precision_time_ms=getattr(self, '_last_elapsed_ms', None),
-            precision_type="fp8",
-        )
+        return {
+            "memory.peak_allocated_mb": float(self.peak_memory_mb),
+            "memory.gradient_checkpointing": 1.0,
+            "memory.cuda_graph_replay": 0.0,
+            "memory.compute_dtype_fp32": 1.0,
+        }
 
     def validate_result(self) -> Optional[str]:
         if self.model is None:

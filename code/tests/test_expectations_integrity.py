@@ -65,6 +65,7 @@ from core.benchmark.expectations import (
     ValidationIssue,
     ValidationReport,
 )
+from core.harness.run_benchmarks import _allow_mixed_provenance_for_expectation_writes
 
 
 # =============================================================================
@@ -813,6 +814,64 @@ class TestMixedProvenanceRejection:
 
         # Should be allowed due to force flag (improved or updated)
         assert result2.status in ("improved", "updated")
+
+    def test_update_expectations_policy_allows_virtualized_provenance_refresh(self, tmp_path):
+        """Explicit expectation refreshes should accept virtualized mixed provenance."""
+        store = ExpectationsStore(
+            tmp_path,
+            "test_hw",
+            accept_regressions=True,
+            allow_mixed_provenance=_allow_mixed_provenance_for_expectation_writes(
+                update_expectations=True,
+                allow_mixed_provenance=False,
+            ),
+        )
+
+        baseline_entry = ExpectationEntry(
+            example="test",
+            type="python",
+            optimization_goal="speed",
+            baseline_time_ms=100.0,
+            best_optimized_time_ms=50.0,
+            provenance=RunProvenance(
+                git_commit="commit_baremetal",
+                hardware_key="test_hw",
+                profile_name="minimal",
+                timestamp="2026-03-18T00:00:00",
+                iterations=20,
+                warmup_iterations=5,
+                execution_environment="bare_metal",
+                validity_profile="strict",
+                dmi_product_name="physical-host",
+            ),
+        )
+        result1 = store.update_entry("test_python", baseline_entry)
+        assert result1.status in ("updated", "improved")
+
+        refreshed_entry = ExpectationEntry(
+            example="test",
+            type="python",
+            optimization_goal="speed",
+            baseline_time_ms=100.0,
+            best_optimized_time_ms=40.0,
+            provenance=RunProvenance(
+                git_commit="commit_virtualized",
+                hardware_key="test_hw",
+                profile_name="minimal",
+                timestamp="2026-03-18T01:00:00",
+                iterations=20,
+                warmup_iterations=5,
+                execution_environment="virtualized",
+                validity_profile="strict",
+                dmi_product_name="vm-host",
+            ),
+        )
+        result2 = store.update_entry("test_python", refreshed_entry)
+
+        assert result2.status in ("improved", "updated")
+        assert result2.entry is not None
+        assert result2.entry.provenance.execution_environment == "virtualized"
+        assert result2.entry.provenance.git_commit == "commit_virtualized"
 
 
 # =============================================================================

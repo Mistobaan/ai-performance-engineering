@@ -897,7 +897,7 @@ def build_parser(*, optimized: bool) -> argparse.ArgumentParser:
     )
     add_shared_args(parser)
     parser.set_defaults(
-        route_mode="topology_aware" if optimized else "uniform",
+        route_mode="uniform",
         overlap_mode="local_remote" if optimized else "disabled",
         output_dir="artifacts/moe_hybrid_ep_optimized" if optimized else "artifacts/moe_hybrid_ep_baseline",
     )

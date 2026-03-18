@@ -15,6 +15,7 @@ This lab is where the repo stops being a pile of isolated kernels and starts beh
 - optimized cluster GEMM variants
 - tcgen05 route where available
 - same harness contract and validation as the rest of the repo
+- canonical hybrid-EP comparisons now keep the same default routing mode, with topology-aware routing available only through an explicit override
 
 ## Measured Delta
 Representative strict result from `artifacts/runs/20260302_full_strict_chapter_lab_singlegpu_v2/`:
@@ -77,3 +78,4 @@ python -m cli.aisp bench run --targets labs/fullstack_cluster --profile minimal
 ## Notes
 - `gpu_requirements.py` reports the minimum GPU count, memory, and features for each scenario; consult it before scheduling runs.
 - `capstone_extension.py` caches builds under `~/.cache/torch_extensions`; run `python cleanup.py --include-extensions` when switching CUDA versions.
+- Canonical hybrid-EP comparisons now keep the same default routing mode; use `--route-mode topology_aware` when you want that alternate behavior to be visible instead of relying on a silent default.

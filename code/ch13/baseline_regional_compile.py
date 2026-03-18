@@ -1,8 +1,8 @@
-"""baseline_regional_compile.py - Full-block torch.compile baseline.
+"""baseline_regional_compile.py - Whole-block torch.compile baseline.
 
-Compiles the entire Transformer block per-sequence bucket. This highlights
-compile-time churn and larger graph specialization overhead when sequence
-lengths change, providing a baseline for regional compilation.
+Compiles the entire Transformer block on the same BF16 workload used by the
+regional benchmark. This keeps precision fixed so the comparison isolates
+whole-graph versus regional compilation rather than BF16 versus FP32.
 """
 
 from __future__ import annotations
@@ -67,9 +67,6 @@ class TinyTransformerBlock(nn.Module):
 class BaselineFullGraphCompileBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """
     Baseline: torch.compile over the entire block for each sequence bucket.
-
-    Changing sequence lengths causes repeated whole-block compilations, which
-    inflates end-to-end latency relative to a regional compile.
     """
 
     signature_equivalence_group = "ch13_regional_compile_precision"
@@ -86,6 +83,7 @@ class BaselineFullGraphCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
         self._step = 0
 
         self.model: Optional[nn.Module] = None
+        self.compiled_model = None
         self.inputs: Dict[int, torch.Tensor] = {}
         self._verify_x: Optional[torch.Tensor] = None
         self._verify_output: Optional[torch.Tensor] = None
@@ -104,27 +102,31 @@ class BaselineFullGraphCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
     def setup(self) -> None:
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
-        # Baseline: FP32 eager execution (no tensor core acceleration)
         self.model = TinyTransformerBlock(
             hidden=self.hidden,
             num_heads=self.num_heads,
             mlp_hidden=self.mlp_hidden,
-        ).to(self.device, dtype=torch.float32).eval()
+        ).to(self.device, dtype=torch.bfloat16).eval()
+        self.compiled_model = torch.compile(
+            self.model,
+            backend="inductor",
+            dynamic=True,
+            mode="reduce-overhead",
+        )
 
-        # Preallocate FP32 inputs
         for seq in self.sequence_schedule:
             self.inputs[seq] = torch.randn(
                 self.batch_size,
                 seq,
                 self.hidden,
                 device=self.device,
-                dtype=torch.float32,
+                dtype=torch.bfloat16,
             )
 
-        # Warmup
         with torch.no_grad():
-            for seq in self.sequence_schedule:
-                _ = self.model(self.inputs[seq])
+            for _ in range(5):
+                for seq in self.sequence_schedule:
+                    _ = self.compiled_model(self.inputs[seq])
 
         self.register_workload_metadata(
             requests_per_iteration=self._workload.requests_per_iteration,
@@ -137,20 +139,19 @@ class BaselineFullGraphCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
         return seq
 
     def benchmark_fn(self) -> None:
-        if self.model is None:
+        if self.model is None or self.compiled_model is None:
             raise RuntimeError("Model not initialized")
 
         seq_len = self._next_sequence_length()
         x = self.inputs[seq_len]
 
-        # Baseline: FP32 eager execution (no tensor core acceleration)
-        with torch.no_grad(), self._nvtx_range("baseline_fp32_eager"):
-            self.output = self.model(x).detach().clone()
+        with torch.no_grad(), self._nvtx_range("baseline_full_graph_compile"):
+            self.output = self.compiled_model(x).detach().clone()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
         if self._verify_x is None:
             self._verify_x = x
-            self._verify_output = self.output.detach().float().clone()
+            self._verify_output = self.output.detach().clone()
 
     def capture_verification_payload(self) -> None:
         if self._verify_x is None or self._verify_output is None:
@@ -158,11 +159,11 @@ class BaselineFullGraphCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
         x = self._verify_x
         self._set_verification_payload(
             inputs={"input": x},
-            output=self._verify_output,
+            output=self._verify_output.float().clone(),
             batch_size=self.batch_size,
             precision_flags={
                 "fp16": False,
-                "bf16": False,
+                "bf16": True,
                 "fp8": False,
                 "tf32": torch.backends.cuda.matmul.allow_tf32 if torch.cuda.is_available() else False,
             },
@@ -171,6 +172,7 @@ class BaselineFullGraphCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
 
     def teardown(self) -> None:
         self.model = None
+        self.compiled_model = None
         self.inputs.clear()
         super().teardown()
 
@@ -204,4 +206,3 @@ class BaselineFullGraphCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
 
 def get_benchmark() -> BaseBenchmark:
     return BaselineFullGraphCompileBenchmark()
-

@@ -1,7 +1,7 @@
 # Chapter 11 - Streams & Concurrency
 
 ## Summary
-Explains how to overlap compute, memory, and communication on Blackwell using CUDA streams, ordered sequences, Hyper-Q, warp-specialized pipelines, and adaptive scheduling.
+Explains how to overlap compute, memory, and communication on Blackwell using CUDA streams, ordered sequences, Hyper-Q, warp-specialized pipelines, and adaptive scheduling. The README keeps the legacy target names tied to the actual copy+elementwise overlap workload and runtime-adaptive scheduling story instead of pretending every target is a generic multi-stream demo.
 
 ## Problem
 Chapter 11 is where concurrency ideas have to prove they are reducing real idle time instead of just making traces look busier. The useful question is not "can we add streams?" but "which ordering and overlap changes actually improve the measured workload?"
@@ -82,5 +82,6 @@ python -m cli.aisp bench run --targets ch11 --profile minimal
 - Warp-specialized multistream kernels flag unsupported hardware (missing DSMEM) immediately, preventing silent fallbacks.
 
 ## Notes
+- The README calls out the legacy target names explicitly so book-facing labels still point at the actual copy+elementwise overlap workload and runtime-adaptive scheduling pairs.
 - `warp_specialized_triton.py` provides a Triton analogue for the CUDA concurrency demos so you can compare compiler-generated schedules.
 - `kv_prefetch_pipeline_enhanced_demo.cu` builds on the DSMEM kernels bundled in this directory so you can study the entire pipeline locally.

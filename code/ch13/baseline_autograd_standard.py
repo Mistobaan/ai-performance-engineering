@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Optional
 
 import torch
@@ -53,17 +54,32 @@ class BaselineAutogradStandardBenchmark(VerificationPayloadMixin, BaseBenchmark)
     def setup(self) -> None:
         """Setup: Initialize model and data."""
         torch.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
         
         self.model = SimpleModel(hidden_dim=self.hidden_dim).to(self.device).half().train()
         self.inputs = torch.randn(self.batch_size, self.hidden_dim, device=self.device, dtype=torch.float16)
         self.targets = torch.randn(self.batch_size, self.hidden_dim, device=self.device, dtype=torch.float16)
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01)
         self.criterion = nn.MSELoss()
-        
+
+        saved_model_state = copy.deepcopy(self.model.state_dict())
+        saved_opt_state = copy.deepcopy(self.optimizer.state_dict())
+
         for _ in range(3):
-            self.optimizer.zero_grad()
-            _ = self.model(self.inputs)
+            self._train_step(self.inputs, self.targets)
         self._synchronize()
+        self.model.load_state_dict(saved_model_state)
+        self.optimizer.load_state_dict(saved_opt_state)
+
+    def _train_step(self, batch: torch.Tensor, target: torch.Tensor, capture_output: bool = False) -> None:
+        assert self.model is not None and self.optimizer is not None and self.criterion is not None
+        self.optimizer.zero_grad(set_to_none=False)
+        outputs = self.model(batch)
+        if capture_output:
+            self.output = outputs.detach().clone()
+        loss = self.criterion(outputs, target)
+        loss.backward()
+        self.optimizer.step()
     
     def benchmark_fn(self) -> None:
         """Function to benchmark - standard autograd."""
@@ -71,12 +87,7 @@ class BaselineAutogradStandardBenchmark(VerificationPayloadMixin, BaseBenchmark)
             raise RuntimeError("Benchmark not configured")
 
         with self._nvtx_range("baseline_autograd_standard"):
-            self.optimizer.zero_grad()
-            outputs = self.model(self.inputs)
-            loss = self.criterion(outputs, self.targets)
-            loss.backward()
-            self.optimizer.step()
-            self.output = outputs.detach().clone()
+            self._train_step(self.inputs, self.targets, capture_output=True)
         if self.inputs is None or self.targets is None or self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 
@@ -112,6 +123,8 @@ class BaselineAutogradStandardBenchmark(VerificationPayloadMixin, BaseBenchmark)
             enable_memory_tracking=False,
             enable_profiling=False,
             setup_timeout_seconds=180,
+            timing_method="wall_clock",
+            full_device_sync=True,
         )
 
     def get_workload_metadata(self) -> Optional[WorkloadMetadata]:
@@ -123,7 +136,7 @@ class BaselineAutogradStandardBenchmark(VerificationPayloadMixin, BaseBenchmark)
         return compute_precision_metrics(
             fp32_time_ms=getattr(self, '_last_elapsed_ms', None),
             reduced_precision_time_ms=None,
-            precision_type="fp8",
+            precision_type="fp16",
         )
 
     def validate_result(self) -> Optional[str]:

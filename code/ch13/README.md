@@ -1,7 +1,7 @@
 # Chapter 13 - PyTorch Profiling & Memory Tuning
 
 ## Summary
-Focuses on PyTorch-centric optimizations: compiled autograd, memory profiling, FSDP/context/expert parallelism, and FP8/quantization workflows backed by the same harness infrastructure.
+Focuses on PyTorch-centric optimizations: compiled autograd, memory profiling, FSDP/context/expert parallelism, and FP8/quantization workflows backed by the same harness infrastructure. The chapter README is fairness-refreshed so canonical pairs stay separate from informational variants such as `torchao_quantization_compiled` and `kv_cache_naive_flash_blockwise`.
 
 ## Problem
 Chapter 13 is where high-level PyTorch optimizations have to prove they are doing more than rearranging framework overhead. The useful question is not "can PyTorch do this optimization?" but "which profiling, compilation, precision, and memory changes actually improve the workload under the shared harness?"
@@ -65,7 +65,7 @@ python -m cli.aisp bench run --targets ch13:precisionfp8_te --profile deep_dive 
 | `baseline_expert_parallel_multigpu.py`, `optimized_expert_parallel_multigpu.py`, `expert_parallel_common.py` | Expert-parallel all-to-all benchmarks contrasting per-iteration list allocations vs pre-allocated all_to_all_single. |
 | `context_parallelism.py`, `fsdp_example.py` | Context and FSDP sharding demos for scaling beyond a single GPU. (Tools; not benchmark targets.) |
 | `baseline_precisionfp8*.py`, `optimized_precisionfp8*.py`, `baseline_precisionmixed.py`, `optimized_precisionmixed.py`, `compiled_autograd.py` | Precision-management suites covering Transformer Engine and compiled autograd recipes. |
-| `baseline_quantization.py`, `optimized_quantization.py`, `baseline_kv_cache_naive.py`, `optimized_kv_cache_naive.py`, `optimized_kv_cache_naive_pool.py` | Quantization and KV-cache pipelines for inference/training memory savings. |
+| `baseline_quantization.py`, `optimized_quantization.py`, `baseline_kv_cache_naive.py`, `optimized_kv_cache_naive.py`, `optimized_kv_cache_naive_pool.py` | Quantization and KV-cache pipelines for inference/training memory savings, including the quantization-only canonical pair and a token-by-token decode with naive concat cache versus paged cache allocation. |
 | `compare.py`, `compare_perf.py`, `requirements.txt`, `expectations_{hardware_key}.json`, `workload_config.py` | Harness entry, performance comparison helper, dependencies, and regression baselines. |
 
 ## Running the Benchmarks
@@ -87,3 +87,4 @@ python -m cli.aisp bench run --targets ch13 --profile minimal
 ## Notes
 - `custom_allocator.py` contains a standalone torch allocator shim that can be re-used in other chapters when debugging fragmentation.
 - `compiled_autograd.py` doubles as a tutorial on partial graph capture; the README here references it directly.
+- `torchao_quantization_compiled` and `kv_cache_naive_flash_blockwise` remain informational variants; the fairness-refreshed canonical pairs stay focused on quantization-only and token-by-token cache comparisons.

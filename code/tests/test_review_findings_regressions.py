@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import torch
+
 from ch08.tcgen05_custom_vs_cublas_benchmark_base import Tcgen05CustomVsCublasBase
 from ch08.threshold_tma_benchmark_base import ThresholdBenchmarkBaseTMA
 from ch08.tiling_benchmark_base import TilingBenchmarkBase
@@ -213,6 +215,55 @@ def test_reviewed_pair_fixes_remain_applied() -> None:
     assert "HBM3e" not in baseline_memory_standard
 
     assert "with torch.no_grad():" in baseline_pipeline_bench
+
+
+def test_ch13_pair_remediations_keep_canonical_and_informational_targets_split() -> None:
+    canonical_quant = _read("ch13/optimized_torchao_quantization.py")
+    compiled_quant = _read("ch13/optimized_torchao_quantization_compiled.py")
+    canonical_kv = _read("ch13/optimized_kv_cache_naive.py")
+    flash_kv = _read("ch13/optimized_kv_cache_naive_flash_blockwise.py")
+
+    assert "torch.compile(self.model" not in canonical_quant
+    assert "torch.compile(self.model" in compiled_quant
+    assert "torchao_quantization_compiled" in INFORMATIONAL_BENCHMARKS["ch13"]
+
+    assert "for pos in range(seq_len):" in canonical_kv
+    assert "range(0, seq_len, self.block_size)" not in canonical_kv
+    assert "range(0, seq_len, self.block_size)" in flash_kv
+    assert "kv_cache_naive_flash_blockwise" in INFORMATIONAL_BENCHMARKS["ch13"]
+
+
+def test_ch18_and_fullstack_pairs_keep_semantics_fixed() -> None:
+    baseline_flexdecode = _read("ch18/baseline_flexdecoding.py")
+    optimized_flexdecode = _read("ch18/optimized_flexdecoding.py")
+    moe_common = _read("labs/fullstack_cluster/moe_hybrid_ep_common.py")
+
+    assert '"comparison_axis": "full_kv_mask_vs_windowed_kv_slice"' in baseline_flexdecode
+    assert '"execution_pattern": "masked_full_cache_decode"' in baseline_flexdecode
+    assert "self.model.decode(token, position)" not in optimized_flexdecode
+    assert "full KV cache with a sliding-window mask" in baseline_flexdecode
+    assert "window_slice_decode" in optimized_flexdecode
+    assert "k_slice = self.model.k_cache[:, start:end]" not in baseline_flexdecode
+    assert "k_slice = self.model.k_cache[:, start:end]" in optimized_flexdecode
+    assert 'route_mode="uniform"' in moe_common
+    assert 'route_mode="topology_aware" if optimized else "uniform"' not in moe_common
+
+
+def test_ch17_memory_pair_keeps_discrete_input_distribution() -> None:
+    baseline_memory = _read("ch17/baseline_memory.py")
+    optimized_memory = _read("ch17/optimized_memory.py")
+
+    assert "torch.randint(" in baseline_memory
+    assert "256," in baseline_memory
+    assert "dtype=torch.uint8" in baseline_memory
+    assert "random_(0, 256).floor_()" in optimized_memory
+    assert "discrete 0..255 population" in optimized_memory
+
+    sample = torch.empty(4096, dtype=torch.float32)
+    sample.random_(0, 256).floor_()
+    assert torch.equal(sample, sample.floor())
+    assert float(sample.min().item()) >= 0.0
+    assert float(sample.max().item()) <= 255.0
 
 
 def test_ch20_multiple_unoptimized_no_longer_claims_fused_ops() -> None:

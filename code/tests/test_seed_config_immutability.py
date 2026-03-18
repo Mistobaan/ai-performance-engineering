@@ -104,6 +104,51 @@ def test_seed_mutation_is_detected_in_perf_runs():
     assert any("seed mutation detected" in err.lower() for err in result.errors)
 
 
+class PersistentConfigBenchmark(_CpuBenchmarkBase):
+    def __init__(self) -> None:
+        super().__init__()
+        self._cfg = BenchmarkConfig(
+            device=torch.device("cpu"),
+            iterations=7,
+            warmup=9,
+            enable_profiling=False,
+            enable_memory_tracking=False,
+            use_subprocess=False,
+        )
+
+    def get_config(self) -> BenchmarkConfig:
+        return self._cfg
+
+    def setup(self) -> None:
+        self.input_tensor = torch.ones(4, device=self.device)
+
+    def benchmark_fn(self) -> None:
+        if self.input_tensor is None:
+            raise RuntimeError("setup() must set input_tensor")
+        self.output = self.input_tensor + 1
+
+
+def test_chapter_style_config_normalization_does_not_mutate_benchmark_config(monkeypatch: pytest.MonkeyPatch):
+    harness = _make_cpu_harness()
+    benchmark = PersistentConfigBenchmark()
+
+    import core.harness.benchmark_harness as benchmark_harness_module
+
+    monkeypatch.setattr(
+        benchmark_harness_module,
+        "_is_chapter_or_labs_benchmark",
+        lambda _benchmark: True,
+    )
+
+    result = harness.benchmark(benchmark)
+
+    assert not result.errors
+    cfg = benchmark.get_config()
+    assert cfg.iterations == 7
+    assert cfg.warmup == 9
+    assert cfg.timing.timeout_for("torch") == 10800
+
+
 class TorchrunSeedMutateBenchmark(_CpuBenchmarkBase):
     def __init__(self, script_path: Path) -> None:
         super().__init__()

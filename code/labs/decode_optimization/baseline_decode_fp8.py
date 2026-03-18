@@ -28,6 +28,17 @@ def get_benchmark() -> DecodeBenchmark:
     bench = attach_benchmark_metadata(DecodeBenchmark(cfg), __file__)
     bench.signature_equivalence_group = "labs_decode_fp8_precision"
     bench.signature_equivalence_ignore_fields = ("precision_flags",)
+    bench.story_metadata = {
+        "pair_role": "canonical",
+        "variant_role": "baseline",
+        "chapter_alignment": "native",
+        "chapter_native_exemplar": True,
+        "comparison_axis": "bf16_vs_fp8_transformer_engine",
+        "execution_pattern": "prefill_only_decode",
+        "control_reason": (
+            "This baseline keeps the FP8 workload fixed while using BF16 nn.Linear "
+            "modules as the non-Transformer-Engine reference path."
+        ),
+    }
     return bench
-
 

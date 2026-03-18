@@ -57,7 +57,7 @@ python -m cli.aisp demos labs-decode-multigpu --nproc-per-node 4 -- --iters 4 --
 | --- | --- |
 | `baseline_decode.py`, `optimized_decode_pinned.py`, `optimized_decode_streams.py`, `optimized_decode_compile.py`, `optimized_decode_graph.py`, `optimized_decode_graph_full.py`, `optimized_decode_ultimate.py` | Serving-path decode variants that isolate host, stream, compile, and graph effects. |
 | `baseline_decode_hf_cache.py`, `optimized_decode_hf_cache.py` | Real HuggingFace decoder-loop comparison: dynamic cache + per-step EOS sync vs static cache + compiled decode + batched EOS polling. |
-| `baseline_decode_fp8.py`, `optimized_decode_fp8.py`, `baseline_decode_fp4.py`, `optimized_decode_fp4.py` | Prefill-focused low-precision decode comparisons on hardware that supports them. |
+| `baseline_decode_fp8.py`, `optimized_decode_fp8.py`, `baseline_decode_fp4.py`, `optimized_decode_fp4.py` | Prefill-focused low-precision decode comparisons on hardware that supports them, including the intentional BF16/nn.Linear versus FP8/Transformer Engine TELinear path. |
 | `baseline_decode_warp_specialized.py`, `optimized_decode_warp_specialized.py` | Warp-specialized decode path plus its eager correctness reference. |
 | `baseline_decode_double_buffer_tma.py`, `optimized_decode_double_buffer_tma.py`, `decode_common.py`, `decode_multigpu_demo.py` | CUDA double-buffer/TMA path, shared helpers, and the multi-GPU NVLink-C2C demo. |
 
@@ -83,3 +83,4 @@ python -m cli.aisp bench run --targets labs/decode_optimization --profile minima
 - All targets emit TTFT, TPOT mean, decode time, total time, and tokens/sec in `custom_metrics` for easy diffing.
 - FP4 requires NVFP4-capable Blackwell hardware; unsupported platforms fail fast.
 - The HF cache pair reproduces the main idea from Chaim Rand's token-generation optimization write-up while keeping the harness contract intact.
+- `decode_fp8` is intentionally a BF16/`nn.Linear` baseline versus FP8/Transformer Engine `TELinear`, because Transformer Engine is the supported FP8 linear path in this lab.

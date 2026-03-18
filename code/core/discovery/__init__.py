@@ -99,14 +99,15 @@ def should_ignore_benchmark_candidate(file_path: Path) -> bool:
     """Return True for baseline_/optimized_ files reserved for non-harness helper flows."""
     stem = file_path.stem
     return stem in {
-        "baseline_add",
-        "baseline_add_cuda",
-        "optimized_add",
-        "optimized_add_cuda_parallel",
         "baseline_submission",
         "optimized_submission",
         "reference_submission",
     } or stem.startswith("optimized_submission_") or is_generated_benchmark_copy(file_path)
+
+
+SUPPRESSED_VARIANT_ALIAS_TARGETS = {
+    "add_cuda_parallel",
+}
 
 
 def is_cuda_binary_benchmark_file(file_path: Path) -> bool:
@@ -463,7 +464,8 @@ def discover_benchmarks(
             if candidate_name in example_names:
                 continue
             optimized_files.append(opt_path)
-            variant_aliases.append((candidate_name, opt_path))
+            if candidate_name not in SUPPRESSED_VARIANT_ALIAS_TARGETS:
+                variant_aliases.append((candidate_name, opt_path))
         
         # Pattern 2: optimized_{name}.{ext} (e.g., optimized_moe.py / optimized_moe.cu)
         pattern2 = chapter_dir / f"optimized_{example_name}{ext}"

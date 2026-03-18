@@ -44,6 +44,8 @@ class OptimizedMemoryBenchmark(VerificationPayloadMixin, BaseBenchmark):
     
     def setup(self) -> None:
         torch.manual_seed(42)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(42)
         self.model = nn.Sequential(
             nn.Linear(self.input_dim, HIDDEN_DIM),
             nn.GELU(),
@@ -67,7 +69,9 @@ class OptimizedMemoryBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self._synchronize()
 
         self.graph = torch.cuda.CUDAGraph()
-        self.device_buffer.uniform_(0.0, 255.0)
+        # Keep the float buffer on the same discrete 0..255 population as the
+        # baseline's uint8 staging path instead of relying on implicit behavior.
+        self.device_buffer.random_(0, 256).floor_()
         self._synchronize()
         with torch.cuda.graph(self.graph):
             self.transform_buffer.copy_(self.device_buffer)
@@ -91,7 +95,8 @@ class OptimizedMemoryBenchmark(VerificationPayloadMixin, BaseBenchmark):
         with self._nvtx_range("optimized_memory"):
             with torch.no_grad():
                 for _ in range(self.repetitions):
-                    self.device_buffer.uniform_(0.0, 255.0)
+                    # Make the discrete input population explicit on every replay.
+                    self.device_buffer.random_(0, 256).floor_()
                     self.graph.replay()
                 self.output = self.graph_output.clone()
         if self.output is None or self.device_buffer is None:

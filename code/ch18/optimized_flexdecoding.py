@@ -14,6 +14,23 @@ from ch18.baseline_flexdecoding import FlexDecodingHarness  # noqa: E402
 class OptimizedFlexDecodingBenchmark(FlexDecodingHarness):
     """Optimized path: compiled FlexAttention with sliding-window cache slicing."""
 
+    story_metadata = {
+        "pair_role": "canonical",
+        "variant_role": "optimized",
+        "chapter_alignment": "native",
+        "chapter_native_exemplar": True,
+        "comparison_axis": "full_kv_mask_vs_windowed_kv_slice",
+        "execution_pattern": "windowed_kv_slice_decode",
+        "control_reason": (
+            "This chapter-native FlexDecoding path reduces decode work by slicing the "
+            "KV cache to the active sliding window before attention."
+        ),
+        "optimization_mechanism": (
+            "slice the KV cache to the active decode window and run the decode step "
+            "through the compiled FlashAttention-backed path"
+        ),
+    }
+
     def __init__(self) -> None:
         super().__init__(
             use_flex_attention=True,
@@ -82,8 +99,19 @@ class OptimizedFlexDecodingBenchmark(FlexDecodingHarness):
             raise RuntimeError("benchmark_fn() must produce output")
         return None
 
+    def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        metrics = super().get_custom_metrics()
+        if metrics is None:
+            return None
+        metrics.update(
+            {
+                "flexdecode.decode_kv_span_tokens": float(self.config.window + 1),
+                "flexdecode.active_window_tokens": float(self.config.window + 1),
+                "flexdecode.window_slice_decode": 1.0,
+            }
+        )
+        return metrics
+
 
 def get_benchmark():
     return OptimizedFlexDecodingBenchmark()
-
-

@@ -85,3 +85,4 @@ python -m cli.aisp bench run --targets ch12 --profile minimal
 ## Notes
 - `cuda_graphs_workload.cuh` holds reusable graph capture helpers when you want to wrap your own kernels.
 - `helper_*.cu` files contain host/device glue for the dynamic-parallelism case studies-copy them when bootstrapping new experiments.
+- For a smaller supporting lab that keeps Chapter 12's CUDA Graph story primary while adding fused reduction and padding-aware projection examples, see `labs/training_hotpath`.

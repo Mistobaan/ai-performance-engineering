@@ -153,7 +153,7 @@ class BaselineFlashAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
         """Return benchmark configuration."""
         return BenchmarkConfig(
             iterations=50,
-            warmup=5,
+            warmup=10,
         )
     
     def get_workload_metadata(self) -> Optional[WorkloadMetadata]:

@@ -29,8 +29,8 @@ class SimpleModel(nn.Module):
 class BaselineMemoryProfilingBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Baseline memory profiling - tracks usage without optimization."""
 
-    signature_equivalence_group = "ch13_memory_profiling_precision"
-    signature_equivalence_ignore_fields = ("precision_flags",)
+    signature_equivalence_group = "ch13_memory_profiling_checkpointing"
+    signature_equivalence_ignore_fields: tuple[str, ...] = ()
     
     def __init__(self):
         super().__init__()
@@ -54,6 +54,7 @@ class BaselineMemoryProfilingBenchmark(VerificationPayloadMixin, BaseBenchmark):
     
     def setup(self) -> None:
         torch.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
         torch.cuda.reset_peak_memory_stats()
         
         self.model = SimpleModel(hidden_dim=self.hidden_dim).to(self.device).train()
@@ -110,13 +111,12 @@ class BaselineMemoryProfilingBenchmark(VerificationPayloadMixin, BaseBenchmark):
         return self._workload
     
     def get_custom_metrics(self) -> Optional[dict]:
-        """Return domain-specific metrics using standardized helper."""
-        from core.benchmark.metrics import compute_precision_metrics
-        return compute_precision_metrics(
-            fp32_time_ms=getattr(self, '_last_elapsed_ms', None),
-            reduced_precision_time_ms=None,
-            precision_type="fp8",
-        )
+        return {
+            "memory.peak_allocated_mb": float(self.peak_memory_mb),
+            "memory.gradient_checkpointing": 0.0,
+            "memory.cuda_graph_replay": 0.0,
+            "memory.compute_dtype_fp32": 1.0,
+        }
 
     def validate_result(self) -> Optional[str]:
         if self.model is None:

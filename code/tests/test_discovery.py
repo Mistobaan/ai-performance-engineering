@@ -178,7 +178,7 @@ class TestPythonBenchmarkDiscovery:
         assert "distributed" not in names
 
     def test_discover_benchmarks_ch06_hides_duplicate_add_aliases(self):
-        """Chapter 6 should expose only the book-aligned add targets."""
+        """Chapter 6 should expose only the canonical add targets."""
         ch06_dir = repo_root / "ch06"
         if not ch06_dir.exists():
             pytest.skip("ch06 directory not found")
@@ -186,10 +186,25 @@ class TestPythonBenchmarkDiscovery:
         pairs = discover_benchmarks(ch06_dir)
         names = {example_name for _, _, example_name in pairs}
 
-        assert "add_tensors" in names
-        assert "add_tensors_cuda" in names
-        assert "add" not in names
-        assert "add_cuda" not in names
+        assert "add" in names
+        assert "add_cuda" in names
+        assert "add_tensors" not in names
+        assert "add_tensors_cuda" not in names
+        assert "add_cuda_parallel" not in names
+
+    def test_discover_benchmarks_suppresses_add_cuda_parallel_variant_alias(self, tmp_path):
+        """The canonical add_cuda target should not surface a parallel alias target."""
+        chapter_dir = tmp_path / "ch06"
+        chapter_dir.mkdir()
+
+        (chapter_dir / "baseline_add_cuda.py").write_text(_DUMMY_BENCH_SOURCE)
+        (chapter_dir / "optimized_add_cuda_parallel.py").write_text(_DUMMY_BENCH_SOURCE)
+
+        pairs = discover_benchmarks(chapter_dir)
+        names = {example_name for _, _, example_name in pairs}
+
+        assert "add_cuda" in names
+        assert "add_cuda_parallel" not in names
 
     def test_discover_benchmarks_ch14_hides_auxiliary_bench_variants(self):
         """Chapter 14 should expose only canonical paired benchmark targets."""

@@ -113,9 +113,8 @@ class OptimizedFP8PadInnerBenchmark(VerificationPayloadMixin, BaseBenchmark):
             raise RuntimeError("Verification input not initialized")
         with self._nvtx_range("optimized_precisionfp8_pad_inner"):
             with torch.no_grad():
-                _ = self.model(self.inputs_fp16)
-                verify_out = self.model(self._verify_input_fp16)
-                self.output = verify_out.detach().float().clone()
+                benchmark_out = self.model(self.inputs_fp16)
+                self.output = benchmark_out.detach().float().clone()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 
@@ -165,4 +164,3 @@ class OptimizedFP8PadInnerBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
 def get_benchmark() -> BaseBenchmark:
     return OptimizedFP8PadInnerBenchmark()
-

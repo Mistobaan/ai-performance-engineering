@@ -1,9 +1,7 @@
-"""baseline_matmul_pytorch.py - PyTorch matmul baseline (baseline).
+"""baseline_matmul_pytorch.py - Eager PyTorch matmul baseline.
 
-Standard PyTorch matrix multiplication without CUTLASS optimization.
-Good baseline but can be optimized with specialized GEMM kernels.
-
-Implements BaseBenchmark for harness integration.
+Uses the same FP16 compute dtype as the optimized benchmark so the comparison
+isolates compilation/fusion rather than a precision change.
 """
 
 from __future__ import annotations
@@ -51,7 +49,7 @@ class BaselineMatmulPyTorchBenchmark(VerificationPayloadMixin, BaseBenchmark):
             tokens_per_iteration=float(tokens),
         )
         # Register workload metadata at init time for compliance check
-        bytes_per_iter = (self.m * self.k + self.k * self.n + self.m * self.n * 3) * 4
+        bytes_per_iter = (self.m * self.k + self.k * self.n + self.m * self.n * 3) * 2
         self.register_workload_metadata(
             requests_per_iteration=1.0,
             tokens_per_iteration=float(tokens),
@@ -63,12 +61,11 @@ class BaselineMatmulPyTorchBenchmark(VerificationPayloadMixin, BaseBenchmark):
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
         
-        # Standard PyTorch matmul
-        self.A = torch.randn(self.m, self.k, device=self.device, dtype=torch.float32)
-        self.B = torch.randn(self.k, self.n, device=self.device, dtype=torch.float32)
-        self.C = torch.empty(self.m, self.n, device=self.device, dtype=torch.float32)
-        self.bias = torch.randn(self.m, self.n, device=self.device, dtype=torch.float32)
-        self.residual = torch.randn(self.m, self.n, device=self.device, dtype=torch.float32)
+        self.A = torch.randn(self.m, self.k, device=self.device, dtype=torch.float16)
+        self.B = torch.randn(self.k, self.n, device=self.device, dtype=torch.float16)
+        self.C = torch.empty(self.m, self.n, device=self.device, dtype=torch.float16)
+        self.bias = torch.randn(self.m, self.n, device=self.device, dtype=torch.float16)
+        self.residual = torch.randn(self.m, self.n, device=self.device, dtype=torch.float16)
         
         # Warmup
         out = torch.matmul(self.A, self.B)
@@ -92,7 +89,7 @@ class BaselineMatmulPyTorchBenchmark(VerificationPayloadMixin, BaseBenchmark):
             batch_size=self.m,
             parameter_count=0,
             precision_flags={
-                "fp16": False,
+                "fp16": True,
                 "bf16": False,
                 "tf32": torch.backends.cuda.matmul.allow_tf32,
             },
@@ -119,7 +116,7 @@ class BaselineMatmulPyTorchBenchmark(VerificationPayloadMixin, BaseBenchmark):
         return compute_precision_metrics(
             fp32_time_ms=getattr(self, '_last_elapsed_ms', None),
             reduced_precision_time_ms=None,
-            precision_type="fp8",
+            precision_type="fp16",
         )
 
     def validate_result(self) -> Optional[str]:

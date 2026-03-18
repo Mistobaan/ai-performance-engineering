@@ -825,7 +825,7 @@ ENTRIES["labs/README.md"] = Entry(
         "Point contributors toward the repo's expected lab quality bar.",
     ],
     contents=[
-        ("`labs/block_scaling`, `labs/blackwell_matmul`, `labs/flashattention4`, `labs/persistent_decode`", "Benchmark-pair labs with strong kernel/perf narratives and artifact-backed measured deltas."),
+        ("`labs/block_scaling`, `labs/blackwell_matmul`, `labs/flashattention4`, `labs/persistent_decode`, `labs/training_hotpath`", "Benchmark-pair labs with strong kernel/perf narratives and artifact-backed measured deltas."),
         ("`labs/decode_optimization`, `labs/kv_optimization`, `labs/moe_cuda`, `labs/moe_optimization_journey`", "Serving-path and MoE labs where the benchmark pair is part of a broader optimization story."),
         ("`labs/nanochat_fullstack`, `labs/python_concurrency`, `labs/vllm-deepseek-tuning`", "Larger workflow-oriented labs that need a richer doc model than a simple pair benchmark."),
         ("`labs/nvfp4_*`", "Low-precision kernel labs where verification discipline matters as much as the timing win."),
@@ -879,6 +879,7 @@ ENTRIES["labs/README.md"] = Entry(
             | `labs/python_concurrency/` | Python concurrency control-plane playbook (`asyncio`, retries, idempotency, hybrid pipelines) | ch03, ch11, ch16 |
             | `labs/real_world_models/` | Real-world model optimization playbook | ch20 |
             | `labs/speculative_decode/` | Speculative decoding | ch15, ch18 |
+            | `labs/training_hotpath/` | Training hot-path supporting examples for reduction fusion and padding-aware projections | ch12, ch14 |
             | `labs/trtllm_phi_3_5_moe/` | TensorRT-LLM Phi-3.5-MoE comparison | ch16, ch18 |
             | `labs/train_distributed/` | Distributed training workflows | ch03, ch04 |
             | `labs/uma_memory/` | UMA / unified memory diagnostics | ch02, ch07 |
@@ -1515,8 +1516,7 @@ ENTRIES["ch06"] = chapter_entry(
         "Validate unified memory and allocator tuning on Blackwell GPUs.",
     ],
     contents=[
-        ("`my_first_kernel.cu`, `simple_kernel.cu`, `baseline_add_cuda.cu`, `optimized_add_cuda_parallel.cu`, `baseline_add.py`, `optimized_add.py`, `baseline_add_cuda.py`, `optimized_add_cuda_parallel.py`", "Hello-world kernels plus Python wrappers for verifying CUDA build chains and launch parameters."),
-        ("`baseline_add_tensors_cuda.cu`, `optimized_add_tensors_cuda.cu`, `baseline_add_tensors.py`, `optimized_add_tensors.py`, `baseline_add_tensors_cuda.py`, `optimized_add_tensors_cuda.py`", "Tensor-oriented adds with automatic pinned-memory staging and correctness checks."),
+        ("`my_first_kernel.cu`, `simple_kernel.cu`, `baseline_add_cuda.cu`, `optimized_add_cuda_parallel.cu`, `baseline_add.py`, `optimized_add.py`, `baseline_add_cuda.py`, `optimized_add_cuda_parallel.py`", "Hello-world kernels plus Python wrappers for the canonical `add` / `add_cuda` targets and the underlying CUDA launch-path verification."),
         ("`baseline_attention_ilp.py`, `optimized_attention_ilp.py`, `baseline_gemm_ilp.py`, `optimized_gemm_ilp.py`, `ilp_low_occupancy_vec4_demo.cu`, `ilp_extreme_low_occupancy_vec4_demo.cu`", "Instruction-level parallelism studies that keep the math fixed while changing independent chains per thread, register pressure, and vector width."),
         ("`baseline_bank_conflicts.cu`, `optimized_bank_conflicts.cu`, `baseline_launch_bounds*.{py,cu}`, `optimized_launch_bounds*.{py,cu}`", "Bank conflict and launch-bound exercises to highlight shared memory layouts and CTA sizing."),
         ("`baseline_autotuning.py`, `optimized_autotuning.py`, `memory_pool_tuning.cu`, `stream_ordered_allocator/`", "Autotuning harness plus allocator experiments for controlling fragmentation and stream ordering."),
@@ -1530,6 +1530,7 @@ ENTRIES["ch06"] = chapter_entry(
     ],
     notes=[
         "`arch_config.py` forces SM-specific compile flags (e.g., disabling pipelines on unsupported GPUs) so targets fail gracefully on older hardware.",
+        "The canonical public add targets are `add` and `add_cuda`; the older add-tensors wrapper names were removed instead of kept as legacy aliases.",
         "`attention_ilp` is an attention-score preprocessing microbenchmark. It is intentionally not a fused SDPA or multi-stream overlap example.",
         "CUDA extensions in `cuda_extensions/` can be imported directly into notebooks for interactive prototyping.",
     ],
@@ -1966,7 +1967,7 @@ ENTRIES["ch11"] = chapter_entry(
     title="Chapter 11 - Streams & Concurrency",
     summary=dedent(
         """\
-        Explains how to overlap compute, memory, and communication on Blackwell using CUDA streams, ordered sequences, Hyper-Q, warp-specialized pipelines, and adaptive scheduling."""
+        Explains how to overlap compute, memory, and communication on Blackwell using CUDA streams, ordered sequences, Hyper-Q, warp-specialized pipelines, and adaptive scheduling. The README keeps the legacy target names tied to the actual copy+elementwise overlap workload and runtime-adaptive scheduling story instead of pretending every target is a generic multi-stream demo."""
     ),
     lead_sections=[
         MarkdownSection(
@@ -2060,6 +2061,7 @@ ENTRIES["ch11"] = chapter_entry(
         "Warp-specialized multistream kernels flag unsupported hardware (missing DSMEM) immediately, preventing silent fallbacks.",
     ],
     notes=[
+        "The README calls out the legacy target names explicitly so book-facing labels still point at the actual copy+elementwise overlap workload and runtime-adaptive scheduling pairs.",
         "`warp_specialized_triton.py` provides a Triton analogue for the CUDA concurrency demos so you can compare compiler-generated schedules.",
         "`kv_prefetch_pipeline_enhanced_demo.cu` builds on the DSMEM kernels bundled in this directory so you can study the entire pipeline locally.",
     ],
@@ -2167,6 +2169,7 @@ ENTRIES["ch12"] = chapter_entry(
     notes=[
         "`cuda_graphs_workload.cuh` holds reusable graph capture helpers when you want to wrap your own kernels.",
         "`helper_*.cu` files contain host/device glue for the dynamic-parallelism case studies-copy them when bootstrapping new experiments.",
+        "For a smaller supporting lab that keeps Chapter 12's CUDA Graph story primary while adding fused reduction and padding-aware projection examples, see `labs/training_hotpath`.",
     ],
 )
 
@@ -2175,7 +2178,7 @@ ENTRIES["ch13"] = chapter_entry(
     title="Chapter 13 - PyTorch Profiling & Memory Tuning",
     summary=dedent(
         """\
-        Focuses on PyTorch-centric optimizations: compiled autograd, memory profiling, FSDP/context/expert parallelism, and FP8/quantization workflows backed by the same harness infrastructure."""
+        Focuses on PyTorch-centric optimizations: compiled autograd, memory profiling, FSDP/context/expert parallelism, and FP8/quantization workflows backed by the same harness infrastructure. The chapter README is fairness-refreshed so canonical pairs stay separate from informational variants such as `torchao_quantization_compiled` and `kv_cache_naive_flash_blockwise`."""
     ),
     lead_sections=[
         MarkdownSection(
@@ -2263,7 +2266,7 @@ ENTRIES["ch13"] = chapter_entry(
         ("`baseline_expert_parallel_multigpu.py`, `optimized_expert_parallel_multigpu.py`, `expert_parallel_common.py`", "Expert-parallel all-to-all benchmarks contrasting per-iteration list allocations vs pre-allocated all_to_all_single."),
         ("`context_parallelism.py`, `fsdp_example.py`", "Context and FSDP sharding demos for scaling beyond a single GPU. (Tools; not benchmark targets.)"),
         ("`baseline_precisionfp8*.py`, `optimized_precisionfp8*.py`, `baseline_precisionmixed.py`, `optimized_precisionmixed.py`, `compiled_autograd.py`", "Precision-management suites covering Transformer Engine and compiled autograd recipes."),
-        ("`baseline_quantization.py`, `optimized_quantization.py`, `baseline_kv_cache_naive.py`, `optimized_kv_cache_naive.py`, `optimized_kv_cache_naive_pool.py`", "Quantization and KV-cache pipelines for inference/training memory savings."),
+        ("`baseline_quantization.py`, `optimized_quantization.py`, `baseline_kv_cache_naive.py`, `optimized_kv_cache_naive.py`, `optimized_kv_cache_naive_pool.py`", "Quantization and KV-cache pipelines for inference/training memory savings, including the quantization-only canonical pair and a token-by-token decode with naive concat cache versus paged cache allocation."),
         ("`compare.py`, `compare_perf.py`, `requirements.txt`, `expectations_{hardware_key}.json`, `workload_config.py`", "Harness entry, performance comparison helper, dependencies, and regression baselines."),
     ],
     validation=[
@@ -2274,6 +2277,7 @@ ENTRIES["ch13"] = chapter_entry(
     notes=[
         "`custom_allocator.py` contains a standalone torch allocator shim that can be re-used in other chapters when debugging fragmentation.",
         "`compiled_autograd.py` doubles as a tutorial on partial graph capture; the README here references it directly.",
+        "`torchao_quantization_compiled` and `kv_cache_naive_flash_blockwise` remain informational variants; the fairness-refreshed canonical pairs stay focused on quantization-only and token-by-token cache comparisons.",
     ],
 )
 
@@ -2378,6 +2382,7 @@ ENTRIES["ch14"] = chapter_entry(
     notes=[
         "`inspect_compiled_code.py` dumps Triton/PTX/Graph captures for any target; edit the helper to introspect new workloads.",
         "`requirements.txt` includes nightly Triton + PyTorch wheels to keep compiler features aligned with the CUDA 13 toolchain.",
+        "For repo-native supporting examples that fill the training hot-path gaps without changing this chapter's primary compile narrative, see `labs/training_hotpath`.",
     ],
 )
 
@@ -2837,11 +2842,11 @@ ENTRIES["ch18"] = chapter_entry(
 
                 | Target | Baseline | Optimized | Measured delta | What changed |
                 | --- | ---: | ---: | ---: | --- |
-                | `flexdecoding` | `161.596 ms` | `81.980 ms` | `1.97x` | optimized FlexDecoding path |
+                | `flexdecoding` | `161.596 ms` | `81.980 ms` | `1.97x` | baseline masks the full KV cache; optimized slices to the active decode window |
                 | `tensor_cores` | `3.805 ms` | `0.243 ms` | `15.65x` | tensor-core decode kernel |
                 | `rope_q_cache` | `106.429 ms` | `4.523 ms` | `23.53x` | cache-aware rope/Q-path reuse |
 
-                The chapter has a mix of "moderate but real" improvements and "big kernel-level" improvements. Treat those as different stories rather than averaging them together into one headline number."""
+                The chapter has a mix of "moderate but real" improvements and "big kernel-level" improvements. Treat those as different stories rather than averaging them together into one headline number. `flexdecoding` is the chapter-native work-reduction story: the baseline scores the full KV cache with a sliding-window mask, while the optimized path trims the decode step down to the active window before attention. Re-measure it on your hardware before treating the chapter numbers as a decision threshold."""
             ),
         ),
         MarkdownSection(
@@ -3503,7 +3508,7 @@ ENTRIES["labs/decode_optimization"] = lab_entry(
     contents=[
         ("`baseline_decode.py`, `optimized_decode_pinned.py`, `optimized_decode_streams.py`, `optimized_decode_compile.py`, `optimized_decode_graph.py`, `optimized_decode_graph_full.py`, `optimized_decode_ultimate.py`", "Serving-path decode variants that isolate host, stream, compile, and graph effects."),
         ("`baseline_decode_hf_cache.py`, `optimized_decode_hf_cache.py`", "Real HuggingFace decoder-loop comparison: dynamic cache + per-step EOS sync vs static cache + compiled decode + batched EOS polling."),
-        ("`baseline_decode_fp8.py`, `optimized_decode_fp8.py`, `baseline_decode_fp4.py`, `optimized_decode_fp4.py`", "Prefill-focused low-precision decode comparisons on hardware that supports them."),
+        ("`baseline_decode_fp8.py`, `optimized_decode_fp8.py`, `baseline_decode_fp4.py`, `optimized_decode_fp4.py`", "Prefill-focused low-precision decode comparisons on hardware that supports them, including the intentional BF16/nn.Linear versus FP8/Transformer Engine TELinear path."),
         ("`baseline_decode_warp_specialized.py`, `optimized_decode_warp_specialized.py`", "Warp-specialized decode path plus its eager correctness reference."),
         ("`baseline_decode_double_buffer_tma.py`, `optimized_decode_double_buffer_tma.py`, `decode_common.py`, `decode_multigpu_demo.py`", "CUDA double-buffer/TMA path, shared helpers, and the multi-GPU NVLink-C2C demo."),
     ],
@@ -3518,6 +3523,7 @@ ENTRIES["labs/decode_optimization"] = lab_entry(
         "All targets emit TTFT, TPOT mean, decode time, total time, and tokens/sec in `custom_metrics` for easy diffing.",
         "FP4 requires NVFP4-capable Blackwell hardware; unsupported platforms fail fast.",
         "The HF cache pair reproduces the main idea from Chaim Rand's token-generation optimization write-up while keeping the harness contract intact.",
+        "`decode_fp8` is intentionally a BF16/`nn.Linear` baseline versus FP8/Transformer Engine `TELinear`, because Transformer Engine is the supported FP8 linear path in this lab.",
     ],
 )
 
@@ -4082,6 +4088,110 @@ ENTRIES["labs/async_input_pipeline"] = lab_entry(
     ],
     notes=[
         "This is an end-to-end pipeline lab, so the value is in the timeline and total latency, not just kernel-local timing.",
+        "Keep this lab as the primary copy-stream overlap example. `labs/training_hotpath` reuses that concept by reference and only adds the missing reduction and padding-aware cases.",
+    ],
+)
+
+ENTRIES["labs/training_hotpath"] = lab_entry(
+    slug="labs/training_hotpath",
+    title="Lab - Training Hot-Path",
+    summary=dedent(
+        """\
+        Adds three small supporting examples for training-side bottlenecks that were missing from the main chapter flow: vectorized metric aggregation, fused CUDA reduction, and padding-aware projection work that skips padded rows without changing the chapter-primary stories in `ch12`, `ch14`, or `labs/async_input_pipeline`."""
+    ),
+    lead_sections=[
+        MarkdownSection(
+            "Problem",
+            dedent(
+                """\
+                Some training bottlenecks are too small and cross-cutting to deserve a chapter rewrite, but still matter in practice. This lab isolates three of them so they can be benchmarked honestly:
+
+                - scalar Python-side metric aggregation that should have been vectorized
+                - segmented reductions that should have been fused into one CUDA pass
+                - padded projection work that should only run on active tokens"""
+            ),
+        ),
+        MarkdownSection(
+            "Baseline Path",
+            dedent(
+                """\
+                - scalar or unfused reduction logic
+                - padded dense projection work over every token position
+                - simple reference paths that preserve correctness but spend work on overhead and padding"""
+            ),
+        ),
+        MarkdownSection(
+            "Optimized Path",
+            dedent(
+                """\
+                - tensor-vectorized metric aggregation
+                - a local CUDA extension for fused segmented abs-mean reduction
+                - packed-row projection kernels that only touch active rows before scattering results back into the padded layout"""
+            ),
+        ),
+        MarkdownSection(
+            "Measured Delta",
+            dedent(
+                """\
+                Strict `minimal` expectation-backed runs on the current `b200` hardware key produced the following deltas:
+
+                | Target | Baseline | Optimized | Measured delta |
+                | --- | ---: | ---: | ---: |
+                | `metric_reduction_vectorized` | `14.050 ms` | `0.158 ms` | `89.12x` faster |
+                | `metric_reduction_cuda` | `2.760 ms` | `0.050 ms` | `55.06x` faster |
+                | `padding_aware_transformer` | `2.919 ms` | `3.430 ms` | `0.85x` speed, `76.4%` lower peak memory |
+                """
+            ),
+        ),
+        MarkdownSection(
+            "Profiler Evidence",
+            dedent(
+                """\
+                ```bash
+                python -m cli.aisp bench run --targets labs/training_hotpath:metric_reduction_vectorized --profile deep_dive --single-gpu
+                python -m cli.aisp bench run --targets labs/training_hotpath:metric_reduction_cuda --profile deep_dive --single-gpu
+                python -m cli.aisp bench run --targets labs/training_hotpath:padding_aware_transformer --profile deep_dive --single-gpu
+                ```
+
+                Use the profile when you want to see the missing work directly:
+                - vectorized vs scalar host-side reduction behavior
+                - one fused CUDA reduction kernel instead of repeated segmented slicing
+                - active-row packing that reduces padded projection work"""
+            ),
+        ),
+        MarkdownSection(
+            "Repro Commands",
+            dedent(
+                """\
+                ```bash
+                python -m labs.training_hotpath.compare --example metric_reduction_vectorized
+                python -m cli.aisp bench list-targets --chapter labs/training_hotpath
+                python -m cli.aisp bench run --targets labs/training_hotpath --profile minimal
+                ```"""
+            ),
+        ),
+    ],
+    goals=[
+        "Benchmark vectorized training-side metric aggregation instead of leaving it as an unmeasured Python loop.",
+        "Show when a local CUDA fused reduction is worth the extension overhead.",
+        "Make padding-aware projection savings visible without changing the primary CUDA Graph or compiler chapter narratives.",
+    ],
+    contents=[
+        ("`baseline_metric_reduction_vectorized.py`, `optimized_metric_reduction_vectorized.py`", "Scalar per-output aggregation vs tensor-vectorized metric reduction."),
+        ("`baseline_metric_reduction_cuda.py`, `optimized_metric_reduction_cuda.py`", "Torch segmented reduction baseline vs fused CUDA extension."),
+        ("`baseline_padding_aware_transformer.py`, `optimized_padding_aware_transformer.py`", "Dense padded projections vs packed-row padding-aware projections."),
+        ("`training_hotpath_common.py`, `training_hotpath_extension.py`, `training_hotpath_kernels.cu`, `compare.py`", "Shared workloads, local extension loader, CUDA kernels, and a direct compare entrypoint."),
+        ("`expectations_{hardware_key}.json`", "Regression thresholds for the three supporting benchmark pairs."),
+    ],
+    validation=[
+        "`python -m cli.aisp bench list-targets --chapter labs/training_hotpath` should discover the three supporting benchmark pairs.",
+        "The optimized metric reduction targets should match their baselines numerically while flipping `metric_reduction.is_vectorized` or `metric_reduction.is_fused_cuda` in custom metrics.",
+        "The padding-aware target should preserve outputs while flipping `padding_aware.enabled` and reporting a non-trivial padded-token fraction.",
+    ],
+    notes=[
+        "Keep `ch14:model_compile_bf16` as the primary compile + BF16 training story.",
+        "Keep `ch12:cuda_graphs` as the primary CUDA Graph replay story.",
+        "Keep `labs/async_input_pipeline:async_input_pipeline` as the primary copy-stream overlap story.",
     ],
 )
 
@@ -5343,7 +5453,8 @@ ENTRIES["labs/fullstack_cluster"] = lab_entry(
                 """\
                 - optimized cluster GEMM variants
                 - tcgen05 route where available
-                - same harness contract and validation as the rest of the repo"""
+                - same harness contract and validation as the rest of the repo
+                - canonical hybrid-EP comparisons now keep the same default routing mode, with topology-aware routing available only through an explicit override"""
             ),
         ),
         MarkdownSection(
@@ -5407,6 +5518,7 @@ ENTRIES["labs/fullstack_cluster"] = lab_entry(
     notes=[
         "`gpu_requirements.py` reports the minimum GPU count, memory, and features for each scenario; consult it before scheduling runs.",
         "`capstone_extension.py` caches builds under `~/.cache/torch_extensions`; run `python cleanup.py --include-extensions` when switching CUDA versions.",
+        "Canonical hybrid-EP comparisons now keep the same default routing mode; use `--route-mode topology_aware` when you want that alternate behavior to be visible instead of relying on a silent default.",
     ],
 )
 

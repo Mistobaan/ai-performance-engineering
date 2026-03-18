@@ -142,13 +142,19 @@ class SlidingWindowCausalAttention(nn.Module):
         qkv = qkv.permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
         
-        if self._compiled_flex is not None and HAS_FLEX_ATTENTION:
+        if self._compiled_flex is None or not HAS_FLEX_ATTENTION:
+            raise RuntimeError(
+                "FAIL FAST: optimized_flex_attention_sparse requires FlexAttention kernels; "
+                "no SDPA fallback is allowed for this benchmark."
+            )
+        try:
             block_mask = self._get_block_mask(batch_size, seq_len, x.device)
             output = self._compiled_flex(q, k, v, block_mask=block_mask)
-        else:
-            output = F.scaled_dot_product_attention(
-                q, k, v, is_causal=True, dropout_p=self.dropout if self.training else 0.0
-            )
+        except Exception as exc:
+            raise RuntimeError(
+                "FAIL FAST: optimized_flex_attention_sparse could not build or execute the "
+                "FlexAttention block mask/kernels."
+            ) from exc
         
         output = output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.embed_dim)
         return self.out_proj(output)
@@ -171,8 +177,10 @@ def benchmark():
     print(f"Device: {torch.cuda.get_device_name()}")
     
     if not HAS_FLEX_ATTENTION:
-        print("\nFlexAttention requires PyTorch 2.5+")
-        print("Running SDPA comparison instead...")
+        raise RuntimeError(
+            "FAIL FAST: FlexAttention requires PyTorch 2.5+; no SDPA fallback is allowed "
+            "for optimized_flex_attention_sparse."
+        )
     
     # Config
     batch_size, num_heads, head_dim, seq_len = 2, 32, 128, 4096
@@ -246,6 +254,7 @@ class FlexAttentionSparseBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def __init__(self):
         super().__init__()
         self.attn = None
+        self.model = None
         self.x = None
         self.batch_size = 1
         self.num_heads = 16
@@ -280,6 +289,7 @@ class FlexAttentionSparseBenchmark(VerificationPayloadMixin, BaseBenchmark):
             num_heads=self.num_heads,
             window_size=self.window_size,
         ).to(self.device, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16)
+        self.model = self.attn
         self.parameter_count = sum(p.numel() for p in self.attn.parameters())
         
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
@@ -288,6 +298,8 @@ class FlexAttentionSparseBenchmark(VerificationPayloadMixin, BaseBenchmark):
             device=self.device,
             dtype=dtype,
         )
+
+        self.attn._get_block_mask(self.batch_size, self.seq_len, self.device)
         
         # Warmup
         for _ in range(3):
@@ -300,7 +312,7 @@ class FlexAttentionSparseBenchmark(VerificationPayloadMixin, BaseBenchmark):
         enable_nvtx = get_nvtx_enabled(config) if config else False
         with nvtx_range("optimized_flex_attention_sparse", enable=enable_nvtx):
             with torch.no_grad():
-                self.output = self.attn(self.x)
+                self.output = self.model(self.x)
         if self.output is None or self.x is None:
             raise RuntimeError("benchmark_fn() must produce output")
         self._payload_dtype = self.x.dtype
@@ -324,6 +336,7 @@ class FlexAttentionSparseBenchmark(VerificationPayloadMixin, BaseBenchmark):
     def teardown(self) -> None:
         """Teardown: Clean up resources."""
         self.attn = None
+        self.model = None
         self.x = None
         torch.cuda.empty_cache()
 
@@ -344,7 +357,7 @@ class FlexAttentionSparseBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
 
     def validate_result(self) -> Optional[str]:
-        if self.attn is None:
+        if self.model is None:
             return "Attention module not initialized"
         return None
 
@@ -352,5 +365,3 @@ class FlexAttentionSparseBenchmark(VerificationPayloadMixin, BaseBenchmark):
 def get_benchmark() -> BaseBenchmark:
     """Factory function for benchmark discovery."""
     return FlexAttentionSparseBenchmark()
-
-

@@ -33,6 +33,7 @@ class OptimizedBankConflictsBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self._extension = load_bank_conflicts_extension()
         
         torch.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
         self.input = torch.randn(self.N, device=self.device, dtype=torch.float32)
         self.output = None
         self._output_buffer = torch.empty_like(self.input)

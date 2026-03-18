@@ -115,7 +115,7 @@ class OptimizedFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 "fp8": False,
                 "tf32": torch.backends.cuda.matmul.allow_tf32,
             },
-            output_tolerance=(0.5, 5.0),
+            output_tolerance=(0.1, 1.0),
         )
 
     
@@ -157,5 +157,4 @@ class OptimizedFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
 def get_benchmark() -> BaseBenchmark:
     """Factory function for benchmark discovery."""
     return OptimizedFlexAttentionBenchmark()
-
 

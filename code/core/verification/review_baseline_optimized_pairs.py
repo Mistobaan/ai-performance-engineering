@@ -12,7 +12,9 @@ Checks for:
 
 from __future__ import annotations
 
+import argparse
 import ast
+from collections import Counter
 import re
 import sys
 from pathlib import Path
@@ -325,6 +327,276 @@ def extract_timed_path_sync_count(content: str) -> int:
     return total
 
 
+def _merge_seed_info(*seed_infos: Dict[str, Tuple[int, ...]]) -> Dict[str, Tuple[int, ...]]:
+    manual: Set[int] = set()
+    cuda: Set[int] = set()
+    for seed_info in seed_infos:
+        manual.update(seed_info.get("manual", ()))
+        cuda.update(seed_info.get("cuda", ()))
+    return {
+        "manual": tuple(sorted(manual)),
+        "cuda": tuple(sorted(cuda)),
+    }
+
+
+def _seed_info_from_content(content: str) -> Dict[str, Tuple[int, ...]]:
+    manual = tuple(sorted({int(value) for value in re.findall(r"torch\.manual_seed\((\d+)\)", content)}))
+    cuda = tuple(sorted({int(value) for value in re.findall(r"torch\.cuda\.manual_seed_all\((\d+)\)", content)}))
+    return {"manual": manual, "cuda": cuda}
+
+
+def _resolve_local_module_path(importing_file: Path, module: Optional[str], level: int) -> Optional[Path]:
+    if level > 0:
+        base_dir = importing_file.parent
+        for _ in range(level - 1):
+            base_dir = base_dir.parent
+        search_roots = [base_dir]
+    else:
+        search_roots = [REPO_ROOT, importing_file.parent]
+
+    rel_module = Path(*module.split(".")) if module else Path()
+    for root in search_roots:
+        candidates = []
+        if rel_module.parts:
+            candidates.append((root / rel_module).with_suffix(".py"))
+            candidates.append(root / rel_module / "__init__.py")
+        else:
+            candidates.append(root / "__init__.py")
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate.resolve()
+    return None
+
+
+def _extract_local_import_map(file_path: Path, tree: ast.AST) -> Dict[str, Path]:
+    import_map: Dict[str, Path] = {}
+    for node in getattr(tree, "body", []):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        module_path = _resolve_local_module_path(file_path, node.module, node.level)
+        if module_path is None:
+            continue
+        for alias in node.names:
+            if alias.name == "*":
+                continue
+            import_map[alias.asname or alias.name] = module_path
+    return import_map
+
+
+def extract_seed_info(
+    file_path: Path,
+    content: str,
+    *,
+    _visited: Optional[Set[Path]] = None,
+) -> Dict[str, Tuple[int, ...]]:
+    visited = _visited or set()
+    resolved_path = file_path.resolve()
+    if resolved_path in visited:
+        return {"manual": (), "cuda": ()}
+    visited.add(resolved_path)
+
+    seed_info = _seed_info_from_content(content)
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return seed_info
+
+    import_map = _extract_local_import_map(file_path, tree)
+    inherited_infos: List[Dict[str, Tuple[int, ...]]] = []
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for base in node.bases:
+            base_name: Optional[str] = None
+            if isinstance(base, ast.Name):
+                base_name = base.id
+            elif isinstance(base, ast.Attribute):
+                base_name = base.attr
+            if not base_name:
+                continue
+            imported_path = import_map.get(base_name)
+            if imported_path is None:
+                continue
+            try:
+                imported_content = imported_path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            inherited_infos.append(
+                extract_seed_info(imported_path, imported_content, _visited=visited)
+            )
+
+    return _merge_seed_info(seed_info, *inherited_infos)
+
+
+def _eval_literal_expr(node: ast.AST) -> Optional[object]:
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float, bool, str)):
+            return node.value
+        return None
+    if isinstance(node, ast.UnaryOp):
+        operand = _eval_literal_expr(node.operand)
+        if not isinstance(operand, (int, float)):
+            return None
+        if isinstance(node.op, ast.USub):
+            return -operand
+        if isinstance(node.op, ast.UAdd):
+            return operand
+    return None
+
+
+def extract_benchmark_config_from_source(content: str) -> Optional[Dict[str, object]]:
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return None
+
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for item in node.body:
+            if not isinstance(item, ast.FunctionDef) or item.name != "get_config":
+                continue
+            for child in ast.walk(item):
+                if not isinstance(child, ast.Call):
+                    continue
+                if not isinstance(child.func, ast.Name) or child.func.id != "BenchmarkConfig":
+                    continue
+                config: Dict[str, object] = {}
+                for kw in child.keywords:
+                    if kw.arg is None:
+                        continue
+                    value = _eval_literal_expr(kw.value)
+                    if value is not None:
+                        config[kw.arg] = value
+                return config or None
+    return None
+
+
+_DTYPE_PATTERN = re.compile(r"torch\.(float16|float32|bfloat16|int8)")
+
+
+def extract_primary_dtype(content: str) -> Optional[str]:
+    preamble = content.split("def capture_verification_payload", 1)[0]
+    matches = _DTYPE_PATTERN.findall(preamble)
+    if not matches:
+        return None
+    return Counter(matches).most_common(1)[0][0]
+
+
+class _TimedPathFeatureAnalyzer(ast.NodeVisitor):
+    def __init__(self, methods: Dict[str, ast.FunctionDef]):
+        self.methods = methods
+        self.visited_methods: Set[str] = set()
+        self.clone_calls = 0
+        self.dtype_casts = 0
+        self.model_calls = 0
+
+    def analyze(self, method_name: str) -> Dict[str, int]:
+        self._visit_method(method_name)
+        return {
+            "clone_calls": self.clone_calls,
+            "dtype_casts": self.dtype_casts,
+            "model_calls": self.model_calls,
+        }
+
+    def _visit_method(self, method_name: str) -> None:
+        if method_name in self.visited_methods:
+            return
+        func_def = self.methods.get(method_name)
+        if func_def is None:
+            return
+        self.visited_methods.add(method_name)
+        for stmt in func_def.body:
+            self.visit(stmt)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        helper_name = _get_self_method_name(node)
+        if helper_name is not None and helper_name in self.methods:
+            self._visit_method(helper_name)
+
+        if isinstance(node.func, ast.Attribute):
+            if node.func.attr == "clone":
+                self.clone_calls += 1
+            if node.func.attr == "to" and any(kw.arg == "dtype" for kw in node.keywords):
+                self.dtype_casts += 1
+            if node.func.attr in {"float", "half", "bfloat16"}:
+                self.dtype_casts += 1
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "self" and node.func.attr in {"model", "compiled_model"}:
+                self.model_calls += 1
+        self.generic_visit(node)
+
+
+def extract_hot_path_features(content: str) -> Dict[str, int]:
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return {"clone_calls": 0, "dtype_casts": 0, "model_calls": 0}
+
+    total = {"clone_calls": 0, "dtype_casts": 0, "model_calls": 0}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        methods = {item.name: item for item in node.body if isinstance(item, ast.FunctionDef)}
+        if "benchmark_fn" not in methods:
+            continue
+        analyzer = _TimedPathFeatureAnalyzer(methods)
+        features = analyzer.analyze("benchmark_fn")
+        for key, value in features.items():
+            total[key] += value
+    return total
+
+
+def extract_algorithmic_markers(content: str) -> Dict[str, object]:
+    benchmark_prefix = content.split("def capture_verification_payload", 1)[0]
+    route_modes = sorted(set(match for match in re.findall(r'route_mode\s*=\s*"([^"]+)"', content) if match))
+    return {
+        "route_modes": route_modes,
+        "blockwise_decode": bool(re.search(r"range\s*\(\s*0\s*,\s*seq_len\s*,", benchmark_prefix)),
+    }
+
+
+def _uses_cuda_graphs(content: str) -> bool:
+    return any(
+        marker in content
+        for marker in ("torch.cuda.CUDAGraph", ".graph.replay()", "torch.cuda.graph(")
+    )
+
+
+def _calls_super_setup(content: str) -> bool:
+    return "super().setup()" in content
+
+
+def _is_intentional_precision_target(baseline_path: Path, opt_path: Path) -> bool:
+    keywords = ("precisionfp", "quantization", "fp8", "fp4", "mixed")
+    names = (baseline_path.stem, opt_path.stem)
+    return any(any(keyword in name for keyword in keywords) for name in names)
+
+
+def _benchmark_example_name(path: Path) -> str:
+    stem = path.stem
+    for prefix in ("baseline_", "optimized_"):
+        if stem.startswith(prefix):
+            return stem[len(prefix):]
+    return stem
+
+
+def _benchmark_scope_key(path: Path) -> str:
+    try:
+        return path.parent.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return ""
+
+
+def _is_informational_benchmark(path: Path) -> bool:
+    try:
+        from core.harness.run_benchmarks import INFORMATIONAL_BENCHMARKS
+    except Exception:
+        return False
+    scope = _benchmark_scope_key(path)
+    example_name = _benchmark_example_name(path)
+    return example_name in INFORMATIONAL_BENCHMARKS.get(scope, set())
+
+
 def dedupe_issues(issues: List[Dict[str, str]]) -> List[Dict[str, str]]:
     deduped: List[Dict[str, str]] = []
     seen: Set[Tuple[str, str, str]] = set()
@@ -456,6 +728,9 @@ class CodeReviewer:
                     "message": f"Could not read optimized: {e}"
                 })
                 continue
+
+            if _is_informational_benchmark(opt_path):
+                continue
             
             # Check for declared workload mismatches only when we can prove them.
             baseline_workload = self._extract_workload_info(baseline_content)
@@ -483,6 +758,87 @@ class CodeReviewer:
                     "type": "sync_mismatch",
                     "severity": "low",
                     "message": f"Optimized has more synchronizations ({opt_syncs} vs {baseline_syncs}) - may be unfair"
+                })
+
+            baseline_seed = extract_seed_info(baseline_path, baseline_content)
+            opt_seed = extract_seed_info(opt_path, opt_content)
+            if baseline_seed != opt_seed and not (_calls_super_setup(baseline_content) or _calls_super_setup(opt_content)):
+                pair_issues.append({
+                    "file": f"{baseline_path} vs {opt_path}",
+                    "type": "seed_mismatch",
+                    "severity": "high",
+                    "message": f"Seed setup differs: baseline={baseline_seed}, optimized={opt_seed}",
+                })
+
+            baseline_config = extract_benchmark_config_from_source(baseline_content) or {}
+            opt_config = extract_benchmark_config_from_source(opt_content) or {}
+            config_keys = {
+                "iterations",
+                "warmup",
+                "adaptive_iterations",
+                "enable_profiling",
+                "enable_ncu",
+                "enable_nsys",
+            }
+            config_diffs = {
+                key: (baseline_config.get(key), opt_config.get(key))
+                for key in config_keys
+                if baseline_config.get(key) != opt_config.get(key)
+                and key in baseline_config
+                and key in opt_config
+            }
+            if config_diffs:
+                pair_issues.append({
+                    "file": f"{baseline_path} vs {opt_path}",
+                    "type": "config_mismatch",
+                    "severity": "high",
+                    "message": f"BenchmarkConfig differs: {config_diffs}",
+                })
+
+            baseline_dtype = extract_primary_dtype(baseline_content)
+            opt_dtype = extract_primary_dtype(opt_content)
+            if (
+                baseline_dtype
+                and opt_dtype
+                and baseline_dtype != opt_dtype
+                and not _is_intentional_precision_target(baseline_path, opt_path)
+                and not (_calls_super_setup(baseline_content) or _calls_super_setup(opt_content))
+            ):
+                pair_issues.append({
+                    "file": f"{baseline_path} vs {opt_path}",
+                    "type": "precision_mismatch",
+                    "severity": "high",
+                    "message": f"Primary compute dtype differs: baseline=torch.{baseline_dtype}, optimized=torch.{opt_dtype}",
+                })
+
+            baseline_hot = extract_hot_path_features(baseline_content)
+            opt_hot = extract_hot_path_features(opt_content)
+            hot_diffs = {
+                key: (baseline_hot[key], opt_hot[key])
+                for key in baseline_hot
+                if opt_hot[key] > baseline_hot[key]
+            }
+            if hot_diffs and not (_uses_cuda_graphs(baseline_content) or _uses_cuda_graphs(opt_content)):
+                pair_issues.append({
+                    "file": f"{baseline_path} vs {opt_path}",
+                    "type": "hot_path_extra_work",
+                    "severity": "medium",
+                    "message": f"Hot-path operations differ: {hot_diffs}",
+                })
+
+            baseline_algo = extract_algorithmic_markers(baseline_content)
+            opt_algo = extract_algorithmic_markers(opt_content)
+            algo_diffs = {
+                key: (baseline_algo[key], opt_algo[key])
+                for key in baseline_algo
+                if baseline_algo[key] != opt_algo[key]
+            }
+            if algo_diffs:
+                pair_issues.append({
+                    "file": f"{baseline_path} vs {opt_path}",
+                    "type": "algorithmic_pair_mismatch",
+                    "severity": "high",
+                    "message": f"Pair semantics differ beyond execution strategy: {algo_diffs}",
                 })
         
         return pair_issues
@@ -554,11 +910,46 @@ class CodeReviewer:
         return extract_timed_path_sync_count(content)
 
 
-def main():
+def _discover_pairs_for_review(chapters: Optional[List[str]]) -> List[Tuple[Path, List[Path], str]]:
+    requested_chapters = chapters or ["all"]
+    all_pairs: List[Tuple[Path, List[Path], str]] = []
+    seen: Set[Tuple[Path, Tuple[Path, ...], str]] = set()
+
+    for chapter in requested_chapters:
+        for baseline_path, optimized_paths, example_name in discover_benchmark_pairs(REPO_ROOT, chapter):
+            key = (
+                baseline_path.resolve(),
+                tuple(path.resolve() for path in optimized_paths),
+                example_name,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            all_pairs.append((baseline_path, optimized_paths, example_name))
+
+    return all_pairs
+
+
+def main(argv: Optional[List[str]] = None) -> int:
     """Main review function."""
+    parser = argparse.ArgumentParser(
+        description="Review baseline/optimized benchmark pairs for fairness and questionable practices.",
+    )
+    parser.add_argument(
+        "--chapter",
+        action="append",
+        dest="chapters",
+        help="Limit the review to a chapter or lab path (repeatable). Example: --chapter ch12 --chapter labs/fullstack_cluster",
+    )
+    args = parser.parse_args(argv)
+
     print("Discovering benchmark pairs...")
-    pairs = discover_benchmark_pairs(REPO_ROOT, "all")
+    pairs = _discover_pairs_for_review(args.chapters)
     print(f"Found {len(pairs)} pairs to review\n")
+
+    if not pairs:
+        print("No benchmark pairs found for the requested scope.")
+        return 1
     
     reviewer = CodeReviewer()
     all_issues = []

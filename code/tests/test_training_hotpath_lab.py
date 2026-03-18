@@ -1,0 +1,169 @@
+"""Tests for the training-hotpath supporting lab."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+import torch
+
+from core.discovery import discover_benchmarks
+from core.harness.benchmark_harness import BaseBenchmark
+from labs.training_hotpath.training_hotpath_common import (
+    MetricReductionCudaBenchmark,
+    MetricReductionVectorizedBenchmark,
+    PaddingAwareTransformerBenchmark,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+LAB_DIR = REPO_ROOT / "labs" / "training_hotpath"
+
+
+def _load_module(module_path: Path):
+    spec = importlib.util.spec_from_file_location(module_path.stem, module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_benchmark_once(bench: BaseBenchmark) -> tuple[torch.Tensor, dict]:
+    bench.setup()
+    try:
+        bench.benchmark_fn()
+        bench.capture_verification_payload()
+        result = getattr(bench, "output", None)
+        metrics = bench.get_custom_metrics()
+        assert isinstance(result, torch.Tensor)
+        assert isinstance(metrics, dict)
+        return result.detach().cpu(), metrics
+    finally:
+        bench.teardown()
+
+
+def test_training_hotpath_discovery_finds_all_three_pairs() -> None:
+    pairs = discover_benchmarks(LAB_DIR)
+    discovered = {example_name for _, _, example_name in pairs}
+    assert discovered == {
+        "metric_reduction_vectorized",
+        "metric_reduction_cuda",
+        "padding_aware_transformer",
+    }
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "labs/training_hotpath/baseline_metric_reduction_vectorized.py",
+        "labs/training_hotpath/optimized_metric_reduction_vectorized.py",
+        "labs/training_hotpath/baseline_metric_reduction_cuda.py",
+        "labs/training_hotpath/optimized_metric_reduction_cuda.py",
+        "labs/training_hotpath/baseline_padding_aware_transformer.py",
+        "labs/training_hotpath/optimized_padding_aware_transformer.py",
+    ],
+)
+def test_training_hotpath_wrappers_expose_get_benchmark(relative_path: str) -> None:
+    module_path = REPO_ROOT / relative_path
+    module = _load_module(module_path)
+    bench = module.get_benchmark()
+    assert isinstance(bench, BaseBenchmark)
+    assert getattr(bench, "_module_file_override", None) == str(module_path)
+    assert getattr(bench, "_factory_name_override", None) == "get_benchmark"
+
+
+@pytest.mark.skipif(torch.cuda.is_available(), reason="CPU-only guard only matters without CUDA")
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: MetricReductionVectorizedBenchmark(optimized=False, label="baseline_metric_reduction_vectorized_test"),
+        lambda: MetricReductionCudaBenchmark(optimized=True, label="optimized_metric_reduction_cuda_test"),
+        lambda: PaddingAwareTransformerBenchmark(optimized=True, label="optimized_padding_aware_transformer_test"),
+    ],
+)
+def test_training_hotpath_setup_requires_cuda(factory) -> None:
+    bench = factory()
+    with pytest.raises(RuntimeError, match="require CUDA"):
+        bench.setup()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required for training-hotpath lab parity checks")
+def test_metric_reduction_vectorized_pair_matches_output_and_metrics() -> None:
+    baseline = MetricReductionVectorizedBenchmark(
+        optimized=False,
+        label="baseline_metric_reduction_vectorized_test",
+    )
+    optimized = MetricReductionVectorizedBenchmark(
+        optimized=True,
+        label="optimized_metric_reduction_vectorized_test",
+    )
+    overrides = ["--batch-size", "4", "--max-num-tokens", "64", "--responders", "32"]
+    baseline.apply_target_overrides(overrides)
+    optimized.apply_target_overrides(overrides)
+
+    baseline_output, baseline_metrics = _run_benchmark_once(baseline)
+    optimized_output, optimized_metrics = _run_benchmark_once(optimized)
+
+    assert torch.allclose(baseline_output, optimized_output, atol=1e-4, rtol=1e-4)
+    assert baseline_metrics["metric_reduction.is_vectorized"] == 0.0
+    assert optimized_metrics["metric_reduction.is_vectorized"] == 1.0
+    assert baseline_metrics["metric_reduction.uses_cuda_extension"] == 0.0
+    assert optimized_metrics["metric_reduction.uses_cuda_extension"] == 0.0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required for training-hotpath lab parity checks")
+def test_metric_reduction_cuda_pair_matches_output_and_metrics() -> None:
+    baseline = MetricReductionCudaBenchmark(
+        optimized=False,
+        label="baseline_metric_reduction_cuda_test",
+    )
+    optimized = MetricReductionCudaBenchmark(
+        optimized=True,
+        label="optimized_metric_reduction_cuda_test",
+    )
+    overrides = ["--num-segments", "8", "--min-segment-length", "256", "--max-segment-length", "512"]
+    baseline.apply_target_overrides(overrides)
+    optimized.apply_target_overrides(overrides)
+
+    baseline_output, baseline_metrics = _run_benchmark_once(baseline)
+    optimized_output, optimized_metrics = _run_benchmark_once(optimized)
+
+    assert torch.allclose(baseline_output, optimized_output, atol=1e-5, rtol=1e-5)
+    assert baseline_metrics["metric_reduction.is_fused_cuda"] == 0.0
+    assert optimized_metrics["metric_reduction.is_fused_cuda"] == 1.0
+    assert baseline_metrics["metric_reduction.uses_cuda_extension"] == 0.0
+    assert optimized_metrics["metric_reduction.uses_cuda_extension"] == 1.0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required for training-hotpath lab parity checks")
+def test_padding_aware_transformer_pair_matches_output_and_metrics() -> None:
+    baseline = PaddingAwareTransformerBenchmark(
+        optimized=False,
+        label="baseline_padding_aware_transformer_test",
+    )
+    optimized = PaddingAwareTransformerBenchmark(
+        optimized=True,
+        label="optimized_padding_aware_transformer_test",
+    )
+    overrides = [
+        "--batch-size", "2",
+        "--max-num-tokens", "64",
+        "--min-num-tokens", "8",
+        "--input-size", "32",
+        "--hidden-size", "64",
+        "--projection-size", "128",
+        "--num-heads", "4",
+        "--num-blocks", "2",
+        "--output-size", "32",
+    ]
+    baseline.apply_target_overrides(overrides)
+    optimized.apply_target_overrides(overrides)
+
+    baseline_output, baseline_metrics = _run_benchmark_once(baseline)
+    optimized_output, optimized_metrics = _run_benchmark_once(optimized)
+
+    assert torch.allclose(baseline_output, optimized_output, atol=1e-5, rtol=1e-5)
+    assert baseline_metrics["padding_aware.enabled"] == 0.0
+    assert optimized_metrics["padding_aware.enabled"] == 1.0
+    assert baseline_metrics["padding_aware.uses_cuda_extension"] == 0.0
+    assert optimized_metrics["padding_aware.uses_cuda_extension"] == 1.0

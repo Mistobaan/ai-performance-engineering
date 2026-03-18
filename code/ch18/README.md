@@ -21,11 +21,11 @@ Representative validated results from `artifacts/runs/20260303_163946__bench__pr
 
 | Target | Baseline | Optimized | Measured delta | What changed |
 | --- | ---: | ---: | ---: | --- |
-| `flexdecoding` | `161.596 ms` | `81.980 ms` | `1.97x` | optimized FlexDecoding path |
+| `flexdecoding` | `161.596 ms` | `81.980 ms` | `1.97x` | baseline masks the full KV cache; optimized slices to the active decode window |
 | `tensor_cores` | `3.805 ms` | `0.243 ms` | `15.65x` | tensor-core decode kernel |
 | `rope_q_cache` | `106.429 ms` | `4.523 ms` | `23.53x` | cache-aware rope/Q-path reuse |
 
-The chapter has a mix of "moderate but real" improvements and "big kernel-level" improvements. Treat those as different stories rather than averaging them together into one headline number.
+The chapter has a mix of "moderate but real" improvements and "big kernel-level" improvements. Treat those as different stories rather than averaging them together into one headline number. `flexdecoding` is the chapter-native work-reduction story: the baseline scores the full KV cache with a sliding-window mask, while the optimized path trims the decode step down to the active window before attention. Re-measure it on your hardware before treating the chapter numbers as a decision threshold.
 
 ## Profiler Evidence
 Use deep-dive harness runs when you want Nsight evidence for cache reuse, launch count, and kernel selection:

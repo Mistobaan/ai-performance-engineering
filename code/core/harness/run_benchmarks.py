@@ -143,6 +143,12 @@ TORCH_PROFILER_AVAILABLE = hasattr(torch, 'profiler') and hasattr(torch.profiler
 
 # Generous timeout so deep NCU profiling can finish (pulled from benchmark defaults)
 NCU_TIMEOUT_SECONDS = get_defaults().ncu_timeout_seconds
+_NCU_DRIVER_RESOURCE_RETRY_ATTEMPTS = 2
+_NCU_DRIVER_RESOURCE_RETRY_DELAY_SECONDS = 5.0
+_NCU_DRIVER_RESOURCE_UNAVAILABLE_MARKERS = (
+    "driver resource was unavailable",
+    "ensure that no other tool",
+)
 
 
 def _run_repo_python_module(
@@ -162,6 +168,33 @@ def _run_repo_python_module(
         cwd=str(repo_root),
         env=env,
     )
+
+
+def _read_profile_log_text(path: Path) -> str:
+    """Read a profiler stdout/stderr log if it exists."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return ""
+
+
+def _is_retryable_ncu_driver_resource_error(
+    *,
+    stdout_log: Path,
+    stderr_log: Path,
+) -> bool:
+    """Return True when Nsight Compute failed due to a transient resource conflict."""
+    combined = "\n".join(
+        part
+        for part in (
+            _read_profile_log_text(stdout_log),
+            _read_profile_log_text(stderr_log),
+        )
+        if part
+    ).lower()
+    return all(marker in combined for marker in _NCU_DRIVER_RESOURCE_UNAVAILABLE_MARKERS)
 
 
 PROGRESS_PHASES = {
@@ -444,8 +477,12 @@ def extract_from_pytorch_trace(trace_path: Path) -> Dict[str, float]:
 INFORMATIONAL_BENCHMARKS: Dict[str, Set[str]] = {
     # Ch4: DataParallel demo shows basic parallelism pattern (requires multi-GPU)
     "ch04": {"dataparallel_basic"},
+    # Ch6: launch-bounds bridge targets remain informational.
+    "ch06": {"launch_bounds_gmem"},
     # Ch12: Graph CUDA demos show graph capture patterns
     "ch12": {"graph_cuda"},
+    # Ch13: compound optimization and exploratory KV-cache variants stay noncanonical
+    "ch13": {"torchao_quantization_compiled", "kv_cache_naive_flash_blockwise"},
     # Ch15: Inference placement demo shows architecture patterns (multi-GPU)
     "ch15": {"inference_placement"},
     # Ch16: The baseline paged-attention demo and piece-graphs example remain informational.
@@ -3398,42 +3435,54 @@ def profile_python_benchmark_ncu(
             # ncu profiling timeout: align with BenchmarkConfig.ncu_timeout_seconds
             # ncu is slower than nsys and needs more time for metric collection
             ncu_timeout_seconds = timing_view.timeout_for("ncu") or NCU_TIMEOUT_SECONDS
-            run_result = _run_profile_subprocess(
-                command=ncu_command,
-                cwd=chapter_dir,
-                env=env,
-                timeout_seconds=float(ncu_timeout_seconds),
-                log_base=log_base,
-                terminate_reason=f"{benchmark_name}_{variant}",
-                capture_output=True,
-                timeout_collect_error_message=(
-                    f"Timed-out NCU profiling for {benchmark_name} ({variant}) could not collect trailing stdout/stderr"
-                ),
-                wait_error_message=f"NCU profiling communicate failed for {benchmark_name} ({variant})",
-            )
-        if run_result.failure_warning:
-            _append_profile_warning(run_result.stderr_log, run_result.failure_warning)
-            return None
-
-        # Check if file exists (ncu may create file even with non-zero exit code)
-        if not run_result.timed_out:
-            if ncu_output.exists():
-                return ncu_output
-            alt_path = output_dir / f"{benchmark_name}__{variant}.ncu-rep"
-            if alt_path.exists():
-                return alt_path
-            for ncu_file in output_dir.glob(f"{benchmark_name}__{variant}*.ncu-rep"):
-                return ncu_file
-            if run_result.process.returncode not in (0, None):
-                _append_profile_warning(
-                    run_result.stderr_log,
-                    f"NCU profiling exited with code {run_result.process.returncode} for {benchmark_name} ({variant}) without producing a report.",
+            for attempt in range(1, _NCU_DRIVER_RESOURCE_RETRY_ATTEMPTS + 1):
+                run_result = _run_profile_subprocess(
+                    command=ncu_command,
+                    cwd=chapter_dir,
+                    env=env,
+                    timeout_seconds=float(ncu_timeout_seconds),
+                    log_base=log_base,
+                    terminate_reason=f"{benchmark_name}_{variant}",
+                    capture_output=True,
+                    timeout_collect_error_message=(
+                        f"Timed-out NCU profiling for {benchmark_name} ({variant}) could not collect trailing stdout/stderr"
+                    ),
+                    wait_error_message=f"NCU profiling communicate failed for {benchmark_name} ({variant})",
                 )
-        else:
-            _append_profile_warning(
-                run_result.stderr_log,
-                f"NCU profiling timed out after {ncu_timeout_seconds}s for {benchmark_name} ({variant}).",
-            )
+                if run_result.failure_warning:
+                    _append_profile_warning(run_result.stderr_log, run_result.failure_warning)
+                    return None
+
+                # Check if file exists (ncu may create file even with non-zero exit code)
+                if not run_result.timed_out:
+                    if ncu_output.exists():
+                        return ncu_output
+                    alt_path = output_dir / f"{benchmark_name}__{variant}.ncu-rep"
+                    if alt_path.exists():
+                        return alt_path
+                    for ncu_file in output_dir.glob(f"{benchmark_name}__{variant}*.ncu-rep"):
+                        return ncu_file
+                    if (
+                        run_result.process.returncode not in (0, None)
+                        and attempt < _NCU_DRIVER_RESOURCE_RETRY_ATTEMPTS
+                        and _is_retryable_ncu_driver_resource_error(
+                            stdout_log=run_result.stdout_log,
+                            stderr_log=run_result.stderr_log,
+                        )
+                    ):
+                        time.sleep(_NCU_DRIVER_RESOURCE_RETRY_DELAY_SECONDS)
+                        continue
+                    if run_result.process.returncode not in (0, None):
+                        _append_profile_warning(
+                            run_result.stderr_log,
+                            f"NCU profiling exited with code {run_result.process.returncode} for {benchmark_name} ({variant}) without producing a report.",
+                        )
+                else:
+                    _append_profile_warning(
+                        run_result.stderr_log,
+                        f"NCU profiling timed out after {ncu_timeout_seconds}s for {benchmark_name} ({variant}).",
+                    )
+                return None
         return None
     except (subprocess.SubprocessError, OSError) as exc:
         if LOGGER_AVAILABLE:
@@ -3535,44 +3584,54 @@ def profile_cuda_executable_ncu(
         # ncu profiling timeout: align with BenchmarkConfig.ncu_timeout_seconds
         # ncu is slower than nsys and needs more time for metric collection
         ncu_timeout_seconds = config.get_effective_timeout("ncu") or NCU_TIMEOUT_SECONDS
-        run_result = _run_profile_subprocess(
-            command=ncu_command,
-            cwd=chapter_dir,
-            env=env,
-            timeout_seconds=float(ncu_timeout_seconds),
-            log_base=log_base,
-            terminate_reason=f"{exec_name}__{variant}",
-            capture_output=True,
-            timeout_collect_error_message=(
-                f"Timed-out NCU profiling for executable {exec_name} ({variant}) could not collect trailing stdout/stderr"
-            ),
-            wait_error_message=f"NCU profiling communicate failed for executable {exec_name} ({variant})",
-        )
-        if run_result.failure_warning:
-            _append_profile_warning(run_result.stderr_log, run_result.failure_warning)
-            return None
+        for attempt in range(1, _NCU_DRIVER_RESOURCE_RETRY_ATTEMPTS + 1):
+            run_result = _run_profile_subprocess(
+                command=ncu_command,
+                cwd=chapter_dir,
+                env=env,
+                timeout_seconds=float(ncu_timeout_seconds),
+                log_base=log_base,
+                terminate_reason=f"{exec_name}__{variant}",
+                capture_output=True,
+                timeout_collect_error_message=(
+                    f"Timed-out NCU profiling for executable {exec_name} ({variant}) could not collect trailing stdout/stderr"
+                ),
+                wait_error_message=f"NCU profiling communicate failed for executable {exec_name} ({variant})",
+            )
+            if run_result.failure_warning:
+                _append_profile_warning(run_result.stderr_log, run_result.failure_warning)
+                return None
 
-        # Check if file exists (ncu may create file even with non-zero exit code)
-        if not run_result.timed_out:
-            if ncu_output.exists():
-                return ncu_output
-            # Try alternative path
-            alt_path = output_dir / f"{exec_name}__{variant}.ncu-rep"
-            if alt_path.exists():
-                return alt_path
-            # Check for any .ncu-rep file matching the pattern
-            for ncu_file in output_dir.glob(f"{exec_name}__{variant}*.ncu-rep"):
-                return ncu_file
-            if run_result.process.returncode not in (0, None):
+            # Check if file exists (ncu may create file even with non-zero exit code)
+            if not run_result.timed_out:
+                if ncu_output.exists():
+                    return ncu_output
+                alt_path = output_dir / f"{exec_name}__{variant}.ncu-rep"
+                if alt_path.exists():
+                    return alt_path
+                for ncu_file in output_dir.glob(f"{exec_name}__{variant}*.ncu-rep"):
+                    return ncu_file
+                if (
+                    run_result.process.returncode not in (0, None)
+                    and attempt < _NCU_DRIVER_RESOURCE_RETRY_ATTEMPTS
+                    and _is_retryable_ncu_driver_resource_error(
+                        stdout_log=run_result.stdout_log,
+                        stderr_log=run_result.stderr_log,
+                    )
+                ):
+                    time.sleep(_NCU_DRIVER_RESOURCE_RETRY_DELAY_SECONDS)
+                    continue
+                if run_result.process.returncode not in (0, None):
+                    _append_profile_warning(
+                        run_result.stderr_log,
+                        f"NCU profiling exited with code {run_result.process.returncode} for executable {exec_name} ({variant}) without producing a report.",
+                    )
+            else:
                 _append_profile_warning(
                     run_result.stderr_log,
-                    f"NCU profiling exited with code {run_result.process.returncode} for executable {exec_name} ({variant}) without producing a report.",
+                    f"NCU profiling timed out after {ncu_timeout_seconds}s for executable {exec_name} ({variant}).",
                 )
-        else:
-            _append_profile_warning(
-                run_result.stderr_log,
-                f"NCU profiling timed out after {ncu_timeout_seconds}s for executable {exec_name} ({variant}).",
-            )
+            return None
         return None
     except (subprocess.SubprocessError, OSError, ValueError) as exc:
         if LOGGER_AVAILABLE:
@@ -3983,6 +4042,22 @@ def _resolve_expectation_validation_policy(
     return validation_enabled, writes_enabled
 
 
+def _allow_mixed_provenance_for_expectation_writes(
+    *,
+    update_expectations: bool,
+    allow_mixed_provenance: bool,
+) -> bool:
+    """Return whether expectation writes may override provenance mismatches.
+
+    Explicit expectation refreshes from the current host are deliberate
+    mixed-provenance writes. This includes virtualized/non-canonical hosts; the
+    refreshed entry still records full provenance so downstream analysis can see
+    that the source run was virtualized.
+    """
+
+    return bool(allow_mixed_provenance or update_expectations)
+
+
 def _test_chapter_impl(
     chapter_dir: Path,
     enable_profiling: bool = False,
@@ -4165,11 +4240,16 @@ def _test_chapter_impl(
     logger.info(f"{'='*80}")
 
     expectation_hardware_key = detect_expectation_key()
+    allow_mixed_provenance_for_writes = _allow_mixed_provenance_for_expectation_writes(
+        update_expectations=bool(update_expectations),
+        allow_mixed_provenance=bool(allow_mixed_provenance),
+    )
+
     expectations_store = ExpectationsStore(
         chapter_dir,
         expectation_hardware_key,
         accept_regressions=accept_regressions or update_expectations,
-        allow_mixed_provenance=allow_mixed_provenance or update_expectations,
+        allow_mixed_provenance=allow_mixed_provenance_for_writes,
     )
     expectation_path = _repo_relative_path(expectations_store.path, repo_root)
     logger.info(f"  Expectations key: {expectation_hardware_key} (file: {expectation_path})")
@@ -6704,7 +6784,7 @@ def _test_chapter_impl(
                                 chapter_dir,
                                 expectation_hardware_key,
                                 accept_regressions=accept_regressions or update_expectations,
-                                allow_mixed_provenance=allow_mixed_provenance or update_expectations,
+                                allow_mixed_provenance=allow_mixed_provenance_for_writes,
                             )
                         update_result = active_expectations_store.update_entry(example_key, entry)
                         try:
@@ -8070,7 +8150,7 @@ def _test_chapter_impl(
                                 chapter_dir,
                                 expectation_hardware_key,
                                 accept_regressions=accept_regressions or update_expectations,
-                                allow_mixed_provenance=allow_mixed_provenance or update_expectations,
+                                allow_mixed_provenance=allow_mixed_provenance_for_writes,
                             )
                         update_result = active_expectations_store.update_entry(example_key, entry)
                         try:

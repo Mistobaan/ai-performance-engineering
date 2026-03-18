@@ -1,33 +1,25 @@
-"""optimized_kv_cache_naive.py - Paged KV cache implementation (optimized)."""
+"""optimized_kv_cache_naive.py - Token-by-token paged KV cache implementation.
+
+The canonical optimized pair keeps the same token-by-token decode loop and SDPA
+math as the baseline while replacing repeated `torch.cat` growth with a paged
+cache layout.
+"""
 
 from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import Optional, Tuple
-from contextlib import nullcontext
+from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-try:
-    from torch.nn.attention import SDPBackend, sdpa_kernel
-except ImportError:  # pragma: no cover - older PyTorch fallback
-    SDPBackend = None  # type: ignore[assignment]
-    sdpa_kernel = None  # type: ignore[assignment]
 
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import BaseBenchmark, BenchmarkConfig, WorkloadMetadata
 from ch13.kv_cache_workload import get_workload
 
 WORKLOAD = get_workload()
-
-
-def _flash_sdp_context():
-    """Prefer the new sdpa_kernel API; fall back to no-op if unavailable."""
-    if sdpa_kernel is None or SDPBackend is None or not hasattr(SDPBackend, "FLASH_ATTENTION"):
-        return nullcontext()
-    return sdpa_kernel([SDPBackend.FLASH_ATTENTION])
 
 
 class PagedKVCache:
@@ -142,8 +134,8 @@ class PagedKVCache:
             self._release_buffer(entry["pages"], entry["buffer"])  # type: ignore[arg-type]
 
 
-class FlashAttentionLayer(nn.Module):
-    """FlashAttention layer tailored for paged KV caches."""
+class PagedAttentionLayer(nn.Module):
+    """Attention layer that reuses paged cache storage with baseline-equivalent math."""
     
     def __init__(self, hidden_dim: int, num_heads: int, head_dim: int, dtype: torch.dtype = torch.float16):
         super().__init__()
@@ -152,7 +144,14 @@ class FlashAttentionLayer(nn.Module):
         self.qkv = nn.Linear(hidden_dim, hidden_dim * 3, dtype=dtype)
         self.proj = nn.Linear(hidden_dim, hidden_dim, dtype=dtype)
     
-    def forward(self, x: torch.Tensor, kv_cache: PagedKVCache, request_id: str, layer_idx: int, cache_pos: int) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        kv_cache: PagedKVCache,
+        request_id: str,
+        layer_idx: int,
+        cache_pos: int,
+    ) -> torch.Tensor:
         batch_size, seq_len, hidden_dim = x.shape
         qkv = self.qkv(x)
         q, k, v = qkv.chunk(3, dim=-1)
@@ -161,32 +160,18 @@ class FlashAttentionLayer(nn.Module):
         k = k.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = v.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         
-        k_block = k.permute(0, 2, 1, 3).contiguous()
-        v_block = v.permute(0, 2, 1, 3).contiguous()
-        for batch_idx in range(batch_size):
-            kv_cache.append_block(
-                request_id,
-                layer_idx,
-                k_block[batch_idx],
-                v_block[batch_idx],
-                cache_pos,
-            )
-        
-        if cache_pos > 0:
-            cached_k, cached_v = kv_cache.get(request_id, layer_idx, 0, cache_pos)
-            cached_k = cached_k.permute(1, 0, 2).unsqueeze(0).expand(batch_size, -1, -1, -1)
-            cached_v = cached_v.permute(1, 0, 2).unsqueeze(0).expand(batch_size, -1, -1, -1)
-            k = torch.cat([cached_k, k], dim=2)
-            v = torch.cat([cached_v, v], dim=2)
-        
-        with _flash_sdp_context():
-            attn_out = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0, is_causal=False)
+        kv_cache.append(request_id, layer_idx, k[0, :, 0, :], v[0, :, 0, :], cache_pos)
+        cached_k, cached_v = kv_cache.get(request_id, layer_idx, 0, cache_pos + 1)
+        cached_k = cached_k.permute(1, 0, 2).unsqueeze(0)
+        cached_v = cached_v.permute(1, 0, 2).unsqueeze(0)
+
+        attn_out = F.scaled_dot_product_attention(q, cached_k, cached_v, dropout_p=0.0, is_causal=False)
         attn_out = attn_out.transpose(1, 2).contiguous().view(batch_size, seq_len, hidden_dim)
         return self.proj(attn_out)
 
 
 class OptimizedKVCachePagedBenchmark(VerificationPayloadMixin, BaseBenchmark):
-    """Paged KV cache optimization - efficient memory reuse."""
+    """Paged KV cache optimization with token-by-token decode semantics."""
     
     def __init__(self):
         super().__init__()
@@ -201,7 +186,6 @@ class OptimizedKVCachePagedBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.hidden_dim = self.workload.hidden_dim
         self.batch_size = self.workload.batch_size
         self.sequence_lengths = list(self.workload.lengths())
-        self.block_size = self.workload.block_size
         total_tokens = self.batch_size * sum(self.sequence_lengths)
         self._workload = WorkloadMetadata(
             requests_per_iteration=float(len(self.sequence_lengths)),
@@ -223,7 +207,7 @@ class OptimizedKVCachePagedBenchmark(VerificationPayloadMixin, BaseBenchmark):
         
         self.layers = nn.ModuleList(
             [
-                FlashAttentionLayer(self.hidden_dim, self.num_heads, self.head_dim, dtype=self.workload.dtype)
+                PagedAttentionLayer(self.hidden_dim, self.num_heads, self.head_dim, dtype=self.workload.dtype)
                 for _ in range(self.num_layers)
             ]
         ).to(self.device).eval()
@@ -248,7 +232,7 @@ class OptimizedKVCachePagedBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self._synchronize()
     
     def benchmark_fn(self) -> None:
-        """Function to benchmark - paged KV cache with efficient allocation."""
+        """Benchmark token-by-token decode with paged cache allocation."""
         if self.layers is None or self.kv_cache is None or self.inputs is None:
             raise RuntimeError("Benchmark not configured")
 
@@ -256,18 +240,15 @@ class OptimizedKVCachePagedBenchmark(VerificationPayloadMixin, BaseBenchmark):
             for seq_idx, x in enumerate(self.inputs):
                 request_id = f"req_{seq_idx}"
                 seq_len = x.size(1)
-                
                 self.kv_cache.allocate(request_id, seq_len)
-                
-                for pos in range(0, seq_len, self.block_size):
-                    token_block = x[:, pos:pos + self.block_size, :]
-                    hidden = token_block
+
+                for pos in range(seq_len):
+                    hidden = x[:, pos:pos + 1, :]
                     for layer_idx, layer in enumerate(self.layers):
                         hidden = layer(hidden, self.kv_cache, request_id, layer_idx, pos)
-                
+
                 self.kv_cache.free(request_id)
-            # Store last token output for verification (to match baseline)
-            self.output = hidden[:, -1:, :].detach().clone()
+            self.output = hidden.detach().clone()
         if self._verify_input is None:
             raise RuntimeError("Verification input not initialized")
 

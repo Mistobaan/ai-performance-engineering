@@ -66,3 +66,4 @@ python -m cli.aisp bench run --targets labs/async_input_pipeline --profile minim
 
 ## Notes
 - This is an end-to-end pipeline lab, so the value is in the timeline and total latency, not just kernel-local timing.
+- Keep this lab as the primary copy-stream overlap example. `labs/training_hotpath` reuses that concept by reference and only adds the missing reduction and padding-aware cases.

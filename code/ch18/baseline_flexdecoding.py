@@ -202,11 +202,36 @@ class FlexDecodingHarness(VerificationPayloadMixin, BaseBenchmark):
 
 
 class BaselineFlexDecodingBenchmark(FlexDecodingHarness):
+    story_metadata = {
+        "pair_role": "canonical",
+        "variant_role": "baseline",
+        "chapter_alignment": "native",
+        "chapter_native_exemplar": True,
+        "comparison_axis": "full_kv_mask_vs_windowed_kv_slice",
+        "execution_pattern": "masked_full_cache_decode",
+        "control_reason": (
+            "This chapter-native FlexDecoding pair intentionally changes decode work: "
+            "the baseline scores the full KV cache with a sliding-window mask, while "
+            "the optimized path slices the cache to the active window before attention."
+        ),
+    }
+
     def __init__(self):
         super().__init__(use_flex_attention=False, require_flex=False, decode_tokens=512, compile_enabled=False)
+
+    def get_custom_metrics(self) -> Optional[Dict[str, float]]:
+        metrics = super().get_custom_metrics()
+        if metrics is None:
+            return None
+        metrics.update(
+            {
+                "flexdecode.decode_kv_span_tokens": float(self.config.max_seq_len),
+                "flexdecode.active_window_tokens": float(self.config.window + 1),
+                "flexdecode.window_slice_decode": 0.0,
+            }
+        )
+        return metrics
 
 
 def get_benchmark() -> BaseBenchmark:
     return BaselineFlexDecodingBenchmark()
-
-

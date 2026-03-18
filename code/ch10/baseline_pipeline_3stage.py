@@ -16,7 +16,7 @@ class BaselinePipeline3StageBenchmark(CudaBinaryBenchmark):
             chapter_dir=chapter_dir,
             binary_name="baseline_pipeline_3stage",
             friendly_name="Baseline Pipeline 3Stage",
-            iterations=3,
+            iterations=10,
             warmup=5,
             timeout_seconds=120,
             workload_params={

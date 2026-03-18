@@ -58,6 +58,7 @@ PRIORITY_EVIDENCE_DOCS = (
     "labs/persistent_decode",
     "labs/real_world_models",
     "labs/speculative_decode",
+    "labs/training_hotpath",
     "labs/train_distributed",
     "labs/trtllm_phi_3_5_moe",
 )
@@ -138,6 +139,7 @@ def test_ch10_and_priority_labs_render_custom_evidence_sections() -> None:
     occupancy_tuning_markdown = _format_markdown(ENTRIES["labs/occupancy_tuning"])
     models_markdown = _format_markdown(ENTRIES["labs/real_world_models"])
     speculative_decode_markdown = _format_markdown(ENTRIES["labs/speculative_decode"])
+    training_hotpath_markdown = _format_markdown(ENTRIES["labs/training_hotpath"])
     train_distributed_markdown = _format_markdown(ENTRIES["labs/train_distributed"])
     trtllm_phi_markdown = _format_markdown(ENTRIES["labs/trtllm_phi_3_5_moe"])
 
@@ -191,6 +193,7 @@ def test_ch10_and_priority_labs_render_custom_evidence_sections() -> None:
         occupancy_tuning_markdown,
         models_markdown,
         speculative_decode_markdown,
+        training_hotpath_markdown,
         train_distributed_markdown,
         trtllm_phi_markdown,
     ):

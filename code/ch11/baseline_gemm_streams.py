@@ -1,4 +1,4 @@
-"""Baseline GEMM stream workload without overlap."""
+"""Baseline legacy `gemm_streams` target using serialized copy+elementwise overlap work."""
 
 from __future__ import annotations
 

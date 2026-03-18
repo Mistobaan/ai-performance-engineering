@@ -194,6 +194,7 @@ def test_selected_public_lab_families_are_free_of_local_sys_path_bootstrap() -> 
         "async_input_pipeline",
         "persistent_decode",
         "speculative_decode",
+        "training_hotpath",
         "train_distributed",
         "trtllm_phi_3_5_moe",
         "uma_memory",

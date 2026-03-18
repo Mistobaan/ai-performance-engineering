@@ -153,12 +153,9 @@ class OptimizedPersistentDecodeTritonBenchmark(VerificationPayloadMixin, BaseBen
 
     def get_config(self) -> BenchmarkConfig:
         return BenchmarkConfig(
-            iterations=3,
+            iterations=12,
             warmup=5,
-            enable_profiling=False,
-            enable_ncu=False,
-            enable_nsys=False,
-            measurement_timeout_seconds=90,
+            measurement_timeout_seconds=120,
         )
 
     def get_custom_metrics(self) -> Optional[dict]:
@@ -178,4 +175,3 @@ class OptimizedPersistentDecodeTritonBenchmark(VerificationPayloadMixin, BaseBen
 
 def get_benchmark() -> BaseBenchmark:
     return OptimizedPersistentDecodeTritonBenchmark()
-

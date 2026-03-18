@@ -1,4 +1,4 @@
-"""Baseline stream workload without adaptive scheduling."""
+"""Baseline legacy `adaptive_streams` target using serialized copy/compute overlap work."""
 
 from __future__ import annotations
 

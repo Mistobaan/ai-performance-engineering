@@ -41,6 +41,8 @@ class BaselineAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def setup(self) -> None:
         torch.manual_seed(42)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(42)
         
         # Create Q, K, V tensors in FP16 so baseline/optimized compare the same precision.
         self.query = torch.randn(
@@ -84,9 +86,9 @@ class BaselineAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
                 attn_scores = torch.matmul(self.query, self.key.transpose(-2, -1))
                 attn_scores = attn_scores * self.scale
                 
-                # Softmax over last dimension (materializes full attention matrix)
-                # Compute softmax in FP32 for numerical stability, then cast back to FP16.
-                attn_weights = torch.softmax(attn_scores.float(), dim=-1).to(dtype=self.query.dtype)
+                # Softmax over last dimension (materializes full attention matrix).
+                # Keep the compute dtype aligned with the optimized SDPA path.
+                attn_weights = torch.softmax(attn_scores, dim=-1)
                 
                 # Attention @ V -> output
                 self.output = torch.matmul(attn_weights, self.value)

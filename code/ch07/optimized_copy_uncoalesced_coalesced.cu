@@ -1,4 +1,4 @@
-// optimized_copy_uncoalesced_coalesced.cu -- vectorized streaming copy for Chapter 7.
+// optimized_copy_uncoalesced_coalesced.cu -- coalesced scalar copy for Chapter 7.
 
 #include <cuda_runtime.h>
 
@@ -13,30 +13,15 @@
 constexpr int N = 1 << 23;
 constexpr int REPEAT = 40;
 constexpr int BLOCK_THREADS = 256;
-constexpr int VECTORS_PER_THREAD = 4;  // register blocking
 
-__global__ void coalesced_stream(const float4* __restrict__ src,
-                                 float4* __restrict__ dst,
-                                 int n_vec4) {
+__global__ void coalesced_stream(const float* __restrict__ src,
+                                 float* __restrict__ dst,
+                                 int n) {
   const int tid = blockIdx.x * blockDim.x + threadIdx.x;
   const int stride = gridDim.x * blockDim.x;
 
-  for (int base = tid; base < n_vec4; base += stride * VECTORS_PER_THREAD) {
-    float4 lane_buffer[VECTORS_PER_THREAD];
-#pragma unroll
-    for (int item = 0; item < VECTORS_PER_THREAD; ++item) {
-      const int idx = base + item * stride;
-      if (idx < n_vec4) {
-        lane_buffer[item] = __ldg(src + idx);
-      }
-    }
-#pragma unroll
-    for (int item = 0; item < VECTORS_PER_THREAD; ++item) {
-      const int idx = base + item * stride;
-      if (idx < n_vec4) {
-        dst[idx] = lane_buffer[item];
-      }
-    }
+  for (int idx = tid; idx < n; idx += stride) {
+    dst[idx] = __ldg(src + idx);
   }
 }
 
@@ -59,9 +44,6 @@ float max_abs_diff(const std::vector<float>& a, const std::vector<float>& b) {
 
 int main() {
     NVTX_RANGE("main");
-  static_assert(N % 4 == 0, "Vectorized copy requires divisible-by-4 length");
-  const int n_vec4 = N / 4;
-
   std::vector<float> h_src(N), h_dst(N, 0.0f);
   for (int i = 0; i < N; ++i) {
       NVTX_RANGE("setup");
@@ -74,12 +56,9 @@ int main() {
   CUDA_CHECK(cudaMemcpy(d_src, h_src.data(), N * sizeof(float), cudaMemcpyHostToDevice));
 
   dim3 block(BLOCK_THREADS);
-  dim3 grid((n_vec4 + block.x * VECTORS_PER_THREAD - 1) / (block.x * VECTORS_PER_THREAD));
+  dim3 grid((N + block.x - 1) / block.x);
 
-  coalesced_stream<<<grid, block>>>(
-      reinterpret_cast<const float4*>(d_src),
-      reinterpret_cast<float4*>(d_dst),
-      n_vec4);
+  coalesced_stream<<<grid, block>>>(d_src, d_dst, N);
   CUDA_CHECK_LAST_ERROR();
   CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -90,10 +69,7 @@ int main() {
   CUDA_CHECK(cudaEventRecord(start));
   for (int iter = 0; iter < REPEAT; ++iter) {
       NVTX_RANGE("compute_kernel:coalesced_stream");
-    coalesced_stream<<<grid, block>>>(
-        reinterpret_cast<const float4*>(d_src),
-        reinterpret_cast<float4*>(d_dst),
-        n_vec4);
+    coalesced_stream<<<grid, block>>>(d_src, d_dst, N);
   }
   CUDA_CHECK_LAST_ERROR();
   CUDA_CHECK(cudaEventRecord(stop));
@@ -102,7 +78,7 @@ int main() {
   float total_ms = 0.0f;
   CUDA_CHECK(cudaEventElapsedTime(&total_ms, start, stop));
   const float avg_ms = total_ms / static_cast<float>(REPEAT);
-  std::printf("Vectorized coalesced copy (optimized): %.3f ms\n", avg_ms);
+  std::printf("Coalesced copy (optimized): %.3f ms\n", avg_ms);
   std::printf("TIME_MS: %.6f\n", avg_ms);
 
   CUDA_CHECK(cudaMemcpy(h_dst.data(), d_dst, N * sizeof(float), cudaMemcpyDeviceToHost));

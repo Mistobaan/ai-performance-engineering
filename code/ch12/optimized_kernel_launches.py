@@ -19,10 +19,11 @@ class OptimizedKernelLaunchesBenchmark(VerificationPayloadMixin, BaseBenchmark):
     
     def __init__(self):
         super().__init__()
-        self.x_template = None
-        self.x_capture = None
+        self.x_input = None
+        self.work_a = None
+        self.work_b = None
         self.graph = None
-        self.replay_fn = None
+        self.graph_output = None
         self.size = (1024, 1024)
         self.iterations = 1000
         tokens = self.size[0] * self.size[1]
@@ -35,36 +36,30 @@ class OptimizedKernelLaunchesBenchmark(VerificationPayloadMixin, BaseBenchmark):
     
     def setup(self) -> None:
         """Setup: initialize tensor and capture CUDA graph."""
-        
-        # Optimization: Enable cuDNN benchmarking for optimal kernel selection
-        # Use bfloat16 for GPU performance
         dtype = torch.bfloat16 if self.device.type == "cuda" and torch.cuda.is_bf16_supported() else torch.float32
-        self.x_template = torch.randn(*self.size, device=self.device, dtype=dtype)
+        self.x_input = torch.randn(*self.size, device=self.device, dtype=dtype)
+        self.work_a = torch.empty_like(self.x_input)
         
-        # Warmup before graph capture
         for _ in range(10):
-            x_warmup = self.x_template.clone()
+            x_warmup = self.x_input
             for _ in range(self.iterations):
                 x_warmup = x_warmup + 1.0
                 x_warmup = x_warmup * 0.99
                 x_warmup = torch.relu(x_warmup)
         
-        # Capture graph
         self.graph = torch.cuda.CUDAGraph()
-        self.x_capture = self.x_template.clone()
         with torch.cuda.graph(self.graph):
-            for _ in range(self.iterations):
-                self.x_capture = self.x_capture + 1.0
-                self.x_capture = self.x_capture * 0.99
-                self.x_capture = torch.relu(self.x_capture)
-        self._verify_input = self.x_template.detach().clone()
-        
-        # Create replay function
-        def replay():
-            self.graph.replay()
-            return self.x_capture
-        
-        self.replay_fn = replay
+            if self.work_a is None or self.x_input is None:
+                raise RuntimeError("CUDA graph buffers missing")
+            torch.add(self.x_input, 1.0, out=self.work_a)
+            torch.mul(self.work_a, 0.99, out=self.work_a)
+            torch.clamp_min(self.work_a, 0.0, out=self.work_a)
+            for _ in range(self.iterations - 1):
+                torch.add(self.work_a, 1.0, out=self.work_a)
+                torch.mul(self.work_a, 0.99, out=self.work_a)
+                torch.clamp_min(self.work_a, 0.0, out=self.work_a)
+        self.graph_output = self.work_a
+        self._verify_input = self.x_input.detach().clone()
     
     def benchmark_fn(self) -> None:
         """Function to benchmark."""
@@ -77,8 +72,9 @@ class OptimizedKernelLaunchesBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
         with nvtx_range("kernel_launches", enable=enable_nvtx):
             with torch.no_grad():
-                _ = self.replay_fn()
-        if self._verify_input is None or self.x_capture is None:
+                self.graph.replay()
+                self.output = self.graph_output
+        if self._verify_input is None or self.graph_output is None:
             raise RuntimeError("Verification input or captured output missing")
         dtype = self._verify_input.dtype
         self._payload_dtype = dtype
@@ -87,7 +83,7 @@ class OptimizedKernelLaunchesBenchmark(VerificationPayloadMixin, BaseBenchmark):
         dtype = self._payload_dtype
         self._set_verification_payload(
             inputs={"input": self._verify_input},
-            output=self.x_capture.detach().clone(),
+            output=self.graph_output.detach().clone(),
             batch_size=self._verify_input.shape[0],
             parameter_count=0,
             precision_flags={
@@ -101,7 +97,7 @@ class OptimizedKernelLaunchesBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def teardown(self) -> None:
         """Cleanup."""
-        del self.x_template, self.x_capture, self.graph, self.replay_fn
+        del self.x_input, self.work_a, self.graph, self.graph_output
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     
@@ -130,16 +126,15 @@ class OptimizedKernelLaunchesBenchmark(VerificationPayloadMixin, BaseBenchmark):
         )
     def validate_result(self) -> Optional[str]:
         """Validate benchmark result."""
-        if self.x_template is None:
-            return "Input tensor x_template not initialized"
+        if self.x_input is None:
+            return "Input tensor x_input not initialized"
         if self.graph is None:
             return "CUDA graph not initialized"
-        if self.replay_fn is None:
-            return "Replay function not initialized"
+        if self.graph_output is None:
+            return "Graph output not initialized"
         return None
 
 
 def get_benchmark() -> BaseBenchmark:
     """Factory function for harness discovery."""
     return OptimizedKernelLaunchesBenchmark()
-

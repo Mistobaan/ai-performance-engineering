@@ -75,6 +75,7 @@ class OptimizedTEFP8Benchmark(VerificationPayloadMixin, BaseBenchmark):
         self.static_target: Optional[torch.Tensor] = None
         self.graph: Optional[torch.cuda.CUDAGraph] = None
         self.capture_stream: Optional[torch.cuda.Stream] = None
+        self.output_buffer: Optional[torch.Tensor] = None
         tokens = self.batch_size * self.hidden_dim
         self._workload = WorkloadMetadata(
             requests_per_iteration=1.0,
@@ -129,6 +130,7 @@ class OptimizedTEFP8Benchmark(VerificationPayloadMixin, BaseBenchmark):
         # Prepare static buffers for CUDA graph capture/replay.
         self.static_input = self.input_pool[0].clone()
         self.static_target = self.target_pool[0].clone()
+        self.output_buffer = torch.empty_like(self.static_input)
         self._verify_input = self.static_input.detach().clone()
         self.graph = torch.cuda.CUDAGraph()
         self.capture_stream = torch.cuda.Stream()
@@ -138,14 +140,19 @@ class OptimizedTEFP8Benchmark(VerificationPayloadMixin, BaseBenchmark):
                 self._train_step_impl(self.static_input, self.static_target)
             self._synchronize()
             with torch.cuda.graph(self.graph, stream=self.capture_stream):
-                self._train_step_impl(self.static_input, self.static_target)
+                self._train_step_impl(self.static_input, self.static_target, capture_output=True)
         self.capture_stream.synchronize()
         self.register_workload_metadata(
             requests_per_iteration=self._workload.requests_per_iteration,
             tokens_per_iteration=self._workload.tokens_per_iteration,
         )
 
-    def _train_step_impl(self, batch: torch.Tensor, target: torch.Tensor) -> None:
+    def _train_step_impl(
+        self,
+        batch: torch.Tensor,
+        target: torch.Tensor,
+        capture_output: bool = False,
+    ) -> None:
         assert self.model is not None
         assert self.optimizer and self.criterion
         if self.fp8_recipe is None:
@@ -154,6 +161,10 @@ class OptimizedTEFP8Benchmark(VerificationPayloadMixin, BaseBenchmark):
         self.optimizer.zero_grad(set_to_none=True)
         with fp8_autocast_fn(enabled=True, fp8_recipe=self.fp8_recipe):
             outputs = self.model(batch)
+            if capture_output:
+                if self.output_buffer is None:
+                    raise RuntimeError("Output buffer not initialized")
+                self.output_buffer.copy_(outputs)
             loss = self.criterion(outputs, target)
         loss.backward()
         self.optimizer.step()
@@ -169,9 +180,9 @@ class OptimizedTEFP8Benchmark(VerificationPayloadMixin, BaseBenchmark):
             self.static_input.copy_(current_input)
             self.static_target.copy_(current_target)
             self.graph.replay()
-            # Store output for verification
-            with torch.no_grad():
-                self.output = self.model(current_input).detach().clone()
+            if self.output_buffer is None:
+                raise RuntimeError("Output buffer not initialized")
+            self.output = self.output_buffer.detach().clone()
         if self._verify_input is None or self.output is None:
             raise RuntimeError("Verification input/output not initialized")
 
@@ -198,6 +209,7 @@ class OptimizedTEFP8Benchmark(VerificationPayloadMixin, BaseBenchmark):
         self.static_input = None
         self.static_target = None
         self.capture_stream = None
+        self.output_buffer = None
         self.input_pool = []
         self.target_pool = []
         super().teardown()

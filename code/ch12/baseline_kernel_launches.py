@@ -72,7 +72,7 @@ class BaselineKernelLaunchesBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
         with nvtx_range("kernel_launches", enable=enable_nvtx):
             with torch.no_grad():
-                self.output = many_small_ops_regular(self.x.clone(), self.iterations)
+                self.output = many_small_ops_regular(self.x, self.iterations)
         if self._verify_input is None:
             raise RuntimeError("Verification input not initialized")
         dtype = self._verify_input.dtype
@@ -137,4 +137,3 @@ class BaselineKernelLaunchesBenchmark(VerificationPayloadMixin, BaseBenchmark):
 def get_benchmark() -> BaseBenchmark:
     """Factory function for harness discovery."""
     return BaselineKernelLaunchesBenchmark()
-

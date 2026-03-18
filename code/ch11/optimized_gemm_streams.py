@@ -1,4 +1,4 @@
-"""Optimized GEMM stream workload with overlapping streams."""
+"""Optimized legacy `gemm_streams` target using overlapped copy+elementwise stream work."""
 
 from __future__ import annotations
 

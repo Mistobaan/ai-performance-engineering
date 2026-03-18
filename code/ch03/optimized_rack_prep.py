@@ -61,6 +61,7 @@ class OptimizedRackPrepBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.apply_actions: List[str] = []
         self.verify_report: Optional[dict] = None
         self.output: Optional[torch.Tensor] = None
+        self._last_slot: int = 0
         bytes_per_iter = self.seq_len * self.hidden_size * 4  # float32 bytes (matches baseline)
         # Register workload metadata in __init__ for compliance checks
         self.register_workload_metadata(
@@ -99,9 +100,10 @@ class OptimizedRackPrepBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
         # Use pinned memory for efficient async H2D (the optimization)
         # Same dtype as baseline (float32) for fair verification comparison
+        host_template = torch.randn(self.seq_len, self.hidden_size, dtype=torch.float32)
         self.host_buffers = [
-            torch.randn(self.seq_len, self.hidden_size, dtype=torch.float32, pin_memory=True),
-            torch.randn(self.seq_len, self.hidden_size, dtype=torch.float32, pin_memory=True),
+            host_template.pin_memory(),
+            host_template.clone().pin_memory(),
         ]
         self.device_buffers = [
             torch.empty_like(self.host_buffers[0], device=self.device),
@@ -127,17 +129,18 @@ class OptimizedRackPrepBenchmark(VerificationPayloadMixin, BaseBenchmark):
             self.output = self.norm(self.device_buffers[self.cur_slot])
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
+        self._last_slot = self.cur_slot
         self._start_copy(self.cur_slot)
         self.cur_slot, self.next_slot = self.next_slot, self.cur_slot
 
     def capture_verification_payload(self) -> None:
         self._set_verification_payload(
             inputs={
-                "host_batch": self.host_buffers[self.cur_slot],
-                "device_batch": self.device_buffers[self.cur_slot],
+                "host_batch": self.host_buffers[self._last_slot],
+                "device_batch": self.device_buffers[self._last_slot],
             },
             output=self.output.detach().clone(),
-            batch_size=self.host_buffers[self.cur_slot].shape[0],
+            batch_size=self.host_buffers[self._last_slot].shape[0],
             parameter_count=sum(p.numel() for p in self.norm.parameters()),
             precision_flags={
                 "fp16": False,
@@ -153,6 +156,7 @@ class OptimizedRackPrepBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.device_buffers = []
         self.norm = None
         self.output = None
+        self._last_slot = 0
         super().teardown()
 
     def get_config(self) -> BenchmarkConfig:

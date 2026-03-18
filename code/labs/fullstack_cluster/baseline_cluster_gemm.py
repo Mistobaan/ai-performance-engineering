@@ -11,7 +11,7 @@ class BaselineCapstoneGemmBenchmark(CapstoneMatmulBenchmark):
         super().__init__(
             runner=baseline_matmul,
             label="capstone_baseline",
-            iterations=1,
+            iterations=3,
             warmup=5,
             timeout_seconds=180,
             validate_against_baseline=False,
@@ -19,5 +19,4 @@ class BaselineCapstoneGemmBenchmark(CapstoneMatmulBenchmark):
 
 def get_benchmark() -> BaselineCapstoneGemmBenchmark:
     return BaselineCapstoneGemmBenchmark()
-
 

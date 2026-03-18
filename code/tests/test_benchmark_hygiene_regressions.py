@@ -253,6 +253,64 @@ def test_ch13_regional_compile_moves_fp32_verification_conversion_out_of_hot_loo
     assert "output=self._verify_output.float().clone()" in capture_section
 
 
+def test_ch13_memory_profiling_pair_keeps_compute_dtype_fixed_and_captures_output_in_graph() -> None:
+    baseline_source = (REPO_ROOT / "ch13" / "baseline_memory_profiling.py").read_text(encoding="utf-8")
+    optimized_source = (REPO_ROOT / "ch13" / "optimized_memory_profiling.py").read_text(encoding="utf-8")
+    optimized_benchmark = optimized_source.split("def benchmark_fn", maxsplit=1)[1].split(
+        "def capture_verification_payload", maxsplit=1
+    )[0]
+
+    assert 'signature_equivalence_group = "ch13_memory_profiling_checkpointing"' in baseline_source
+    assert 'signature_equivalence_group = "ch13_memory_profiling_checkpointing"' in optimized_source
+    assert "dtype=torch.bfloat16" not in optimized_source
+    assert "self.inputs_fp32" not in optimized_source
+    assert "self.targets_fp32" not in optimized_source
+    assert "self.output_buffer.copy_(outputs)" in optimized_source
+    assert "self.output = self.output_buffer.detach().clone()" in optimized_benchmark
+    assert "self.model(self.inputs)" not in optimized_benchmark
+
+
+def test_ch12_kernel_launches_pair_keeps_hot_path_work_fixed() -> None:
+    baseline_source = (REPO_ROOT / "ch12" / "baseline_kernel_launches.py").read_text(encoding="utf-8")
+    optimized_source = (REPO_ROOT / "ch12" / "optimized_kernel_launches.py").read_text(encoding="utf-8")
+    baseline_benchmark = baseline_source.split("def benchmark_fn", maxsplit=1)[1].split(
+        "def capture_verification_payload", maxsplit=1
+    )[0]
+
+    assert ".clone()" not in baseline_benchmark
+    assert "self.x_input =" in optimized_source
+    assert "self.x_capture" not in optimized_source
+    assert "self.graph_output = self.work_a" in optimized_source
+
+
+def test_ch13_precisionfp8_pad_inner_runs_single_forward_per_timed_iteration() -> None:
+    baseline_source = (REPO_ROOT / "ch13" / "baseline_precisionfp8_pad_inner.py").read_text(encoding="utf-8")
+    optimized_source = (REPO_ROOT / "ch13" / "optimized_precisionfp8_pad_inner.py").read_text(encoding="utf-8")
+    baseline_benchmark = baseline_source.split("def benchmark_fn", maxsplit=1)[1].split(
+        "def capture_verification_payload", maxsplit=1
+    )[0]
+    optimized_benchmark = optimized_source.split("def benchmark_fn", maxsplit=1)[1].split(
+        "def capture_verification_payload", maxsplit=1
+    )[0]
+
+    assert baseline_benchmark.count("self.model(") == 1
+    assert optimized_benchmark.count("self.model(") == 1
+
+
+def test_ch13_matmul_and_regional_compile_keep_precision_fixed_across_pairs() -> None:
+    baseline_matmul = (REPO_ROOT / "ch13" / "baseline_matmul_pytorch.py").read_text(encoding="utf-8")
+    optimized_matmul = (REPO_ROOT / "ch13" / "optimized_matmul_pytorch.py").read_text(encoding="utf-8")
+    baseline_regional = (REPO_ROOT / "ch13" / "baseline_regional_compile.py").read_text(encoding="utf-8")
+    optimized_regional = (REPO_ROOT / "ch13" / "optimized_regional_compile.py").read_text(encoding="utf-8")
+
+    assert "dtype=torch.float32" not in baseline_matmul
+    assert "dtype=torch.float16" in baseline_matmul
+    assert "dtype=torch.float16" in optimized_matmul
+    assert "self.compiled_model = torch.compile(" in baseline_regional
+    assert "dtype=torch.bfloat16" in baseline_regional
+    assert "dtype=torch.bfloat16" in optimized_regional
+
+
 def test_ch10_tcgen05_warp_specialized_kernel_uses_direct_epilogue_copy() -> None:
     optimized_wrapper = (REPO_ROOT / "ch10" / "optimized_tcgen05_warp_specialization.py").read_text(
         encoding="utf-8"

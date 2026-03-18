@@ -13,9 +13,29 @@ from labs.train_distributed.training_utils.torchrun_harness import TorchrunScrip
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--steps", type=int, default=50, help="Number of optimization steps.")
-    parser.add_argument("--batch-size", type=int, default=8, help="Per-rank batch size.")
+    parser.add_argument("--batch-size", type=int, default=16, help="Per-rank batch size.")
     parser.add_argument("--learning-rate", type=float, default=2e-4, help="AdamW learning rate.")
     return parser.parse_args()
+
+
+def _maybe_fused_adamw(params, lr):
+    import torch
+
+    try:
+        return torch.optim.AdamW(
+            params,
+            lr=lr,
+            betas=(0.9, 0.95),
+            weight_decay=0.1,
+            fused=True,
+        )
+    except TypeError:
+        return torch.optim.AdamW(
+            params,
+            lr=lr,
+            betas=(0.9, 0.95),
+            weight_decay=0.1,
+        )
 
 
 def main():
@@ -28,6 +48,7 @@ def main():
         build_text_model,
         build_tokenizer,
         get_dataset,
+        set_seed,
     )
 
     args = parse_args()
@@ -43,6 +64,12 @@ def main():
 
     rank = dist.get_rank() if dist.is_initialized() else 0
     is_main = rank == 0
+    set_seed(42)
+    torch.backends.cuda.matmul.allow_tf32 = True
+    try:
+        torch.set_float32_matmul_precision("high")
+    except AttributeError:
+        pass
 
     tokenizer = build_tokenizer()
     dataset = get_dataset()["train"]
@@ -52,18 +79,19 @@ def main():
         batch_size=args.batch_size,
         shuffle=True,
         drop_last=True,
-        distributed=dist.is_initialized() and dist.get_world_size() > 1,
-        num_workers=0,
-        prefetch_factor=None,
-        pin_memory=False,
+        distributed=dist.is_initialized(),
+        num_workers=4,
+        prefetch_factor=4,
+        pin_memory=True,
     )
 
-    model = build_text_model(dtype=torch.float32)
+    model_dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+    model = build_text_model(dtype=model_dtype)
     model.to(device)
     model.train()
 
     ddp_model = model
-    if dist.is_initialized() and dist.get_world_size() > 1:
+    if dist.is_initialized():
         ddp_model = DDP(
             model,
             device_ids=[local_rank] if device.type == "cuda" else None,
@@ -71,7 +99,7 @@ def main():
             find_unused_parameters=False,
         )
 
-    optimizer = torch.optim.AdamW(ddp_model.parameters(), lr=args.learning_rate)
+    optimizer = _maybe_fused_adamw(ddp_model.parameters(), args.learning_rate)
 
     num_steps = min(args.steps, len(dataloader))
     start = perf_counter()

@@ -2670,6 +2670,11 @@ class BenchmarkHarness:
             config.use_subprocess = False
             config.execution_mode = ExecutionMode.THREAD
         bench_config = benchmark.get_config()
+        if bench_config is not None:
+            # Benchmarks often return a persistent config instance. Work on a copy so
+            # harness-only normalization cannot corrupt later profiler/verification
+            # paths that call get_config() again on the same benchmark object.
+            bench_config = copy.deepcopy(bench_config)
         if bench_config and _is_chapter_or_labs_benchmark(benchmark):
             bench_config.iterations = None  # type: ignore[assignment]
             bench_config.warmup = None  # type: ignore[assignment]

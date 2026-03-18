@@ -16,9 +16,8 @@ __global__ void naive_matmul(const float* A, const float* B, float* C, int n) {
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
   if (row < n && col < n) {
     float sum = 0.0f;
-#pragma unroll 1
     for (int k = 0; k < n; ++k) {
-      sum = fmaf(A[row * n + k], B[k * n + col], sum);
+      sum += A[row * n + k] * B[k * n + col];
     }
     C[row * n + col] = sum;
   }

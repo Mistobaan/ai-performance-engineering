@@ -109,3 +109,48 @@ def test_ch10_readme_stays_on_book_native_targets() -> None:
     assert "baseline_matmul_tcgen05_vs_cublas.py" in readme_text
     assert "baseline_tmem_tcgen05.py" not in readme_text
     assert "matmul" not in names
+
+
+def test_ch11_legacy_stream_docs_call_out_actual_overlap_workload() -> None:
+    baseline_adaptive = (REPO_ROOT / "ch11" / "baseline_adaptive_streams.py").read_text(encoding="utf-8")
+    optimized_adaptive = (REPO_ROOT / "ch11" / "optimized_adaptive_streams.py").read_text(encoding="utf-8")
+    baseline_gemm = (REPO_ROOT / "ch11" / "baseline_gemm_streams.py").read_text(encoding="utf-8")
+    optimized_gemm = (REPO_ROOT / "ch11" / "optimized_gemm_streams.py").read_text(encoding="utf-8")
+    readme_text = (REPO_ROOT / "ch11" / "README.md").read_text(encoding="utf-8")
+
+    assert "fixed round-robin" in optimized_adaptive
+    assert "serialized copy/compute overlap work" in baseline_adaptive
+    assert "copy+elementwise overlap work" in baseline_gemm
+    assert "copy+elementwise stream work" in optimized_gemm
+    assert "legacy target names" in readme_text
+    assert "copy+elementwise overlap workload" in readme_text
+    assert "runtime-adaptive scheduling" in readme_text
+
+
+def test_ch13_readme_marks_canonical_vs_informational_variants() -> None:
+    readme_text = (REPO_ROOT / "ch13" / "README.md").read_text(encoding="utf-8")
+
+    assert "fairness-refreshed" in readme_text
+    assert "token-by-token decode with naive concat cache versus paged cache allocation" in readme_text
+    assert "kv_cache_naive_flash_blockwise" in readme_text
+    assert "torchao_quantization_compiled" in readme_text
+    assert "quantization-only canonical pair" in readme_text
+
+
+def test_ch18_flexdecoding_docs_call_out_intentional_work_reduction() -> None:
+    readme_text = (REPO_ROOT / "ch18" / "README.md").read_text(encoding="utf-8")
+
+    assert "chapter-native work-reduction story" in readme_text
+    assert "full KV cache with a sliding-window mask" in readme_text
+    assert "active window before attention" in readme_text
+    assert "Re-measure it on your hardware" in readme_text
+
+
+def test_fullstack_cluster_docs_call_out_uniform_default_and_topology_override() -> None:
+    common_text = (REPO_ROOT / "labs" / "fullstack_cluster" / "moe_hybrid_ep_common.py").read_text(encoding="utf-8")
+    readme_text = (REPO_ROOT / "labs" / "fullstack_cluster" / "README.md").read_text(encoding="utf-8")
+
+    assert 'route_mode="uniform"' in common_text
+    assert "Canonical hybrid-EP comparisons now keep the same default routing mode" in readme_text
+    assert "--route-mode topology_aware" in readme_text
+    assert "silent default" in readme_text

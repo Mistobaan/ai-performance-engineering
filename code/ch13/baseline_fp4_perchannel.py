@@ -8,6 +8,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
+from ch13.fp4_perchannel_common import build_fp4_perchannel_reference_tensors
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import (
     BaseBenchmark,
@@ -102,19 +103,16 @@ class BaselineFP4PerChannelBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.model = NaiveFP4MLP(hidden_dim=self.hidden_dim).to(self.device, dtype=self.dtype).eval()
         self.parameter_count = sum(p.numel() for p in self.model.parameters())
 
-        w1 = torch.randn(self.hidden_dim * 2, self.hidden_dim, device=self.device, dtype=self.dtype) * 0.02
-        b1 = torch.zeros(self.hidden_dim * 2, device=self.device, dtype=self.dtype)
-        w2 = torch.randn(self.hidden_dim, self.hidden_dim * 2, device=self.device, dtype=self.dtype) * 0.02
-        b2 = torch.zeros(self.hidden_dim, device=self.device, dtype=self.dtype)
-        _init_linear_weights(self.model.fc1, w1, b1)
-        _init_linear_weights(self.model.fc2, w2, b2)
-
-        self.inputs = torch.randn(
-            self.batch_size,
-            self.hidden_dim,
+        w1, b1, w2, b2, inputs = build_fp4_perchannel_reference_tensors(
+            hidden_dim=self.hidden_dim,
+            batch_size=self.batch_size,
             device=self.device,
             dtype=self.dtype,
         )
+        _init_linear_weights(self.model.fc1, w1, b1)
+        _init_linear_weights(self.model.fc2, w2, b2)
+
+        self.inputs = inputs
         self._verify_input = self.inputs.detach().clone()
 
         for _ in range(3):
@@ -166,5 +164,4 @@ class BaselineFP4PerChannelBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
 def get_benchmark() -> BaseBenchmark:
     return BaselineFP4PerChannelBenchmark()
-
 

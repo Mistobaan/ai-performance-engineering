@@ -1,8 +1,7 @@
 """optimized_regional_compile.py - Regional torch.compile (MLP-only).
 
-Demonstrates regional compilation by compiling only the MLP subgraph while
-keeping the rest of the Transformer block eager. Reduces compile churn across
-sequence buckets and improves steady-state latency versus full-graph compile.
+Compiles only the MLP subgraph while keeping the BF16 workload identical to the
+whole-graph baseline. This isolates regional compilation as the primary change.
 """
 
 from __future__ import annotations
@@ -108,7 +107,6 @@ class OptimizedRegionalCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
 
         self.model: Optional[nn.Module] = None
         self.inputs: Dict[int, torch.Tensor] = {}
-        self.inputs_fp32: Dict[int, torch.Tensor] = {}
         self._verify_x: Optional[torch.Tensor] = None
         self._verify_output: Optional[torch.Tensor] = None
 
@@ -126,32 +124,24 @@ class OptimizedRegionalCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
     def setup(self) -> None:
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
-        self._verification_payload = None
-        
-        # Enable cuDNN autotuning for optimal kernel selection
         self.model = TinyTransformerBlock(
             hidden=self.hidden,
             num_heads=self.num_heads,
             mlp_hidden=self.mlp_hidden,
         ).to(self.device, dtype=torch.bfloat16).eval()
-        
-        # Compile the MLP region after model is on device
         self.model.mlp.compile_mlp()
 
         for seq in self.sequence_schedule:
-            x_fp32 = torch.randn(
+            self.inputs[seq] = torch.randn(
                 self.batch_size,
                 seq,
                 self.hidden,
                 device=self.device,
-                dtype=torch.float32,
+                dtype=torch.bfloat16,
             )
-            self.inputs_fp32[seq] = x_fp32
-            self.inputs[seq] = x_fp32.to(dtype=torch.bfloat16)
-        
-        # Extensive warmup to ensure compilation is complete
+
         with torch.no_grad():
-            for _ in range(5):  # Multiple rounds to warm up for all sequence lengths
+            for _ in range(5):
                 for seq in self.sequence_schedule:
                     _ = self.model(self.inputs[seq])
 
@@ -171,14 +161,13 @@ class OptimizedRegionalCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
 
         seq_len = self._next_sequence_length()
         x = self.inputs[seq_len]
-        x_fp32 = self.inputs_fp32[seq_len]
 
         with torch.no_grad(), self._nvtx_range("optimized_regional_compile"):
             self.output = self.model(x).detach().clone()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
         if self._verify_x is None:
-            self._verify_x = x_fp32
+            self._verify_x = x
             self._verify_output = self.output.detach().clone()
 
     def capture_verification_payload(self) -> None:
@@ -201,7 +190,6 @@ class OptimizedRegionalCompileBenchmark(VerificationPayloadMixin, BaseBenchmark)
     def teardown(self) -> None:
         self.model = None
         self.inputs.clear()
-        self.inputs_fp32.clear()
         super().teardown()
 
     def get_config(self) -> BenchmarkConfig:

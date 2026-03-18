@@ -101,28 +101,27 @@ class BaselineTEFP8Benchmark(VerificationPayloadMixin, BaseBenchmark):
         self._verify_input = self.inputs.detach().clone()
 
         for _ in range(5):
-            self._train_step()
+            self._train_step(capture_output=False)
         self.optimizer.zero_grad(set_to_none=True)
         self.register_workload_metadata(
             requests_per_iteration=self._workload.requests_per_iteration,
             tokens_per_iteration=self._workload.tokens_per_iteration,
         )
 
-    def _train_step(self) -> None:
+    def _train_step(self, capture_output: bool = True) -> None:
         assert self.model and self.inputs is not None and self.targets is not None
         assert self.optimizer and self.criterion
         self.optimizer.zero_grad(set_to_none=True)
         outputs = self.model(self.inputs)
+        if capture_output:
+            self.output = outputs.detach().clone()
         loss = self.criterion(outputs, self.targets)
         loss.backward()
         self.optimizer.step()
 
     def benchmark_fn(self) -> None:
         with self._nvtx_range("baseline_precisionfp8_te"):
-            self._train_step()
-            # Store output for verification
-            with torch.no_grad():
-                self.output = self.model(self.inputs).detach().clone()
+            self._train_step(capture_output=True)
         if self._verify_input is None or self.output is None:
             raise RuntimeError("Verification input/output not initialized")
 

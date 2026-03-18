@@ -256,6 +256,7 @@ class PersistentMatmulTMABenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.a = torch.randn(self.M, self.K, device=self.device, dtype=torch.float16)
         self.b = torch.randn(self.K, self.N, device=self.device, dtype=torch.float16)
         self.c = torch.empty(self.M, self.N, device=self.device, dtype=torch.float16)
+        self.output = self.c
         
         torch.cuda.synchronize(self.device)
 
@@ -280,6 +281,7 @@ class PersistentMatmulTMABenchmark(VerificationPayloadMixin, BaseBenchmark):
             num_warps=NUM_WARPS,
             num_stages=NUM_STAGES,
         )
+        self.output = self.c
         if self.c is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 
@@ -344,4 +346,3 @@ class PersistentMatmulTMABenchmark(VerificationPayloadMixin, BaseBenchmark):
 def get_benchmark() -> BaseBenchmark:
     """Factory function for benchmark discovery."""
     return PersistentMatmulTMABenchmark()
-

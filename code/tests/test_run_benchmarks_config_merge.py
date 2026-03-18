@@ -12,8 +12,10 @@ from core.benchmark.defaults import BenchmarkDefaults
 from core.harness.benchmark_harness import BenchmarkConfig, LaunchVia
 from core.harness import run_benchmarks as run_benchmarks_mod
 from core.harness.run_benchmarks import (
+    _allow_mixed_provenance_for_expectation_writes,
     _apply_preferred_ncu_profile_overrides,
     _compute_locked_fields,
+    _is_retryable_ncu_driver_resource_error,
     _merge_benchmark_config,
     _resolve_nsys_profile_mode,
     _resolve_expectation_validation_policy,
@@ -427,3 +429,61 @@ def test_expectation_policy_portable_requires_explicit_override_for_validation()
 
     assert validation_enabled is False
     assert writes_enabled is False
+
+
+def test_update_expectations_allows_mixed_provenance_writes() -> None:
+    assert (
+        _allow_mixed_provenance_for_expectation_writes(
+            update_expectations=True,
+            allow_mixed_provenance=False,
+        )
+        is True
+    )
+
+
+def test_explicit_mixed_provenance_flag_allows_writes() -> None:
+    assert (
+        _allow_mixed_provenance_for_expectation_writes(
+            update_expectations=False,
+            allow_mixed_provenance=True,
+        )
+        is True
+    )
+
+
+def test_preview_mode_keeps_mixed_provenance_blocked() -> None:
+    assert (
+        _allow_mixed_provenance_for_expectation_writes(
+            update_expectations=False,
+            allow_mixed_provenance=False,
+        )
+        is False
+    )
+
+
+def test_ncu_driver_resource_unavailable_is_retryable(tmp_path: Path) -> None:
+    stdout_log = tmp_path / "ncu.stdout.log"
+    stderr_log = tmp_path / "ncu.stderr.log"
+    stdout_log.write_text(
+        "==ERROR== Profiling failed because a driver resource was unavailable. "
+        "Ensure that no other tool (like DCGM) is concurrently collecting profiling data.\n",
+        encoding="utf-8",
+    )
+    stderr_log.write_text("", encoding="utf-8")
+
+    assert _is_retryable_ncu_driver_resource_error(
+        stdout_log=stdout_log,
+        stderr_log=stderr_log,
+    ) is True
+
+
+def test_unrelated_ncu_failure_is_not_retryable(tmp_path: Path) -> None:
+    stdout_log = tmp_path / "ncu.stdout.log"
+    stderr_log = tmp_path / "ncu.stderr.log"
+    stdout_log.write_text("==ERROR== Failed to profile kernel due to invalid argument\n", encoding="utf-8")
+    stderr_log.write_text("", encoding="utf-8")
+
+    assert _is_retryable_ncu_driver_resource_error(
+        stdout_log=stdout_log,
+        stderr_log=stderr_log,
+    ) is False

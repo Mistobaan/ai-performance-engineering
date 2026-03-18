@@ -25,7 +25,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional, Tuple
+from typing import Optional
 from contextlib import contextmanager
 import math
 
@@ -81,66 +81,6 @@ def fa3_optimized_backend():
         yield
 
 
-class FA3OptimizedQKVProjection(nn.Module):
-    """Fused QKV projection optimized for FA3-style attention.
-    
-    Key optimizations:
-    - Single fused linear for Q, K, V (reduces memory bandwidth)
-    - Contiguous memory layout for TMA-friendly access
-    - Optional rotary embedding support
-    """
-    
-    def __init__(
-        self,
-        hidden_dim: int,
-        num_heads: int,
-        head_dim: int,
-        num_kv_heads: Optional[int] = None,  # For GQA
-    ):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.num_heads = num_heads
-        self.head_dim = head_dim
-        self.num_kv_heads = num_kv_heads or num_heads
-        
-        # Fused QKV projection
-        q_dim = num_heads * head_dim
-        kv_dim = self.num_kv_heads * head_dim
-        self.qkv_proj = nn.Linear(hidden_dim, q_dim + 2 * kv_dim, bias=False)
-        
-        self._q_dim = q_dim
-        self._kv_dim = kv_dim
-        
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Fused QKV projection.
-        
-        Returns:
-            Tuple of (Q, K, V) tensors shaped for attention
-        """
-        batch, seq_len, _ = x.shape
-        
-        # Single fused matmul for Q, K, V
-        qkv = self.qkv_proj(x)
-        
-        # Split into Q, K, V
-        q = qkv[..., :self._q_dim]
-        k = qkv[..., self._q_dim:self._q_dim + self._kv_dim]
-        v = qkv[..., self._q_dim + self._kv_dim:]
-        
-        # Reshape for multi-head attention
-        q = q.view(batch, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.view(batch, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        v = v.view(batch, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        
-        # Expand K, V for GQA if needed
-        if self.num_kv_heads != self.num_heads:
-            n_rep = self.num_heads // self.num_kv_heads
-            k = k.repeat_interleave(n_rep, dim=1)
-            v = v.repeat_interleave(n_rep, dim=1)
-        
-        return q, k, v
-
-
 class FA3PipelinedAttention(nn.Module):
     """FlashAttention-3 style attention with full pipeline optimizations.
     
@@ -184,13 +124,9 @@ class FA3PipelinedAttention(nn.Module):
         self.use_fp8 = use_fp8 and self._check_fp8_support()
         self.scale = 1.0 / math.sqrt(self.head_dim)
         
-        # Fused QKV projection
-        self.qkv = FA3OptimizedQKVProjection(
-            hidden_dim=hidden_dim,
-            num_heads=num_heads,
-            head_dim=self.head_dim,
-            num_kv_heads=self.num_kv_heads,
-        )
+        self.q_proj = nn.Linear(hidden_dim, num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(hidden_dim, self.num_kv_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(hidden_dim, self.num_kv_heads * self.head_dim, bias=False)
         
         # Output projection
         self.out_proj = nn.Linear(num_heads * self.head_dim, hidden_dim, bias=False)
@@ -236,14 +172,20 @@ class FA3PipelinedAttention(nn.Module):
         """Forward pass with FA3-style optimizations.
         
         Pipeline stages (conceptual execution):
-        1. QKV projection (fused)
+        1. Standard Q/K/V projection
         2. Pipelined attention with online softmax
         3. Output projection
         """
         batch_size, seq_len, _ = x.shape
-        
-        # Fused QKV projection
-        q, k, v = self.qkv(x)
+
+        q = self.q_proj(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(x).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(x).view(batch_size, seq_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+
+        if self.num_kv_heads != self.num_heads:
+            n_rep = self.num_heads // self.num_kv_heads
+            k = k.repeat_interleave(n_rep, dim=1)
+            v = v.repeat_interleave(n_rep, dim=1)
         
         # Pipelined attention with optimal backend
         with fa3_optimized_backend():
@@ -258,10 +200,8 @@ class OptimizedFlashAttention3Benchmark(VerificationPayloadMixin, BaseBenchmark)
     """Optimized benchmark with FA3-style pipelining.
     
     Demonstrates improvements from:
-    - Fused QKV projection
     - Optimal SDPA backend selection
-    - torch.compile with max-autotune
-    - FP8 quantization on supported hardware
+    - Pipeline-friendly attention scheduling
     
     Expected improvements over baseline:
     - 1.5-2x on Hopper (warp specialization)
@@ -305,19 +245,13 @@ class OptimizedFlashAttention3Benchmark(VerificationPayloadMixin, BaseBenchmark)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(42)
         
-        # Determine if FP8 should be used
-        use_fp8 = False
-        if torch.cuda.is_available():
-            major, _ = torch.cuda.get_device_capability()
-            use_fp8 = major >= 9
-        
         self.model = FA3PipelinedAttention(
             hidden_dim=self.hidden_dim,
             num_heads=self.num_heads,
             head_dim=self.head_dim,
             num_kv_heads=self.num_kv_heads,
             dropout=0.0,
-            use_fp8=use_fp8,
+            use_fp8=False,
         ).to(self.device).eval()
         
         # Use BF16 for optimal Tensor Core utilization
@@ -337,8 +271,9 @@ class OptimizedFlashAttention3Benchmark(VerificationPayloadMixin, BaseBenchmark)
             v_weight = torch.randn(self.hidden_dim, self.hidden_dim, device=self.device, dtype=dtype) * weight_scale
             out_weight = torch.randn(self.hidden_dim, self.hidden_dim, device=self.device, dtype=dtype) * weight_scale
 
-            qkv_weight = torch.cat([q_weight, k_weight, v_weight], dim=0)
-            self.model.qkv.qkv_proj.weight.copy_(qkv_weight)
+            self.model.q_proj.weight.copy_(q_weight)
+            self.model.k_proj.weight.copy_(k_weight)
+            self.model.v_proj.weight.copy_(v_weight)
             self.model.out_proj.weight.copy_(out_weight)
 
             self.input = torch.randn(
@@ -348,13 +283,13 @@ class OptimizedFlashAttention3Benchmark(VerificationPayloadMixin, BaseBenchmark)
 
         self._verify_input = self.input.detach().clone()
         
-        # Use model directly without torch.compile to avoid compilation overhead
-        # The optimization comes from fused QKV and optimal SDPA backend selection
+        # Use model directly without torch.compile to avoid compilation overhead.
+        # The optimization comes from backend/pipelining behavior only.
         self.compiled_model = self.model
         
         # Warmup
         with torch.no_grad():
-            for _ in range(5):
+            for _ in range(3):
                 _ = self.compiled_model(self.input, is_causal=self.use_causal)
         
     
@@ -413,7 +348,7 @@ class OptimizedFlashAttention3Benchmark(VerificationPayloadMixin, BaseBenchmark)
         )
         metrics["attention.num_kv_heads"] = float(self.num_kv_heads)
         metrics["attention.uses_sdpa"] = 1.0
-        metrics["attention.uses_fused_qkv"] = 1.0
+        metrics["attention.uses_fused_qkv"] = 0.0
         return metrics
     
     def validate_result(self) -> Optional[str]:
@@ -433,5 +368,4 @@ class OptimizedFlashAttention3Benchmark(VerificationPayloadMixin, BaseBenchmark)
 def get_benchmark() -> BaseBenchmark:
     """Factory function for harness discovery."""
     return OptimizedFlashAttention3Benchmark()
-
 

@@ -82,9 +82,8 @@ class BaselinePrecisionFP8PadInnerBenchmark(VerificationPayloadMixin, BaseBenchm
             raise RuntimeError("Benchmark not configured")
         with self._nvtx_range("baseline_precisionfp8_pad_inner"):
             with torch.no_grad():
-                _ = self.model(self.inputs)
-                verify_out = self.model(self._verify_input)
-                self.output = verify_out.detach().float().clone()
+                benchmark_out = self.model(self.inputs)
+                self.output = benchmark_out.detach().float().clone()
         if self.output is None:
             raise RuntimeError("benchmark_fn() must produce output for verification")
 
@@ -132,4 +131,3 @@ class BaselinePrecisionFP8PadInnerBenchmark(VerificationPayloadMixin, BaseBenchm
 
 def get_benchmark() -> BaseBenchmark:
     return BaselinePrecisionFP8PadInnerBenchmark()
-

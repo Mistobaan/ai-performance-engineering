@@ -133,6 +133,8 @@ class BaselineTritonPersistentBenchmark(VerificationPayloadMixin, BaseBenchmark)
     def setup(self) -> None:
         """Setup: Initialize batched matrices."""
         torch.manual_seed(42)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(42)
         
         self.a = torch.randn(self.batch_size, self.M, self.K, device=self.device, dtype=self.dtype)
         self.b = torch.randn(self.batch_size, self.K, self.N, device=self.device, dtype=self.dtype)
@@ -203,4 +205,3 @@ class BaselineTritonPersistentBenchmark(VerificationPayloadMixin, BaseBenchmark)
 def get_benchmark() -> BaseBenchmark:
     """Factory function for benchmark discovery."""
     return BaselineTritonPersistentBenchmark()
-

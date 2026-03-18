@@ -7,6 +7,7 @@ from typing import Any, Optional
 import torch
 import torch.nn as nn
 
+from ch13.fp4_perchannel_common import build_fp4_perchannel_reference_tensors
 from ch13.te_runtime_common import ensure_te_runtime_initialized
 from core.benchmark.verification_mixin import VerificationPayloadMixin
 from core.harness.benchmark_harness import (
@@ -137,13 +138,12 @@ class OptimizedFP4PerChannelBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.model = model
         self.parameter_count = sum(p.numel() for p in self.model.parameters())
 
-        torch.manual_seed(42)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(42)
-        w1 = torch.randn(self.hidden_dim * 2, self.hidden_dim, device=self.device, dtype=self.dtype) * 0.02
-        b1 = torch.zeros(self.hidden_dim * 2, device=self.device, dtype=self.dtype)
-        w2 = torch.randn(self.hidden_dim, self.hidden_dim * 2, device=self.device, dtype=self.dtype) * 0.02
-        b2 = torch.zeros(self.hidden_dim, device=self.device, dtype=self.dtype)
+        w1, b1, w2, b2, inputs = build_fp4_perchannel_reference_tensors(
+            hidden_dim=self.hidden_dim,
+            batch_size=self.batch_size,
+            device=self.device,
+            dtype=self.dtype,
+        )
         with torch.no_grad():
             self.model.fc1.weight.copy_(w1)
             if self.model.fc1.bias is not None:
@@ -154,12 +154,7 @@ class OptimizedFP4PerChannelBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
         self.model.prepare_per_channel_scales()
 
-        self.inputs = torch.randn(
-            self.batch_size,
-            self.hidden_dim,
-            device=self.device,
-            dtype=self.dtype,
-        )
+        self.inputs = inputs
         self._verify_input = self.inputs.detach().clone()
 
         for _ in range(3):
@@ -213,4 +208,3 @@ class OptimizedFP4PerChannelBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
 def get_benchmark() -> BaseBenchmark:
     return OptimizedFP4PerChannelBenchmark()
-
