@@ -73,6 +73,7 @@ python -m cli.aisp bench list-targets --chapter labs/moe_cuda
 | `labs/moe_parallelism/` | MoE parallelism planning | ch04, ch15 |
 | `labs/nanochat_fullstack/` | End-to-end inference stack (NanoChat) | ch16 |
 | `labs/occupancy_tuning/` | Triton occupancy/schedule sweeps | ch08, ch14 |
+| `labs/ozaki_scheme/` | cuBLAS FP64 emulation / Ozaki-style dynamic-vs-fixed retained-bit study on B200 | ch09 |
 | `labs/persistent_decode/` | Persistent decode + TMA prefill | ch10, ch11 |
 | `labs/python_concurrency/` | Python concurrency control-plane playbook (`asyncio`, retries, idempotency, hybrid pipelines) | ch03, ch11, ch16 |
 | `labs/real_world_models/` | Real-world model optimization playbook | ch20 |
