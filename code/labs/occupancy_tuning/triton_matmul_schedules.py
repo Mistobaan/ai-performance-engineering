@@ -95,6 +95,8 @@ def _ensure_inductor_env() -> None:
 class TritonMatmulProtonBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Wrap a Triton matmul run so the harness can drive Proton automatically."""
 
+    allow_cpu = True
+
     def __init__(
         self,
         schedule: MatmulSchedule,

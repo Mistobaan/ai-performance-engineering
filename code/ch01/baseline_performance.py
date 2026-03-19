@@ -42,6 +42,7 @@ def _warn_cuda_probe_failure(message: str) -> None:
 class BaselinePerformanceBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Benchmark implementation following BaseBenchmark."""
 
+    allow_cpu = True
     signature_equivalence_group = "ch01_performance_precision"
     signature_equivalence_ignore_fields = ("precision_flags",)
     

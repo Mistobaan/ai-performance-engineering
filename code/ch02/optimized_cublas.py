@@ -24,6 +24,8 @@ class OptimizedCublasBenchmark(VerificationPayloadMixin, BaseBenchmark):
     few warmup matmuls so Lt heuristics cache the best kernel.
     """
 
+    allow_cpu = True
+
     def __init__(self):
         super().__init__()
         self.m = 2048
@@ -40,6 +42,8 @@ class OptimizedCublasBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def setup(self) -> None:
         """Allocate FP32 matrices and warm the TF32-enabled cuBLAS path."""
+        if self.device.type != "cuda":
+            raise RuntimeError("SKIPPED: cuBLAS benchmark requires CUDA")
         # Seed FIRST for deterministic verification
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
@@ -97,7 +101,8 @@ class OptimizedCublasBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.A = None
         self.B = None
         self._last_elapsed_ms = None
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:
         return BenchmarkConfig(iterations=50, warmup=5, backend_policy="performance")
@@ -125,4 +130,3 @@ class OptimizedCublasBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
 def get_benchmark() -> BaseBenchmark:
     return OptimizedCublasBenchmark()
-

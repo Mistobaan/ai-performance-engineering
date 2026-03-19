@@ -153,6 +153,8 @@ class GPT4ArchitectureOptimization:
 class GPT4ArchitectureOptimizationBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Harness-friendly wrapper around the GPT-4 architecture demo."""
 
+    allow_cpu = True
+
     def __init__(self) -> None:
         super().__init__()
         self.model_wrapper: Optional[GPT4ArchitectureOptimization] = None
@@ -162,6 +164,8 @@ class GPT4ArchitectureOptimizationBenchmark(VerificationPayloadMixin, BaseBenchm
         self.register_workload_metadata(requests_per_iteration=1.0)
 
     def setup(self) -> None:
+        if self.device.type != "cuda":
+            raise RuntimeError("SKIPPED: GPT-4 architecture benchmark requires CUDA")
         torch.manual_seed(42)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(42)
@@ -252,5 +256,4 @@ def run_benchmark(
 
 def get_benchmark() -> BaseBenchmark:
     return GPT4ArchitectureOptimizationBenchmark()
-
 

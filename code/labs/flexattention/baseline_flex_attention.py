@@ -20,6 +20,8 @@ from labs.flexattention.flexattention_common import (
 class BaselineFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Eager FlexAttention using the DSL score_mod + block_mask."""
 
+    allow_cpu = True
+
     def __init__(self) -> None:
         super().__init__()
         self.dtype = torch.bfloat16
@@ -42,6 +44,7 @@ class BaselineFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
         torch.manual_seed(42)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(42)
+        self.device = resolve_device()
         self.inputs = build_flex_attention_inputs(
             batch=self.batch,
             heads=self.heads,
@@ -121,5 +124,4 @@ class BaselineFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
 def get_benchmark() -> BaseBenchmark:
     return BaselineFlexAttentionBenchmark()
-
 

@@ -19,6 +19,8 @@ class BaselineCublasBenchmark(VerificationPayloadMixin, BaseBenchmark):
     introduce a pure cuBLAS/TF32 path in the optimized example.
     """
 
+    allow_cpu = True
+
     def __init__(self):
         super().__init__()
         self.m = 2048
@@ -36,6 +38,8 @@ class BaselineCublasBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
     def setup(self) -> None:
         """Allocate FP32 matrices, disable TF32, and warm cuBLAS identically."""
+        if self.device.type != "cuda":
+            raise RuntimeError("SKIPPED: cuBLAS benchmark requires CUDA")
         # Seed FIRST for deterministic verification
         torch.manual_seed(42)
         torch.cuda.manual_seed_all(42)
@@ -91,7 +95,8 @@ class BaselineCublasBenchmark(VerificationPayloadMixin, BaseBenchmark):
         self.A = None
         self.B = None
         self._last_elapsed_ms = None
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def get_config(self) -> BenchmarkConfig:
         return BenchmarkConfig(iterations=50, warmup=5, backend_policy="fp32_strict")

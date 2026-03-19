@@ -6,6 +6,7 @@ from typing import Optional
 
 import torch
 
+from core.common.device_utils import get_usable_cuda_or_cpu
 from core.utils.warning_filters import warn_optional_component_unavailable
 
 try:
@@ -32,14 +33,20 @@ from ch01.performance_fp16_common import PERFORMANCE_FP16_WORKLOAD
 from ch01.workload_config import WORKLOAD
 
 
+def _warn_cuda_probe_failure(message: str) -> None:
+    print(f"WARNING: {message}")
+
+
 class OptimizedPerformanceFP16Benchmark(VerificationPayloadMixin, BaseBenchmark):
     """FP16-only optimization: use tensor cores without changing batch fusion strategy."""
 
+    allow_cpu = True
     signature_equivalence_group = "ch01_performance_precision"
     signature_equivalence_ignore_fields = ("precision_flags",)
 
     def __init__(self):
         super().__init__()
+        self.device = get_usable_cuda_or_cpu(warning_handler=_warn_cuda_probe_failure)
         self.workload = WORKLOAD
         self.batch_size = PERFORMANCE_FP16_WORKLOAD.batch_size
         self.num_microbatches = PERFORMANCE_FP16_WORKLOAD.num_microbatches
@@ -164,4 +171,3 @@ class OptimizedPerformanceFP16Benchmark(VerificationPayloadMixin, BaseBenchmark)
 
 def get_benchmark() -> BaseBenchmark:
     return OptimizedPerformanceFP16Benchmark()
-

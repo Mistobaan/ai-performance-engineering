@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import importlib.util
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -75,6 +76,7 @@ class BenchmarkMethodChecker(ast.NodeVisitor):
     """AST visitor to check for required verification methods."""
     
     def __init__(self):
+        self.class_info: dict[str, dict[str, object]] = {}
         self.benchmark_class: Optional[str] = None
         self.benchmark_class_line: Optional[int] = None
         self.bases: Set[str] = set()
@@ -95,6 +97,21 @@ class BenchmarkMethodChecker(ast.NodeVisitor):
         return ".".join(reversed(parts))
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        bases = {
+            name
+            for base in node.bases
+            if (name := self._dotted_name(base)) is not None
+        }
+        methods = {
+            item.name
+            for item in node.body
+            if isinstance(item, ast.FunctionDef)
+        }
+        self.class_info[node.name] = {
+            "bases": bases,
+            "methods": methods,
+        }
+
         has_benchmark_fn = any(
             isinstance(item, ast.FunctionDef) and item.name == "benchmark_fn"
             for item in node.body
@@ -104,11 +121,7 @@ class BenchmarkMethodChecker(ast.NodeVisitor):
             self.benchmark_class = node.name
             self.benchmark_class_line = node.lineno
             self._in_benchmark_class = True
-            self.bases = {
-                name
-                for base in node.bases
-                if (name := self._dotted_name(base)) is not None
-            }
+            self.bases = set(bases)
             
             for item in node.body:
                 if isinstance(item, ast.FunctionDef):
@@ -127,6 +140,29 @@ class BenchmarkMethodChecker(ast.NodeVisitor):
             self._in_benchmark_class = False
         
         self.generic_visit(node)
+
+    def class_or_bases_define_method(self, class_name: str, method_name: str) -> bool:
+        visited: Set[str] = set()
+
+        def _walk(name: str) -> bool:
+            if name in visited:
+                return False
+            visited.add(name)
+            info = self.class_info.get(name)
+            if info is None:
+                return False
+            methods = info.get("methods", set())
+            if isinstance(methods, set) and method_name in methods:
+                return True
+            bases = info.get("bases", set())
+            if not isinstance(bases, set):
+                return False
+            for base_name in bases:
+                if _walk(base_name):
+                    return True
+            return False
+
+        return _walk(class_name)
 
 
 def check_file_compliance(file_path: Path) -> List[ComplianceIssue]:
@@ -162,8 +198,26 @@ def check_file_compliance(file_path: Path) -> List[ComplianceIssue]:
     # get_input_signature()/get_verify_output()/get_output_tolerance() via inheritance.
     # This checker is file-local and cannot always see base classes imported from elsewhere.
     uses_payload_mixin = any(base.endswith("VerificationPayloadMixin") for base in checker.bases)
+    inherits_benchmark_locally = any(
+        base != "BaseBenchmark" and checker.class_or_bases_define_method(base, "get_input_signature")
+        for base in checker.bases
+    )
+    inherits_from_other_benchmark_base = any(
+        base.endswith("Benchmark") and base != "BaseBenchmark"
+        for base in checker.bases
+    )
+    inherits_verification_support_runtime = _class_supports_verification_via_runtime_load(
+        file_path,
+        checker.benchmark_class,
+    )
 
-    if "get_input_signature" not in checker.methods and not uses_payload_mixin:
+    if (
+        "get_input_signature" not in checker.methods
+        and not uses_payload_mixin
+        and not inherits_benchmark_locally
+        and not inherits_from_other_benchmark_base
+        and not inherits_verification_support_runtime
+    ):
         issues.append(
             ComplianceIssue(
                 str(file_path),
@@ -187,6 +241,48 @@ def check_file_compliance(file_path: Path) -> List[ComplianceIssue]:
             ))
     
     return issues
+
+
+def _class_supports_verification_via_runtime_load(file_path: Path, class_name: Optional[str]) -> bool:
+    """Best-effort import path to resolve inherited verification helpers.
+
+    This is only used to suppress file-local false positives when a benchmark
+    inherits verification support through an imported benchmark base class.
+    Any import failure falls back to the static warning path.
+    """
+    if not class_name:
+        return False
+
+    module_name = f"_verification_compliance_{file_path.stem}_{abs(hash(file_path.resolve()))}"
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        return False
+
+    module = importlib.util.module_from_spec(spec)
+    cleanup_names = [module_name]
+    added_sys_path = False
+    try:
+        sys.modules[module_name] = module
+        parent = str(file_path.parent)
+        if parent not in sys.path:
+            sys.path.insert(0, parent)
+            added_sys_path = True
+        spec.loader.exec_module(module)
+        cls = getattr(module, class_name, None)
+        if cls is None:
+            return False
+        method = getattr(cls, "get_input_signature", None)
+        return callable(method)
+    except Exception:
+        return False
+    finally:
+        for name in cleanup_names:
+            sys.modules.pop(name, None)
+        if added_sys_path:
+            try:
+                sys.path.remove(str(file_path.parent))
+            except ValueError:
+                pass
 
 
 # =============================================================================
@@ -453,8 +549,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
 
 
 

@@ -74,3 +74,38 @@ def test_ci_compliance_checker_accepts_payload_mixin_inheritance(tmp_path: Path)
     issues = check_file_compliance(file_path)
     assert not any("get_input_signature" in issue.message and issue.severity == "error" for issue in issues)
 
+
+def test_ci_compliance_checker_accepts_local_benchmark_base_inheritance(tmp_path: Path) -> None:
+    file_path = tmp_path / "baseline_dummy.py"
+    file_path.write_text(
+        "from core.benchmark.verification_mixin import VerificationPayloadMixin\n"
+        "from core.harness.benchmark_harness import BaseBenchmark\n"
+        "class ParentBenchmark(VerificationPayloadMixin, BaseBenchmark):\n"
+        "    def benchmark_fn(self):\n"
+        "        return None\n"
+        "class ChildBenchmark(ParentBenchmark):\n"
+        "    def benchmark_fn(self):\n"
+        "        return None\n"
+    )
+    issues = check_file_compliance(file_path)
+    assert not any("get_input_signature" in issue.message for issue in issues)
+
+
+def test_ci_compliance_checker_accepts_imported_benchmark_base_inheritance(tmp_path: Path) -> None:
+    (tmp_path / "base_module.py").write_text(
+        "from core.benchmark.verification_mixin import VerificationPayloadMixin\n"
+        "from core.harness.benchmark_harness import BaseBenchmark\n"
+        "class ImportedParentBenchmark(VerificationPayloadMixin, BaseBenchmark):\n"
+        "    allow_cpu = True\n"
+        "    def benchmark_fn(self):\n"
+        "        return None\n"
+    )
+    file_path = tmp_path / "baseline_dummy.py"
+    file_path.write_text(
+        "from base_module import ImportedParentBenchmark\n"
+        "class ChildBenchmark(ImportedParentBenchmark):\n"
+        "    def benchmark_fn(self):\n"
+        "        return None\n"
+    )
+    issues = check_file_compliance(file_path)
+    assert not any("get_input_signature" in issue.message for issue in issues)

@@ -44,6 +44,8 @@ class CompiledFlexAttention(nn.Module):
 class OptimizedFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Compiled FlexAttention with the blog's DSL hooks."""
 
+    allow_cpu = True
+
     def __init__(self) -> None:
         super().__init__()
         self.dtype = torch.bfloat16
@@ -67,6 +69,7 @@ class OptimizedFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
         torch.manual_seed(42)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(42)
+        self.device = resolve_device()
         torch._inductor.config.triton.cudagraphs = True
         torch._inductor.config.max_autotune = True
 
@@ -156,5 +159,4 @@ class OptimizedFlexAttentionBenchmark(VerificationPayloadMixin, BaseBenchmark):
 
 def get_benchmark() -> BaseBenchmark:
     return OptimizedFlexAttentionBenchmark()
-
 

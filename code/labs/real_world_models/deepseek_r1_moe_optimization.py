@@ -165,6 +165,8 @@ class MoELayer(nn.Module):
 
 class DeepSeekR1MoEOptimization(VerificationPayloadMixin, BaseBenchmark):
     """DeepSeek-R1 style MoE optimization benchmark."""
+
+    allow_cpu = True
     
     def __init__(
         self,
@@ -194,6 +196,8 @@ class DeepSeekR1MoEOptimization(VerificationPayloadMixin, BaseBenchmark):
 
     def setup(self):
         """Initialize MoE model."""
+        if self.device.type != "cuda":
+            raise RuntimeError("SKIPPED: DeepSeek-R1 MoE benchmark requires CUDA")
         self.moe_layer = MoELayer(
             hidden_size=self.hidden_size,
             num_experts=self.num_experts,
@@ -335,5 +339,4 @@ def run_benchmark(
 
 def get_benchmark() -> BaseBenchmark:
     return DeepSeekR1MoEOptimization()
-
 

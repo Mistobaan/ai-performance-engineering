@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import torch
 
+from core.common.device_utils import get_usable_cuda_or_cpu
 from core.utils.warning_filters import warn_optional_component_unavailable
 
 try:
@@ -31,14 +32,20 @@ from ch01.performance_common import (
 from ch01.workload_config import WORKLOAD
 
 
+def _warn_cuda_probe_failure(message: str) -> None:
+    print(f"WARNING: {message}")
+
+
 class OptimizedPerformanceBatchBenchmark(VerificationPayloadMixin, BaseBenchmark):
     """Isolate microbatch fusion without also changing arithmetic precision."""
 
+    allow_cpu = True
     signature_equivalence_group = "ch01_performance_precision"
     signature_equivalence_ignore_fields = ("precision_flags",)
     
     def __init__(self, batch_size: int = 32):
         super().__init__()
+        self.device = get_usable_cuda_or_cpu(warning_handler=_warn_cuda_probe_failure)
         self.workload = WORKLOAD
         self.batch_size = batch_size if batch_size != 32 else self.workload.microbatch_size
         self.model = None
